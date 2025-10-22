@@ -1,0 +1,95 @@
+Build a full-stack modern College Club Website where college clubs can post updates, upload photos/files, and schedule events or bootcamps.
+The site should be beautiful, responsive, and cloud-connected.
+
+🏗️ Project Structure
+college-club-website/
+├── client/                   # Frontend (React + Tailwind)
+│   ├── src/
+│   │   ├── components/       # Navbar, Footer, EventCard, ClubCard, etc.
+│   │   ├── pages/            # Home, Clubs, Events, Login, Dashboard
+│   │   ├── utils/            # API calls, config
+│   │   ├── App.jsx
+│   │   ├── main.jsx
+│   ├── index.html
+│   └── package.json
+│
+├── server/                   # Backend (Node + Express)
+│   ├── routes/
+│   │   ├── clubRoutes.js
+│   │   ├── eventRoutes.js
+│   │   └── authRoutes.js
+│   ├── models/
+│   │   ├── Club.js
+│   │   ├── Event.js
+│   │   └── User.js
+│   ├── controllers/
+│   │   ├── clubController.js
+│   │   ├── eventController.js
+│   │   └── authController.js
+│   ├── config/
+│   │   ├── db.js             # MongoDB connection
+│   │   └── cloud.js          # Firebase/Cloudinary setup
+│   ├── server.js
+│   └── package.json
+│
+├── .env                      # API keys, DB URI, etc.
+├── README.md
+└── replit.nix / .replit      # Replit configuration
+
+⚙️ Tech Stack
+
+Frontend: React (Vite) + Tailwind CSS + Framer Motion
+
+Backend: Node.js + Express + MongoDB Atlas
+
+Cloud Storage: Firebase Storage or Cloudinary
+
+Authentication: JWT-based login (Admin / Club)
+
+Deployment: Replit (auto host frontend + backend)
+
+🧩 Key Features
+
+1. Homepage
+
+Modern hero section with college branding.
+
+Dynamic sections for upcoming events and featured clubs.
+
+2. Clubs Section
+
+List of all clubs with logo, description, and members.
+
+Individual club page showing gallery and uploaded files (from cloud).
+
+3. Events Section
+
+Grid of all upcoming bootcamps/workshops with date, organizer, and description.
+
+Admin/Club dashboard to create/edit/delete events.
+
+4. Cloud Storage Integration
+
+Use Firebase or Cloudinary to store uploaded photos/files.
+
+Store metadata (URLs, filenames) in MongoDB.
+
+5. Authentication
+
+Admin login (manage all content).
+
+Club login (manage only own events/uploads).
+
+Optional student login (bookmark or register for events).
+
+6. Dashboard
+
+Simple dashboard with event list, upload form, and analytics (total uploads, events).
+
+7. UI/UX
+
+Tailwind CSS + Framer Motion for smooth animations.
+
+Responsive layout (mobile/tablet/desktop).
+
+Optional dark mode toggle.
