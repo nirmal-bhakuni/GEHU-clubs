@@ -22,7 +22,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "client/src"),       // ✅ Your main alias
+       '@': path.resolve(__dirname, './src'),       // ✅ Your main alias
       "@shared": path.resolve(__dirname, "shared"),    // ✅ Fixed
       "@assets": path.resolve(__dirname, "attached_assets"), // ✅ Fixed
     },
