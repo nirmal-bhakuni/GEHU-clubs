@@ -19,24 +19,32 @@ export default function Footer() {
             <h3 className="font-semibold text-lg mb-4">Quick Links</h3>
             <ul className="space-y-2">
               <li>
-                <Link href="/clubs">
-                  <a className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1" data-testid="link-footer-clubs">
-                    Browse Clubs
-                  </a>
+                <Link
+                  href="/clubs"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1"
+                  data-testid="link-footer-clubs"
+                >
+                  Browse Clubs
                 </Link>
               </li>
+
               <li>
-                <Link href="/events">
-                  <a className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1" data-testid="link-footer-events">
-                    Upcoming Events
-                  </a>
+                <Link
+                  href="/events"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1"
+                  data-testid="link-footer-events"
+                >
+                  Upcoming Events
                 </Link>
               </li>
+
               <li>
-                <Link href="/dashboard">
-                  <a className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1" data-testid="link-footer-dashboard">
-                    Admin Dashboard
-                  </a>
+                <Link
+                  href="/dashboard"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1"
+                  data-testid="link-footer-dashboard"
+                >
+                  Admin Dashboard
                 </Link>
               </li>
             </ul>
