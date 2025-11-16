@@ -125,7 +125,7 @@
 
 .dark {
   --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+  --badge-outline: rgba(220, 15, 15, 0.05);
 
   --opaque-button-border-intensity: 9;  /* In terms of percentages */
 
@@ -208,7 +208,7 @@
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border border-opacity-0;
   }
 
   body {

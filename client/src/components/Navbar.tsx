@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "./ThemeProvider";
+import LoginModal from "./LoginModal";
+import SignupModal from "./SignupModal";
 
 export default function Navbar() {
   const [location] = useLocation();
@@ -44,7 +46,7 @@ export default function Navbar() {
             ))}
           </nav>
 
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-3">
             <Button
               size="icon"
               variant="ghost"
@@ -57,8 +59,10 @@ export default function Navbar() {
                 <Sun className="w-5 h-5" />
               )}
             </Button>
+            <LoginModal />
+            <SignupModal />
             <Link href="/login">
-              <Button variant="default" data-testid="button-login">
+              <Button variant="outline" data-testid="button-admin-login">
                 Admin Login
               </Button>
             </Link>
@@ -106,9 +110,11 @@ export default function Navbar() {
                   {item.label}
                 </Link>
               ))}
-              <div onClick={() => setMobileMenuOpen(false)}>
+              <div className="mt-4 flex flex-col gap-2" onClick={() => setMobileMenuOpen(false)}>
+                <LoginModal />
+                <SignupModal />
                 <Link href="/login">
-                  <Button className="mt-2 w-full" variant="default" data-testid="button-mobile-login">
+                  <Button className="w-full" variant="outline" data-testid="button-mobile-admin-login">
                     Admin Login
                   </Button>
                 </Link>

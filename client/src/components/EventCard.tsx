@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock, MapPin } from "lucide-react";
+import { Link } from "wouter";
 
 interface EventCardProps {
   id: string;
@@ -67,9 +68,11 @@ export default function EventCard({
             <span data-testid={`text-location-${id}`}>{location}</span>
           </div>
         </div>
-        <Button className="w-full" variant="default" data-testid={`button-register-${id}`}>
-          Register Now
-        </Button>
+        <Link href={`/events/${id}`}>
+          <Button className="w-full" variant="default" data-testid={`button-register-${id}`}>
+            Register Now
+          </Button>
+        </Link>
       </div>
     </Card>
   );
