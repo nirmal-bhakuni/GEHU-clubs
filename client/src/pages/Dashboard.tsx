@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import UploadForm from "@/components/UploadForm";
+import EditEventForm from "@/components/EditEventForm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -201,6 +202,13 @@ export default function Dashboard() {
                 </div>
               )}
             </Card>
+
+            {editingEventId && (
+              <EditEventForm
+                event={events.find((e) => e.id === editingEventId)!}
+                onClose={() => setEditingEventId(null)}
+              />
+            )}
           </TabsContent>
         </Tabs>
       </div>
