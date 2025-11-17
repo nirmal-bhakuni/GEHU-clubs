@@ -1,37 +1,34 @@
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
 
-import express, { type Request, Response, NextFunction } from "express";
+import express from "express";
+import type { Request, Response, NextFunction } from "express";
 import session from "express-session";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
 
-// ✅ ADD THIS
-import { connectDB } from "./config/db";  
+import { registerRoutes } from "./routes.ts";
+import { setupVite, serveStatic, log } from "./vite.ts";
+import { connectDB } from "./config/db.ts";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Session configuration
-if (!process.env.SESSION_SECRET) {
-  console.error("WARNING: SESSION_SECRET not set. Using default - DO NOT USE IN PRODUCTION");
-}
-
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "dev-secret-do-not-use-in-production",
+    secret:
+      process.env.SESSION_SECRET ||
+      "dev-secret-do-not-use-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
 
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
@@ -49,11 +46,9 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
       if (logLine.length > 80) {
         logLine = logLine.slice(0, 79) + "…";
       }
-
       log(logLine);
     }
   });
@@ -62,8 +57,6 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-
-  // ⭐ CONNECT MONGODB HERE
   await connectDB();
 
   const server = await registerRoutes(app);
@@ -71,7 +64,6 @@ app.use((req, res, next) => {
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
     res.status(status).json({ message });
     throw err;
   });
@@ -82,11 +74,10 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  const port = parseInt(process.env.PORT || '5000', 10);
+  const port = parseInt(process.env.PORT || "5000", 10);
   const host = process.platform === "win32" ? "localhost" : "0.0.0.0";
 
   server.listen({ port, host }, () => {
     log(`serving on http://${host}:${port}`);
   });
-
 })();

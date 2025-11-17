@@ -1,43 +1,34 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { storage } from "./storage.ts";
 import express from "express";
 import bcrypt from "bcryptjs";
 import multer from "multer";
-import { insertAdminSchema, insertClubSchema, insertEventSchema } from "@shared/schema";
-
-declare module "express-session" {
-  interface SessionData {
-    adminId?: string;
-  }
-}
+import { insertAdminSchema, insertClubSchema, insertEventSchema } from "../shared/schema.ts";
 
 import path from "path";
 import fs from "fs";
 
-// Ensure uploads directory exists
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Configure multer for file uploads (disk storage)
 const storage_multer = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadsDir);
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + "-" + file.originalname);
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage_multer,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-// Middleware to check if admin is authenticated
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!req.session.adminId) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -46,14 +37,12 @@ function requireAuth(req: express.Request, res: express.Response, next: express.
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Serve uploaded files statically
-  app.use('/uploads', express.static(uploadsDir));
-  
-  // Authentication routes
+  app.use("/uploads", express.static(uploadsDir));
+
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { username, password } = req.body;
-      
+
       const admin = await storage.getAdminByUsername(username);
       if (!admin) {
         return res.status(401).json({ error: "Invalid credentials" });
@@ -65,13 +54,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       req.session.adminId = admin.id;
-      res.json({ 
-        success: true, 
-        admin: { 
-          id: admin.id, 
+      res.json({
+        success: true,
+        admin: {
+          id: admin.id,
           username: admin.username,
-          clubId: admin.clubId 
-        } 
+          clubId: admin.clubId
+        }
       });
     } catch (error) {
       res.status(500).json({ error: "Login failed" });
@@ -97,32 +86,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ error: "Admin not found" });
     }
 
-    res.json({ 
-      id: admin.id, 
+    res.json({
+      id: admin.id,
       username: admin.username,
-      clubId: admin.clubId 
+      clubId: admin.clubId
     });
   });
 
-  // Club routes
   app.get("/api/clubs", async (req, res) => {
     try {
       const { search, category } = req.query;
       let clubs = await storage.getAllClubs();
-      
-      // Apply server-side filtering
-      if (search && typeof search === 'string') {
-        const searchLower = search.toLowerCase();
-        clubs = clubs.filter(club => 
-          club.name.toLowerCase().includes(searchLower) ||
-          club.description.toLowerCase().includes(searchLower)
+
+      if (search && typeof search === "string") {
+        const s = search.toLowerCase();
+        clubs = clubs.filter(
+          c =>
+            c.name.toLowerCase().includes(s) ||
+            c.description.toLowerCase().includes(s)
         );
       }
-      
-      if (category && typeof category === 'string' && category !== 'all') {
-        clubs = clubs.filter(club => club.category === category);
+
+      if (category && typeof category === "string" && category !== "all") {
+        clubs = clubs.filter(c => c.category === category);
       }
-      
+
       res.json(clubs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch clubs" });
@@ -175,31 +163,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Event routes
   app.get("/api/events", async (req, res) => {
     try {
       const { clubId, search, category } = req.query;
       let events;
-      
-      if (clubId && typeof clubId === 'string') {
+
+      if (clubId && typeof clubId === "string") {
         events = await storage.getEventsByClub(clubId);
       } else {
         events = await storage.getAllEvents();
       }
-      
-      // Apply server-side filtering
-      if (search && typeof search === 'string') {
-        const searchLower = search.toLowerCase();
-        events = events.filter(event => 
-          event.title.toLowerCase().includes(searchLower) ||
-          event.description.toLowerCase().includes(searchLower)
+
+      if (search && typeof search === "string") {
+        const s = search.toLowerCase();
+        events = events.filter(
+          e =>
+            e.title.toLowerCase().includes(s) ||
+            e.description.toLowerCase().includes(s)
         );
       }
-      
-      if (category && typeof category === 'string' && category !== 'all') {
-        events = events.filter(event => event.category === category);
+
+      if (category && typeof category === "string" && category !== "all") {
+        events = events.filter(e => e.category === category);
       }
-      
+
       res.json(events);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch events" });
@@ -218,55 +205,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/events", requireAuth, upload.single('image'), async (req, res) => {
+  app.post("/api/events", requireAuth, upload.single("image"), async (req, res) => {
     try {
-      // Get admin to ensure they have a club assigned
       const admin = await storage.getAdmin(req.session.adminId!);
       if (!admin?.clubId) {
-        return res.status(403).json({ error: "Admin must be assigned to a club to create events" });
+        return res.status(403).json({ error: "Admin must be assigned to a club" });
       }
-      
-      // Force clubId to be the admin's club - ignore any clubId in request
+
       const eventData = {
         ...req.body,
-        clubId: admin.clubId, // Force admin's club
+        clubId: admin.clubId,
         imageUrl: req.file ? `/uploads/${req.file.filename}` : null
       };
-      
-      const validatedData = insertEventSchema.parse(eventData);
-      const event = await storage.createEvent(validatedData);
+
+      const validated = insertEventSchema.parse(eventData);
+      const event = await storage.createEvent(validated);
       res.status(201).json(event);
     } catch (error) {
       res.status(400).json({ error: "Invalid event data" });
     }
   });
 
-  app.patch("/api/events/:id", requireAuth, upload.single('image'), async (req, res) => {
+  app.patch("/api/events/:id", requireAuth, upload.single("image"), async (req, res) => {
     try {
-      // Get the existing event to check ownership
       const existingEvent = await storage.getEvent(req.params.id);
       if (!existingEvent) {
         return res.status(404).json({ error: "Event not found" });
       }
-      
-      // Get admin to check authorization
+
       const admin = await storage.getAdmin(req.session.adminId!);
       if (!admin?.clubId) {
-        return res.status(403).json({ error: "Admin must be assigned to a club to modify events" });
+        return res.status(403).json({ error: "Admin must be assigned to a club" });
       }
-      
+
       if (existingEvent.clubId !== admin.clubId) {
-        return res.status(403).json({ error: "Not authorized to modify this event" });
+        return res.status(403).json({ error: "Not authorized" });
       }
-      
-      // Prevent clubId reassignment - strip it from updates
+
       const { clubId, ...safeUpdates } = req.body;
-      
+
       const updates = {
         ...safeUpdates,
         ...(req.file && { imageUrl: `/uploads/${req.file.filename}` })
       };
-      
+
       const event = await storage.updateEvent(req.params.id, updates);
       res.json(event);
     } catch (error) {
@@ -276,22 +258,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/events/:id", requireAuth, async (req, res) => {
     try {
-      // Get the existing event to check ownership
       const existingEvent = await storage.getEvent(req.params.id);
       if (!existingEvent) {
         return res.status(404).json({ error: "Event not found" });
       }
-      
-      // Get admin to check authorization
+
       const admin = await storage.getAdmin(req.session.adminId!);
       if (!admin?.clubId) {
-        return res.status(403).json({ error: "Admin must be assigned to a club to delete events" });
+        return res.status(403).json({ error: "Admin must be assigned to a club" });
       }
-      
+
       if (existingEvent.clubId !== admin.clubId) {
-        return res.status(403).json({ error: "Not authorized to delete this event" });
+        return res.status(403).json({ error: "Not authorized" });
       }
-      
+
       const success = await storage.deleteEvent(req.params.id);
       res.json({ success: true });
     } catch (error) {
@@ -299,25 +279,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin registration - PROTECTED: Admins can only create new admins for their own club
-  // NOTE: In production, implement proper role-based access control (super-admin provisioning)
   app.post("/api/auth/register", requireAuth, async (req, res) => {
     try {
       const { username, password, clubId } = req.body;
-      
-      // Get the authenticated admin
-      const creatorAdmin = await storage.getAdmin(req.session.adminId!);
-      if (!creatorAdmin?.clubId) {
-        return res.status(403).json({ error: "Admin must be assigned to a club to create new admins" });
+
+      const creator = await storage.getAdmin(req.session.adminId!);
+      if (!creator?.clubId) {
+        return res.status(403).json({ error: "Admin must be assigned to a club" });
       }
-      
-      // Verify the new admin is for the same club as the creator
-      if (clubId !== creatorAdmin.clubId) {
-        return res.status(403).json({ error: "Can only create admins for your own club" });
+
+      if (clubId !== creator.clubId) {
+        return res.status(403).json({ error: "Can only create admins for your club" });
       }
-      
-      const existingAdmin = await storage.getAdminByUsername(username);
-      if (existingAdmin) {
+
+      const existing = await storage.getAdminByUsername(username);
+      if (existing) {
         return res.status(400).json({ error: "Username already exists" });
       }
 
@@ -328,10 +304,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         clubId
       });
 
-      res.status(201).json({ 
+      res.status(201).json({
         success: true,
-        admin: { 
-          id: admin.id, 
+        admin: {
+          id: admin.id,
           username: admin.username,
           clubId: admin.clubId
         }

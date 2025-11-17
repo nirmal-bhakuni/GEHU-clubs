@@ -1,0 +1,21 @@
+{
+  "name": "gehu-backend",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "ts-node --esm index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.7",
+    "drizzle-zod": "^0.8.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.4.5"
+  }
+}
