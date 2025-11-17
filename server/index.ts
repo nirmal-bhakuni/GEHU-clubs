@@ -5,9 +5,9 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import session from "express-session";
 
-import { registerRoutes } from "./routes.ts";
-import { setupVite, serveStatic, log } from "./vite.ts";
-import { connectDB } from "./config/db.ts";
+import { registerRoutes } from "./routes";
+import { setupVite, serveStatic, log } from "./vite";
+import { connectDB } from "./config/db";
 
 const app = express();
 app.use(express.json());
@@ -68,9 +68,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     throw err;
   });
 
-  if (app.get("env") === "development") {
+  if (process.env.NODE_ENV !== "production") {
+    // In non-production environments run Vite middleware for HMR + dev server
     await setupVite(app, server);
   } else {
+    // In production serve pre-built static assets
     serveStatic(app);
   }
 

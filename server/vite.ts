@@ -1,12 +1,11 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
-import viteConfig from "../vite.config.ts";
+// Note: we dynamically import Vite inside `setupVite` so the Vite package
+// won't be loaded in production builds. This avoids CJS/ESM deprecation
+// warnings and prevents tsc from needing to parse the project's `vite.config.ts`.
 import { nanoid } from "nanoid";
-
-const viteLogger = createLogger();
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -25,13 +24,16 @@ export async function setupVite(app: Express, server: Server) {
     hmr: { server },
     allowedHosts: true as const,
   };
+  const viteModule = await import("vite");
+  const createViteServer = viteModule.createServer as typeof viteModule.createServer;
+  const createLogger = viteModule.createLogger as typeof viteModule.createLogger;
+  const viteLogger = createLogger();
 
   const vite = await createViteServer({
-    ...viteConfig,
     configFile: false,
     customLogger: {
       ...viteLogger,
-      error: (msg, options) => {
+      error: (msg: any, options: any) => {
         viteLogger.error(msg, options);
         process.exit(1);
       },
@@ -45,12 +47,7 @@ export async function setupVite(app: Express, server: Server) {
     const url = req.originalUrl;
 
     try {
-      const clientTemplate = path.resolve(
-        import.meta.dirname,
-        "..",
-        "client",
-        "index.html",
-      );
+      const clientTemplate = path.resolve(process.cwd(), "client", "index.html");
 
       // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
@@ -68,7 +65,9 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  // The client build writes to the repository `dist` folder (see root `vite.config.ts`).
+  // When the server runs from the `server` directory, the built client is at `../dist`.
+  const distPath = path.resolve(process.cwd(), "..", "dist");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(

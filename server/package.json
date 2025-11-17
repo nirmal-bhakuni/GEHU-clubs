@@ -1,14 +1,21 @@
 {
   "name": "gehu-backend",
   "version": "1.0.0",
-  "main": "index.ts",
-  "type": "module",
+  "main": "dist/server/index.js",
   "license": "MIT",
   "scripts": {
-    "start": "ts-node --esm index.ts",
-    "build": "tsc"
+    "build": "tsc -p tsconfig.json",
+    "start": "cross-env NODE_ENV=production npm --prefix .. run build && cross-env NODE_ENV=production npm run build && cross-env NODE_ENV=production node dist/server/index.js"
   },
   "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "bcryptjs": "^2.4.3",
+    "multer": "^1.4.5-lts.1",
+    "mongoose": "^7.0.0",
+    "nanoid": "^4.0.0",
+    "vite": "^5.0.0",
+    "dotenv": "^16.0.0",
     "drizzle-orm": "^0.44.7",
     "drizzle-zod": "^0.8.3",
     "zod": "^4.1.12"
@@ -16,6 +23,7 @@
   "devDependencies": {
     "@types/node": "^20.12.7",
     "ts-node": "^10.9.1",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "cross-env": "^7.0.3"
   }
 }

@@ -5,7 +5,7 @@ import {
   type InsertClub,
   type Event,
   type InsertEvent
-} from "../shared/schema.ts";
+} from "../shared/schema";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
