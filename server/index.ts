@@ -6,8 +6,11 @@ import type { Request, Response, NextFunction } from "express";
 import session from "express-session";
 
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+import { setupVite, log } from "./vite";
 import { connectDB } from "./config/db";
+
+import path from "path";
+import { fileURLToPath } from "url";
 
 const app = express();
 app.use(express.json());
@@ -21,10 +24,6 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      // In production we require secure=true and SameSite='none' for cross-site
-      // cookies (if serving frontend from a different origin). For local
-      // development (vite on :5173 -> backend :5000 via proxy) keep cookies
-      // readable by the browser and allow SameSite lax behavior.
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
@@ -70,19 +69,28 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     res.status(status).json({ message });
-    // Don't re-throw the error here. In development the Vite middleware may
-    // call `next(err)` for recoverable transform errors; re-throwing would
-    // crash the entire server process. Log the error and continue so the
-    // dev server remains available for debugging.
-    console.error('Unhandled error in middleware:', err && err.stack ? err.stack : err);
+
+    console.error(
+      "Unhandled error in middleware:",
+      err && err.stack ? err.stack : err
+    );
   });
 
+  // ⚡ DEVELOPMENT (Vite HMR)
   if (process.env.NODE_ENV !== "production") {
-    // In non-production environments run Vite middleware for HMR + dev server
     await setupVite(app, server);
   } else {
-    // In production serve pre-built static assets
-    serveStatic(app);
+    // ⚡ PRODUCTION — Serve frontend from server/dist/public
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+
+    const publicPath = path.join(__dirname, "public");
+
+    app.use(express.static(publicPath));
+
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(publicPath, "index.html"));
+    });
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
