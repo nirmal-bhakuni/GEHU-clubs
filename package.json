@@ -4,8 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev-frontend-wait": "wait-on http://localhost:5000 && npm run dev-frontend",
-    "dev": "concurrently \"npm:dev-backend\" \"npm:dev-frontend-wait\"",
+    "dev": "concurrently \"npm:dev-backend\" \"npm:dev-frontend\"",
     "dev-backend": "cross-env NODE_ENV=development tsx watch server/index.ts",
     "dev-frontend": "cd client && vite --host",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
