@@ -1,11 +1,11 @@
 {
   "name": "gehu-backend",
   "version": "1.0.0",
-  "main": "dist/server/index.js",
+  "main": "dist/index.js",
   "license": "MIT",
   "scripts": {
-    "build": "tsc -p ./tsconfig.json",
-    "start": "cross-env NODE_ENV=production npm --prefix .. run build && cross-env NODE_ENV=production npm run build && cross-env NODE_ENV=production node dist/server/index.js"
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

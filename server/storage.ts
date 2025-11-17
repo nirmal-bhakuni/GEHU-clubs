@@ -5,7 +5,7 @@ import {
   type InsertClub,
   type Event,
   type InsertEvent
-} from "../shared/schema";
+} from "./shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 

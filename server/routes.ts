@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import express from "express";
 import bcrypt from "bcryptjs";
 import multer from "multer";
-import { insertAdminSchema, insertClubSchema, insertEventSchema } from "../shared/schema";
+import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared/schema";
 
 import path from "path";
 import fs from "fs";
