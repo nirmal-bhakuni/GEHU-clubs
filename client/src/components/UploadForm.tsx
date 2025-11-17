@@ -13,7 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Upload, X } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+
+// Fixed import — only queryClient is needed
+import { queryClient } from "@/lib/queryClient";
+
 import { useToast } from "@/hooks/use-toast";
 import type { Club } from "@shared/schema";
 
@@ -32,6 +35,7 @@ export default function UploadForm() {
   });
 
   const { toast } = useToast();
+
   const { data: clubs = [] } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
   });
@@ -39,9 +43,11 @@ export default function UploadForm() {
   const createEventMutation = useMutation({
     mutationFn: async (data: any) => {
       const formDataToSend = new FormData();
+
       Object.entries(data).forEach(([key, value]) => {
         formDataToSend.append(key, value as string);
       });
+
       if (selectedFiles.length > 0) {
         formDataToSend.append("image", selectedFiles[0]);
       }
@@ -58,13 +64,15 @@ export default function UploadForm() {
 
       return response.json();
     },
+
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+
       toast({
         title: "Event created",
         description: "Your event has been successfully created.",
       });
-      // Reset form
+
       setFormData({
         title: "",
         description: "",
@@ -75,8 +83,10 @@ export default function UploadForm() {
         clubId: "",
         clubName: "",
       });
+
       setSelectedFiles([]);
     },
+
     onError: () => {
       toast({
         title: "Error",
@@ -89,6 +99,7 @@ export default function UploadForm() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+
     const files = Array.from(e.dataTransfer.files);
     setSelectedFiles((prev) => [...prev, ...files]);
   };
@@ -106,7 +117,7 @@ export default function UploadForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.clubId) {
       toast({
         title: "Error",
@@ -116,7 +127,8 @@ export default function UploadForm() {
       return;
     }
 
-    const selectedClub = clubs.find(c => c.id === formData.clubId);
+    const selectedClub = clubs.find((c) => c.id === formData.clubId);
+
     const dataToSubmit = {
       ...formData,
       clubName: selectedClub?.name || "",
@@ -128,6 +140,7 @@ export default function UploadForm() {
   return (
     <Card className="p-8">
       <h2 className="text-2xl font-semibold mb-6">Create New Event</h2>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
           <Label htmlFor="event-title">Event Title</Label>
@@ -135,9 +148,10 @@ export default function UploadForm() {
             id="event-title"
             placeholder="Enter event title"
             value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, title: e.target.value })
+            }
             required
-            data-testid="input-event-title"
           />
         </div>
 
@@ -148,9 +162,10 @@ export default function UploadForm() {
             placeholder="Describe your event..."
             rows={4}
             value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, description: e.target.value })
+            }
             required
-            data-testid="input-event-description"
           />
         </div>
 
@@ -161,20 +176,23 @@ export default function UploadForm() {
               id="event-date"
               type="date"
               value={formData.date}
-              onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, date: e.target.value })
+              }
               required
-              data-testid="input-event-date"
             />
           </div>
+
           <div className="space-y-2">
             <Label htmlFor="event-time">Time</Label>
             <Input
               id="event-time"
               type="time"
               value={formData.time}
-              onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, time: e.target.value })
+              }
               required
-              data-testid="input-event-time"
             />
           </div>
         </div>
@@ -185,21 +203,25 @@ export default function UploadForm() {
             id="event-location"
             placeholder="Event location"
             value={formData.location}
-            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, location: e.target.value })
+            }
             required
-            data-testid="input-event-location"
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="event-club">Club</Label>
-          <Select 
-            value={formData.clubId} 
-            onValueChange={(value) => setFormData({ ...formData, clubId: value })}
+          <Select
+            value={formData.clubId}
+            onValueChange={(value) =>
+              setFormData({ ...formData, clubId: value })
+            }
           >
-            <SelectTrigger id="event-club" data-testid="select-event-club">
+            <SelectTrigger id="event-club">
               <SelectValue placeholder="Select club" />
             </SelectTrigger>
+
             <SelectContent>
               {clubs.map((club) => (
                 <SelectItem key={club.id} value={club.id}>
@@ -212,13 +234,16 @@ export default function UploadForm() {
 
         <div className="space-y-2">
           <Label htmlFor="event-category">Category</Label>
-          <Select 
+          <Select
             value={formData.category}
-            onValueChange={(value) => setFormData({ ...formData, category: value })}
+            onValueChange={(value) =>
+              setFormData({ ...formData, category: value })
+            }
           >
-            <SelectTrigger id="event-category" data-testid="select-event-category">
+            <SelectTrigger id="event-category">
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
+
             <SelectContent>
               <SelectItem value="workshop">Workshop</SelectItem>
               <SelectItem value="bootcamp">Bootcamp</SelectItem>
@@ -231,6 +256,7 @@ export default function UploadForm() {
 
         <div className="space-y-2">
           <Label>Event Poster / Photos</Label>
+
           <div
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
               isDragging
@@ -243,12 +269,12 @@ export default function UploadForm() {
               setIsDragging(true);
             }}
             onDragLeave={() => setIsDragging(false)}
-            data-testid="dropzone-files"
           >
             <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mb-2 font-body">
+            <p className="text-sm text-muted-foreground mb-2">
               Drag and drop files here, or click to browse
             </p>
+
             <Input
               type="file"
               multiple
@@ -257,12 +283,14 @@ export default function UploadForm() {
               className="hidden"
               id="file-upload"
             />
+
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => document.getElementById("file-upload")?.click()}
-              data-testid="button-browse-files"
+              onClick={() =>
+                document.getElementById("file-upload")?.click()
+              }
             >
               Browse Files
             </Button>
@@ -274,16 +302,17 @@ export default function UploadForm() {
                 <div
                   key={`${file.name}-${file.size}-${index}`}
                   className="flex items-center justify-between p-3 bg-muted rounded-md"
-                  data-testid={`file-item-${index}`}
                 >
-                  <span className="text-sm truncate flex-1">{file.name}</span>
+                  <span className="text-sm truncate flex-1">
+                    {file.name}
+                  </span>
+
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
                     onClick={() => removeFile(index)}
                     className="h-8 w-8"
-                    data-testid={`button-remove-file-${index}`}
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -294,17 +323,19 @@ export default function UploadForm() {
         </div>
 
         <div className="flex gap-4 pt-4">
-          <Button 
-            type="submit" 
-            className="flex-1" 
+          <Button
+            type="submit"
+            className="flex-1"
             disabled={createEventMutation.isPending}
-            data-testid="button-submit-event"
           >
-            {createEventMutation.isPending ? "Creating..." : "Create Event"}
+            {createEventMutation.isPending
+              ? "Creating..."
+              : "Create Event"}
           </Button>
-          <Button 
-            type="button" 
-            variant="secondary" 
+
+          <Button
+            type="button"
+            variant="secondary"
             onClick={() => {
               setFormData({
                 title: "",
@@ -318,7 +349,6 @@ export default function UploadForm() {
               });
               setSelectedFiles([]);
             }}
-            data-testid="button-cancel-event"
           >
             Cancel
           </Button>
