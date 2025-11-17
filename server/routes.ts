@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import express from "express";
@@ -29,7 +29,7 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.adminId) {
     return res.status(401).json({ error: "Unauthorized" });
   }

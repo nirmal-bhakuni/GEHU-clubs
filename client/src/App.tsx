@@ -10,6 +10,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Home from "@/pages/Home";
 import Clubs from "@/pages/Clubs";
+import ClubDetail from "@/pages/ClubDetail";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
 import Dashboard from "@/pages/Dashboard";
@@ -22,7 +23,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/clubs" component={Clubs} />
-      <Route path="/clubs/:id" component={require('./pages/ClubDetail').default} />
+      <Route path="/clubs/:id" component={ClubDetail} />
       <Route path="/events" component={Events} />
       <Route path="/events/:id" component={EventDetail} />
       <Route path="/login" component={Login} />
