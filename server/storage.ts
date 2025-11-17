@@ -7,6 +7,7 @@ import {
   type InsertEvent
 } from "../shared/schema";
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
 
 export interface IStorage {
   // Admin operations
@@ -111,7 +112,6 @@ export class MemStorage implements IStorage {
     });
 
     // Create sample admin assigned to Tech Club (password: admin123)
-    const bcrypt = await import("bcryptjs");
     const adminId = randomUUID();
     const hashedPassword = await bcrypt.hash("admin123", 10);
     this.admins.set(adminId, {
