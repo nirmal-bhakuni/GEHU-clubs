@@ -25,7 +25,7 @@ export default function StatsSection() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {stats.map((stat, index) => (
             <div
-              key={index}
+              key={stat.label}
               className="flex flex-col items-center text-center p-8 rounded-xl hover-elevate transition-all duration-300"
               data-testid={`stat-${index}`}
             >

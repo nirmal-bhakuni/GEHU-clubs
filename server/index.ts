@@ -21,8 +21,13 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
+      // In production we require secure=true and SameSite='none' for cross-site
+      // cookies (if serving frontend from a different origin). For local
+      // development (vite on :5173 -> backend :5000 via proxy) keep cookies
+      // readable by the browser and allow SameSite lax behavior.
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
     },
   })
@@ -65,7 +70,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     res.status(status).json({ message });
-    throw err;
+    // Don't re-throw the error here. In development the Vite middleware may
+    // call `next(err)` for recoverable transform errors; re-throwing would
+    // crash the entire server process. Log the error and continue so the
+    // dev server remains available for debugging.
+    console.error('Unhandled error in middleware:', err && err.stack ? err.stack : err);
   });
 
   if (process.env.NODE_ENV !== "production") {

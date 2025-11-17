@@ -272,7 +272,7 @@ export default function UploadForm() {
             <div className="mt-4 space-y-2">
               {selectedFiles.map((file, index) => (
                 <div
-                  key={index}
+                  key={`${file.name}-${file.size}-${index}`}
                   className="flex items-center justify-between p-3 bg-muted rounded-md"
                   data-testid={`file-item-${index}`}
                 >

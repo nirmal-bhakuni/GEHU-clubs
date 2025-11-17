@@ -13,6 +13,7 @@ import type { Event } from "@shared/schema";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -177,11 +178,16 @@ export default function Dashboard() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button variant="secondary" size="sm" data-testid={`button-edit-${event.id}`}>
+                        <Button 
+                          variant="secondary" 
+                          size="sm" 
+                          onClick={() => setEditingEventId(event.id)}
+                          data-testid={`button-edit-${event.id}`}
+                        >
                           Edit
                         </Button>
                         <Button 
-                          variant="ghost" 
+                          variant="destructive" 
                           size="sm" 
                           onClick={() => deleteMutation.mutate(event.id)}
                           disabled={deleteMutation.isPending}

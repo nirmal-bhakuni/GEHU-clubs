@@ -34,8 +34,11 @@ export async function setupVite(app: Express, server: Server) {
     customLogger: {
       ...viteLogger,
       error: (msg: any, options: any) => {
+        // Forward Vite errors to the default logger but do NOT exit the
+        // process. Exiting here caused the entire Node process to terminate
+        // on pre-transform issues (for example when Vite failed to load
+        // `/src/main.tsx`), which made the dev environment brittle.
         viteLogger.error(msg, options);
-        process.exit(1);
       },
     },
     server: serverOptions,
