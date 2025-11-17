@@ -22,12 +22,11 @@ app.use(
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
-    },
+      maxAge: 24 * 60 * 60 * 1000
+    }
   })
 );
 
-// Error logging middleware
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
   res.status(500).json({ message: "Internal Server Error" });
@@ -38,12 +37,9 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
   const server = await registerRoutes(app);
 
-  // Serve frontend in production
   if (process.env.NODE_ENV === "production") {
     const publicPath = path.join(__dirname, "public");
-
     app.use(express.static(publicPath));
-
     app.get("*", (_req, res) => {
       res.sendFile(path.join(publicPath, "index.html"));
     });
@@ -52,7 +48,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   const port = parseInt(process.env.PORT || "5000", 10);
   const host = "0.0.0.0";
 
-  server.listen({ port, host }, () => {
+  server.listen(port, host, () => {
     log(`Serving on http://${host}:${port}`);
   });
 })();
