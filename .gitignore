@@ -1,6 +1,15 @@
-node_modules
-dist
+# Dependencies
+node_modules/
+
+# Editor/Junk files
 .DS_Store
-server/public
+*.log
+
+# Do NOT ignore frontend dist inside server
+# Allow: server/dist/public
+# Ignore other root build folders
+/dist/
+
+# Ignore Vite temp files
 vite.config.ts.*
 *.tar.gz
