@@ -22,6 +22,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/clubs" component={Clubs} />
+      <Route path="/clubs/:id" component={require('./pages/ClubDetail').default} />
       <Route path="/events" component={Events} />
       <Route path="/events/:id" component={EventDetail} />
       <Route path="/login" component={Login} />
