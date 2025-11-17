@@ -3,6 +3,7 @@
   "compilerOptions": {
     "strict": false,
     "noEmit": false,
+    "types": ["node"],
     "allowImportingTsExtensions": false,
     "outDir": "../dist/server",
     "module": "ESNext",
