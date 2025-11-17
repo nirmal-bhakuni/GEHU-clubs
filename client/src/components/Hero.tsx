@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Calendar, Users } from "lucide-react";
+import { Link } from "wouter";
 import heroImage from "@assets/stock_images/college_students_at__ee69440f.jpg";
 
 export default function Hero() {
@@ -22,24 +23,29 @@ export default function Hero() {
           Explore clubs, join events, and connect with students who share your passions. Your college experience starts here.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <Button
-            size="lg"
-            variant="default"
-            className="text-base"
-            data-testid="button-explore-clubs"
-          >
-            <Users className="w-5 h-5 mr-2" />
-            Explore Clubs
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="text-base backdrop-blur-md bg-white/10 border-white/30 text-white hover:bg-white/20"
-            data-testid="button-view-events"
-          >
-            <Calendar className="w-5 h-5 mr-2" />
-            View Events
-          </Button>
+          <Link href="/clubs" data-testid="link-explore-clubs">
+            <Button
+              size="lg"
+              variant="default"
+              className="text-base"
+              data-testid="button-explore-clubs"
+            >
+              <Users className="w-5 h-5 mr-2" />
+              Explore Clubs
+            </Button>
+          </Link>
+
+          <Link href="/events" data-testid="link-view-events">
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-base text-white border-white/40 hover:bg-white/10"
+              data-testid="button-view-events"
+            >
+              <Calendar className="w-5 h-5 mr-2" />
+              View Events
+            </Button>
+          </Link>
         </div>
       </div>
     </section>
