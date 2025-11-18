@@ -13,10 +13,11 @@ import { log } from "./vite";
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// ✅ CORS FIX (REQUIRED for cookies)
 app.use(
   cors({
     origin: [
@@ -28,7 +29,6 @@ app.use(
   })
 );
 
-// ✅ SESSION FIX — (REQUIRED for login)
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "dev-secret",
@@ -47,7 +47,6 @@ app.use(
   })
 );
 
-// Error handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err);
   res.status(500).json({ message: "Internal Server Error" });
@@ -58,7 +57,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
   const server = await registerRoutes(app);
 
-  // Serve frontend build in production
   if (process.env.NODE_ENV === "production") {
     const publicPath = path.join(__dirname, "public");
     app.use(express.static(publicPath));
