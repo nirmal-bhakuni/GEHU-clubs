@@ -9,6 +9,9 @@ import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared
 import path from "path";
 import fs from "fs";
 
+import { Student } from "./models/Student";
+import { randomUUID } from "crypto";
+
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -42,18 +45,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/login", async (req, res) => {
     try {
       const { username, password } = req.body;
-
       const admin = await storage.getAdminByUsername(username);
-      if (!admin) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
+
+      if (!admin) return res.status(401).json({ error: "Invalid credentials" });
 
       const isValid = await bcrypt.compare(password, admin.password);
-      if (!isValid) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
+      if (!isValid) return res.status(401).json({ error: "Invalid credentials" });
 
       req.session.adminId = admin.id;
+
       res.json({
         success: true,
         admin: {
@@ -68,23 +68,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy((err: any) => {
-      if (err) {
-        return res.status(500).json({ error: "Logout failed" });
-      }
+    req.session.destroy(err => {
+      if (err) return res.status(500).json({ error: "Logout failed" });
       res.json({ success: true });
     });
   });
 
   app.get("/api/auth/me", async (req, res) => {
-    if (!req.session.adminId) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
+    if (!req.session.adminId) return res.status(401).json({ error: "Not authenticated" });
 
     const admin = await storage.getAdmin(req.session.adminId);
-    if (!admin) {
-      return res.status(404).json({ error: "Admin not found" });
-    }
+    if (!admin) return res.status(404).json({ error: "Admin not found" });
 
     res.json({
       id: admin.id,
@@ -101,9 +95,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (search && typeof search === "string") {
         const s = search.toLowerCase();
         clubs = clubs.filter(
-          c =>
-            c.name.toLowerCase().includes(s) ||
-            c.description.toLowerCase().includes(s)
+          c => c.name.toLowerCase().includes(s) || c.description.toLowerCase().includes(s)
         );
       }
 
@@ -120,9 +112,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/clubs/:id", async (req, res) => {
     try {
       const club = await storage.getClub(req.params.id);
-      if (!club) {
-        return res.status(404).json({ error: "Club not found" });
-      }
+      if (!club) return res.status(404).json({ error: "Club not found" });
       res.json(club);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch club" });
@@ -142,9 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/clubs/:id", requireAuth, async (req, res) => {
     try {
       const club = await storage.updateClub(req.params.id, req.body);
-      if (!club) {
-        return res.status(404).json({ error: "Club not found" });
-      }
+      if (!club) return res.status(404).json({ error: "Club not found" });
       res.json(club);
     } catch (error) {
       res.status(400).json({ error: "Failed to update club" });
@@ -154,9 +142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/clubs/:id", requireAuth, async (req, res) => {
     try {
       const success = await storage.deleteClub(req.params.id);
-      if (!success) {
-        return res.status(404).json({ error: "Club not found" });
-      }
+      if (!success) return res.status(404).json({ error: "Club not found" });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete club" });
@@ -177,9 +163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (search && typeof search === "string") {
         const s = search.toLowerCase();
         events = events.filter(
-          e =>
-            e.title.toLowerCase().includes(s) ||
-            e.description.toLowerCase().includes(s)
+          e => e.title.toLowerCase().includes(s) || e.description.toLowerCase().includes(s)
         );
       }
 
@@ -196,9 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/events/:id", async (req, res) => {
     try {
       const event = await storage.getEvent(req.params.id);
-      if (!event) {
-        return res.status(404).json({ error: "Event not found" });
-      }
+      if (!event) return res.status(404).json({ error: "Event not found" });
       res.json(event);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch event" });
@@ -208,9 +190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/events", requireAuth, upload.single("image"), async (req, res) => {
     try {
       const admin = await storage.getAdmin(req.session.adminId!);
-      if (!admin?.clubId) {
-        return res.status(403).json({ error: "Admin must be assigned to a club" });
-      }
+      if (!admin?.clubId) return res.status(403).json({ error: "Admin must be assigned to a club" });
 
       const eventData = {
         ...req.body,
@@ -220,6 +200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const validated = insertEventSchema.parse(eventData);
       const event = await storage.createEvent(validated);
+
       res.status(201).json(event);
     } catch (error) {
       res.status(400).json({ error: "Invalid event data" });
@@ -229,14 +210,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/events/:id", requireAuth, upload.single("image"), async (req, res) => {
     try {
       const existingEvent = await storage.getEvent(req.params.id);
-      if (!existingEvent) {
-        return res.status(404).json({ error: "Event not found" });
-      }
+      if (!existingEvent) return res.status(404).json({ error: "Event not found" });
 
       const admin = await storage.getAdmin(req.session.adminId!);
-      if (!admin?.clubId) {
-        return res.status(403).json({ error: "Admin must be assigned to a club" });
-      }
+      if (!admin?.clubId) return res.status(403).json({ error: "Admin must be assigned to a club" });
 
       if (existingEvent.clubId !== admin.clubId) {
         return res.status(403).json({ error: "Not authorized" });
@@ -259,14 +236,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/events/:id", requireAuth, async (req, res) => {
     try {
       const existingEvent = await storage.getEvent(req.params.id);
-      if (!existingEvent) {
-        return res.status(404).json({ error: "Event not found" });
-      }
+      if (!existingEvent) return res.status(404).json({ error: "Event not found" });
 
       const admin = await storage.getAdmin(req.session.adminId!);
-      if (!admin?.clubId) {
-        return res.status(403).json({ error: "Admin must be assigned to a club" });
-      }
+      if (!admin?.clubId) return res.status(403).json({ error: "Admin must be assigned to a club" });
 
       if (existingEvent.clubId !== admin.clubId) {
         return res.status(403).json({ error: "Not authorized" });
@@ -284,20 +257,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { username, password, clubId } = req.body;
 
       const creator = await storage.getAdmin(req.session.adminId!);
-      if (!creator?.clubId) {
-        return res.status(403).json({ error: "Admin must be assigned to a club" });
-      }
+      if (!creator?.clubId) return res.status(403).json({ error: "Admin must be assigned to a club" });
 
       if (clubId !== creator.clubId) {
         return res.status(403).json({ error: "Can only create admins for your club" });
       }
 
       const existing = await storage.getAdminByUsername(username);
-      if (existing) {
-        return res.status(400).json({ error: "Username already exists" });
-      }
+      if (existing) return res.status(400).json({ error: "Username already exists" });
 
       const hashedPassword = await bcrypt.hash(password, 10);
+
       const admin = await storage.createAdmin({
         username,
         password: hashedPassword,
@@ -314,6 +284,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(400).json({ error: "Registration failed" });
+    }
+  });
+
+  // ⭐ STUDENT SIGNUP (MongoDB)
+  app.post("/api/student/signup", async (req, res) => {
+    try {
+      const { name, email, password, clubId } = req.body;
+
+      const exists = await Student.findOne({ email });
+      if (exists) return res.status(400).json({ error: "Email already exists" });
+
+      const hashed = await bcrypt.hash(password, 10);
+
+      const student = await Student.create({
+        id: randomUUID(),
+        name,
+        email,
+        password: hashed,
+        clubId: clubId || null,
+        createdAt: new Date()
+      });
+
+      res.json({
+        success: true,
+        student: {
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          clubId: student.clubId
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Signup failed" });
     }
   });
 
