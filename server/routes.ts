@@ -5,12 +5,9 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared/schema";
-
 import path from "path";
 import fs from "fs";
-
 import { Student } from "./models/Student";
-import { randomUUID } from "crypto";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -18,12 +15,11 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 const storage_multer = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination: function (_, __, cb) {
     cb(null, uploadsDir);
   },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + "-" + file.originalname);
+  filename: function (_, file, cb) {
+    cb(null, Date.now() + "-" + Math.round(Math.random() * 1e9) + "-" + file.originalname);
   }
 });
 
@@ -33,9 +29,7 @@ const upload = multer({
 });
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.adminId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!req.session.adminId) return res.status(401).json({ error: "Unauthorized" });
   next();
 }
 
@@ -46,30 +40,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username, password } = req.body;
       const admin = await storage.getAdminByUsername(username);
-
       if (!admin) return res.status(401).json({ error: "Invalid credentials" });
 
-      const isValid = await bcrypt.compare(password, admin.password);
-      if (!isValid) return res.status(401).json({ error: "Invalid credentials" });
+      const valid = await bcrypt.compare(password, admin.password);
+      if (!valid) return res.status(401).json({ error: "Invalid credentials" });
 
       req.session.adminId = admin.id;
 
       res.json({
         success: true,
-        admin: {
-          id: admin.id,
-          username: admin.username,
-          clubId: admin.clubId
-        }
+        admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
       });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Login failed" });
     }
   });
 
   app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy(err => {
-      if (err) return res.status(500).json({ error: "Logout failed" });
+    req.session.destroy(() => {
       res.json({ success: true });
     });
   });
@@ -94,9 +82,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (search && typeof search === "string") {
         const s = search.toLowerCase();
-        clubs = clubs.filter(
-          c => c.name.toLowerCase().includes(s) || c.description.toLowerCase().includes(s)
-        );
+        clubs = clubs.filter(c => c.name.toLowerCase().includes(s) || c.description.toLowerCase().includes(s));
       }
 
       if (category && typeof category === "string" && category !== "all") {
@@ -104,7 +90,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json(clubs);
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch clubs" });
     }
   });
@@ -114,27 +100,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const club = await storage.getClub(req.params.id);
       if (!club) return res.status(404).json({ error: "Club not found" });
       res.json(club);
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch club" });
     }
   });
 
   app.post("/api/clubs", requireAuth, async (req, res) => {
     try {
-      const validatedData = insertClubSchema.parse(req.body);
-      const club = await storage.createClub(validatedData);
+      const data = insertClubSchema.parse(req.body);
+      const club = await storage.createClub(data);
       res.status(201).json(club);
-    } catch (error) {
+    } catch {
       res.status(400).json({ error: "Invalid club data" });
     }
   });
 
   app.patch("/api/clubs/:id", requireAuth, async (req, res) => {
     try {
-      const club = await storage.updateClub(req.params.id, req.body);
-      if (!club) return res.status(404).json({ error: "Club not found" });
-      res.json(club);
-    } catch (error) {
+      const updated = await storage.updateClub(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ error: "Club not found" });
+      res.json(updated);
+    } catch {
       res.status(400).json({ error: "Failed to update club" });
     }
   });
@@ -144,7 +130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const success = await storage.deleteClub(req.params.id);
       if (!success) return res.status(404).json({ error: "Club not found" });
       res.json({ success: true });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Failed to delete club" });
     }
   });
@@ -152,13 +138,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/events", async (req, res) => {
     try {
       const { clubId, search, category } = req.query;
-      let events;
 
-      if (clubId && typeof clubId === "string") {
-        events = await storage.getEventsByClub(clubId);
-      } else {
-        events = await storage.getAllEvents();
-      }
+      let events =
+        clubId && typeof clubId === "string"
+          ? await storage.getEventsByClub(clubId)
+          : await storage.getAllEvents();
 
       if (search && typeof search === "string") {
         const s = search.toLowerCase();
@@ -172,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json(events);
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch events" });
     }
   });
@@ -182,7 +166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const event = await storage.getEvent(req.params.id);
       if (!event) return res.status(404).json({ error: "Event not found" });
       res.json(event);
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Failed to fetch event" });
     }
   });
@@ -190,7 +174,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/events", requireAuth, upload.single("image"), async (req, res) => {
     try {
       const admin = await storage.getAdmin(req.session.adminId!);
-      if (!admin?.clubId) return res.status(403).json({ error: "Admin must be assigned to a club" });
 
       const eventData = {
         ...req.body,
@@ -202,20 +185,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const event = await storage.createEvent(validated);
 
       res.status(201).json(event);
-    } catch (error) {
+    } catch {
       res.status(400).json({ error: "Invalid event data" });
     }
   });
 
   app.patch("/api/events/:id", requireAuth, upload.single("image"), async (req, res) => {
     try {
-      const existingEvent = await storage.getEvent(req.params.id);
-      if (!existingEvent) return res.status(404).json({ error: "Event not found" });
+      const oldEvent = await storage.getEvent(req.params.id);
+      if (!oldEvent) return res.status(404).json({ error: "Event not found" });
 
       const admin = await storage.getAdmin(req.session.adminId!);
-      if (!admin?.clubId) return res.status(403).json({ error: "Admin must be assigned to a club" });
-
-      if (existingEvent.clubId !== admin.clubId) {
+      if (oldEvent.clubId !== admin.clubId) {
         return res.status(403).json({ error: "Not authorized" });
       }
 
@@ -228,26 +209,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const event = await storage.updateEvent(req.params.id, updates);
       res.json(event);
-    } catch (error) {
+    } catch {
       res.status(400).json({ error: "Failed to update event" });
     }
   });
 
   app.delete("/api/events/:id", requireAuth, async (req, res) => {
     try {
-      const existingEvent = await storage.getEvent(req.params.id);
-      if (!existingEvent) return res.status(404).json({ error: "Event not found" });
+      const oldEvent = await storage.getEvent(req.params.id);
+      if (!oldEvent) return res.status(404).json({ error: "Event not found" });
 
       const admin = await storage.getAdmin(req.session.adminId!);
-      if (!admin?.clubId) return res.status(403).json({ error: "Admin must be assigned to a club" });
-
-      if (existingEvent.clubId !== admin.clubId) {
+      if (oldEvent.clubId !== admin.clubId) {
         return res.status(403).json({ error: "Not authorized" });
       }
 
-      const success = await storage.deleteEvent(req.params.id);
+      await storage.deleteEvent(req.params.id);
       res.json({ success: true });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Failed to delete event" });
     }
   });
@@ -256,41 +235,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { username, password, clubId } = req.body;
 
-      const creator = await storage.getAdmin(req.session.adminId!);
-      if (!creator?.clubId) return res.status(403).json({ error: "Admin must be assigned to a club" });
-
-      if (clubId !== creator.clubId) {
-        return res.status(403).json({ error: "Can only create admins for your club" });
-      }
-
       const existing = await storage.getAdminByUsername(username);
       if (existing) return res.status(400).json({ error: "Username already exists" });
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashed = await bcrypt.hash(password, 10);
 
       const admin = await storage.createAdmin({
         username,
-        password: hashedPassword,
+        password: hashed,
         clubId
       });
 
-      res.status(201).json({
+      res.json({
         success: true,
-        admin: {
-          id: admin.id,
-          username: admin.username,
-          clubId: admin.clubId
-        }
+        admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
       });
-    } catch (error) {
+    } catch {
       res.status(400).json({ error: "Registration failed" });
     }
   });
 
-  // ⭐ STUDENT SIGNUP (MongoDB)
   app.post("/api/student/signup", async (req, res) => {
     try {
-      const { name, email, password, clubId } = req.body;
+      const { name, email, password, enrollment, branch } = req.body;
+
+      if (!name || !email || !password || !enrollment || !branch)
+        return res.status(400).json({ error: "All fields required" });
 
       const exists = await Student.findOne({ email });
       if (exists) return res.status(400).json({ error: "Email already exists" });
@@ -298,26 +268,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hashed = await bcrypt.hash(password, 10);
 
       const student = await Student.create({
-        id: randomUUID(),
         name,
         email,
         password: hashed,
-        clubId: clubId || null,
-        createdAt: new Date()
+        enrollment,
+        branch
       });
+
+      req.session.studentId = student._id;
 
       res.json({
         success: true,
         student: {
-          id: student.id,
+          id: student._id,
           name: student.name,
-          email: student.email,
-          clubId: student.clubId
+          email: student.email
         }
       });
-    } catch (error) {
+    } catch {
       res.status(500).json({ error: "Signup failed" });
     }
+  });
+
+  app.post("/api/student/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+
+      const student = await Student.findOne({ email });
+      if (!student) return res.status(401).json({ error: "Invalid email or password" });
+
+      const valid = await bcrypt.compare(password, student.password);
+      if (!valid) return res.status(401).json({ error: "Invalid email or password" });
+
+      req.session.studentId = student._id;
+
+      res.json({
+        success: true,
+        student: {
+          id: student._id,
+          name: student.name,
+          email: student.email
+        }
+      });
+    } catch {
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  app.get("/api/student/me", async (req, res) => {
+    if (!req.session.studentId)
+      return res.status(401).json({ error: "Not authenticated" });
+
+    const student = await Student.findById(req.session.studentId);
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    res.json({
+      id: student._id,
+      name: student.name,
+      email: student.email,
+      enrollment: student.enrollment,
+      branch: student.branch
+    });
   });
 
   const httpServer = createServer(app);

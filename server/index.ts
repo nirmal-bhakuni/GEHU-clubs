@@ -55,7 +55,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 (async () => {
   const connected = await connectDB();
 
-  if (connected) {
+  if (connected && process.env.NODE_ENV !== "production") {
     await seedDatabase();
   }
 

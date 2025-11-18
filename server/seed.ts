@@ -111,13 +111,16 @@ export async function seedDatabase() {
     }
   ]);
 
+  const studentPassword = await bcrypt.hash("student123", 10);
+
   await Student.insertMany([
     {
       id: randomUUID(),
       name: "Demo Student",
       email: "student@example.com",
+      password: studentPassword,
       clubId: techClubId,
-      joinedAt: new Date()
+      createdAt: new Date()
     }
   ]);
 }
