@@ -5,14 +5,16 @@ export const connectDB = async () => {
     const uri = process.env.MONGO_URI;
 
     if (!uri) {
-      console.warn("⚠️  MONGO_URI missing in .env file — skipping MongoDB connection (using in-memory storage)");
-      return;
+      console.warn("⚠️ MONGO_URI missing in .env file — skipping MongoDB connection");
+      return false;
     }
 
     await mongoose.connect(uri);
     console.log("🚀 MongoDB Connected Successfully");
+    return true;
+
   } catch (error: any) {
     console.error("❌ MongoDB Error:", error.message);
-    process.exit(1);
+    return false;
   }
 };

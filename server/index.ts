@@ -9,6 +9,7 @@ import cors from "cors";
 
 import { registerRoutes } from "./routes";
 import { connectDB } from "./config/db";
+import { seedDatabase } from "./seed";
 import { log } from "./vite";
 
 const app = express();
@@ -48,12 +49,15 @@ app.use(
 );
 
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err);
   res.status(500).json({ message: "Internal Server Error" });
 });
 
 (async () => {
-  await connectDB();
+  const connected = await connectDB();
+
+  if (connected) {
+    await seedDatabase();
+  }
 
   const server = await registerRoutes(app);
 
