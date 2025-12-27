@@ -14,6 +14,8 @@ import ClubDetail from "@/pages/ClubDetail";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
 import Dashboard from "@/pages/Dashboard";
+import ClubAdmin from "@/pages/ClubAdmin";
+import ClubAdminLogin from "@/pages/ClubAdminLogin";
 import Login from "@/pages/Login";
 import StudentProfile from "@/pages/StudentProfile";
 import NotFound from "@/pages/not-found";
@@ -24,7 +26,9 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/student" component={StudentProfile} />
       <Route path="/admin/login" component={Login} />
+      <Route path="/club-admin/login" component={ClubAdminLogin} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/club-admin" component={ClubAdmin} />
       <Route path="/clubs" component={Clubs} />
       <Route path="/clubs/:id" component={ClubDetail} />
       <Route path="/events" component={Events} />

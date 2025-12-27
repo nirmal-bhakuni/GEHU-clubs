@@ -51,7 +51,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: true,
         admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
       });
-    } catch {
+    } catch (error) {
+      console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });
     }
   });

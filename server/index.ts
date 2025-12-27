@@ -35,10 +35,10 @@ app.use(
     secret: process.env.SESSION_SECRET || "dev-secret",
     resave: false,
     saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGO_URI!,
-      collectionName: "sessions"
-    }),
+    // store: MongoStore.create({
+    //   mongoUrl: process.env.MONGO_URI!,
+    //   collectionName: "sessions"
+    // }),
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
@@ -53,26 +53,50 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 (async () => {
-  const connected = await connectDB();
+  try {
+    const connected = await connectDB();
 
-  if (connected && process.env.NODE_ENV !== "production") {
-    await seedDatabase();
+    if (connected && process.env.NODE_ENV !== "production") {
+      await seedDatabase();
+    }
+
+    // Temporarily skip route registration to test
+    await registerRoutes(app);
+    app.get("/test", (req, res) => res.json({ message: "Server is working", timestamp: new Date().toISOString() }));
+
+    const port = parseInt(process.env.PORT || "5000", 10);
+    const host = "0.0.0.0";
+
+    try {
+      const server = app.listen(port, host, () => {
+        log(`Serving on http://${host}:${port}`);
+        console.log(`Server is actually listening on port ${port}`);
+      });
+
+      // Handle server errors
+      server.on('error', (error) => {
+        console.error('Server error:', error);
+        process.exit(1);
+      });
+
+      // Handle uncaught exceptions
+      process.on('uncaughtException', (error) => {
+        console.error('Uncaught Exception:', error);
+        process.exit(1);
+      });
+
+      // Handle unhandled promise rejections
+      process.on('unhandledRejection', (reason, promise) => {
+        console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+        process.exit(1);
+      });
+    } catch (error) {
+      console.error('Failed to start server:', error);
+      process.exit(1);
+    }
+
+  } catch (error) {
+    console.error("Server startup error:", error);
+    process.exit(1);
   }
-
-  const server = await registerRoutes(app);
-
-  if (process.env.NODE_ENV === "production") {
-    const publicPath = path.join(__dirname, "public");
-    app.use(express.static(publicPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(publicPath, "index.html"));
-    });
-  }
-
-  const port = parseInt(process.env.PORT || "5000", 10);
-  const host = "0.0.0.0";
-
-  server.listen(port, host, () => {
-    log(`Serving on http://${host}:${port}`);
-  });
 })();

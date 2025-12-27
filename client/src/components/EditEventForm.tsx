@@ -18,23 +18,24 @@ import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
 
 interface EditEventFormProps {
-  event: Event;
+  event?: Event;
+  clubId?: string;
   onClose: () => void;
   onSuccess?: () => void;
 }
 
-export default function EditEventForm({ event, onClose, onSuccess }: EditEventFormProps) {
+export default function EditEventForm({ event, clubId, onClose, onSuccess }: EditEventFormProps) {
   const [formData, setFormData] = useState({
-    title: event.title,
-    description: event.description,
-    date: event.date,
-    time: event.time,
-    location: event.location,
-    category: event.category,
-    clubId: event.clubId,
+    title: event?.title || "",
+    description: event?.description || "",
+    date: event?.date || "",
+    time: event?.time || "",
+    location: event?.location || "",
+    category: event?.category || "",
+    clubId: event?.clubId || clubId || "",
   });
   const [newImage, setNewImage] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(event.imageUrl || null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(event?.imageUrl || null);
 
   const { toast } = useToast();
   
@@ -52,14 +53,17 @@ export default function EditEventForm({ event, onClose, onSuccess }: EditEventFo
         formDataToSend.append("image", newImage);
       }
 
-      const response = await fetch(`/api/events/${event.id}`, {
-        method: "PATCH",
+      const url = event ? `/api/events/${event.id}` : "/api/events";
+      const method = event ? "PATCH" : "POST";
+
+      const response = await fetch(url, {
+        method,
         body: formDataToSend,
         credentials: "include",
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update event");
+        throw new Error(`Failed to ${event ? "update" : "create"} event`);
       }
 
       return response.json();
@@ -67,8 +71,8 @@ export default function EditEventForm({ event, onClose, onSuccess }: EditEventFo
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
       toast({
-        title: "Event updated",
-        description: "Your event has been successfully updated.",
+        title: `Event ${event ? "updated" : "created"}`,
+        description: `Your event has been successfully ${event ? "updated" : "created"}.`,
       });
       onSuccess?.();
       onClose();
@@ -76,7 +80,7 @@ export default function EditEventForm({ event, onClose, onSuccess }: EditEventFo
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to update event. Please try again.",
+        description: `Failed to ${event ? "update" : "create"} event. Please try again.`,
         variant: "destructive",
       });
     },
@@ -231,7 +235,7 @@ export default function EditEventForm({ event, onClose, onSuccess }: EditEventFo
               disabled={updateEventMutation.isPending}
               data-testid="button-submit-edit-event"
             >
-              {updateEventMutation.isPending ? "Updating..." : "Update Event"}
+              {updateEventMutation.isPending ? (event ? "Updating..." : "Creating...") : (event ? "Update Event" : "Create Event")}
             </Button>
             <Button
               type="button"

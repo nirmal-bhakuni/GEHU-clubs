@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "./ThemeProvider";
+import { useAuth } from "@/hooks/useAuth";
 import LoginModal from "./LoginModal";
 import SignupModal from "./SignupModal";
 
@@ -10,12 +11,16 @@ export default function Navbar() {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { admin, isAuthenticated } = useAuth();
 
   const navItems = [
     { path: "/", label: "Home" },
     { path: "/clubs", label: "Clubs" },
     { path: "/events", label: "Events" },
-    { path: "/dashboard", label: "Dashboard" },
+    { 
+      path: isAuthenticated && admin?.clubId ? "/club-admin" : "/dashboard", 
+      label: isAuthenticated && admin?.clubId ? "Club Admin" : "Dashboard" 
+    },
   ];
 
   return (
@@ -61,9 +66,14 @@ export default function Navbar() {
             </Button>
             <LoginModal />
             <SignupModal />
-            <Link href="/login">
+            <Link href="/admin/login">
               <Button variant="outline" data-testid="button-admin-login">
                 Admin Login
+              </Button>
+            </Link>
+            <Link href="/club-admin/login">
+              <Button variant="outline" data-testid="button-club-admin-login">
+                Club Admin Login
               </Button>
             </Link>
           </div>
@@ -113,9 +123,14 @@ export default function Navbar() {
               <div className="mt-4 flex flex-col gap-2" onClick={() => setMobileMenuOpen(false)}>
                 <LoginModal />
                 <SignupModal />
-                <Link href="/login">
+                <Link href="/admin/login">
                   <Button className="w-full" variant="outline" data-testid="button-mobile-admin-login">
                     Admin Login
+                  </Button>
+                </Link>
+                <Link href="/club-admin/login">
+                  <Button className="w-full" variant="outline" data-testid="button-mobile-club-admin-login">
+                    Club Admin Login
                   </Button>
                 </Link>
               </div>

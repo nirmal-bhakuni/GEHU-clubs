@@ -1,9 +1,61 @@
 import { Link } from "wouter";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Facebook, Twitter, Instagram, Linkedin } from "lucide-react";
+import { Facebook, Twitter, Instagram, Linkedin, Send } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Footer() {
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const handleNewsletterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newsletterEmail.trim()) {
+      toast({
+        title: "Email required",
+        description: "Please enter your email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newsletterEmail)) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // TODO: Replace with actual API call
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+
+      toast({
+        title: "Welcome to GEHU Clubs! 🎉",
+        description: "Thank you for subscribing! Check your email for confirmation.",
+      });
+
+      setNewsletterEmail("");
+    } catch (error) {
+      toast({
+        title: "Subscription failed",
+        description: "Please try again later or contact support.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <footer className="bg-card border-t border-card-border">
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
@@ -64,17 +116,37 @@ export default function Footer() {
             <p className="text-sm text-muted-foreground mb-3 font-body">
               Get updates on new events and clubs.
             </p>
-            <div className="flex gap-2">
+            <form onSubmit={handleNewsletterSubmit} className="space-y-2">
               <Input
                 type="email"
                 placeholder="Your email"
                 className="text-sm"
+                value={newsletterEmail}
+                onChange={(e) => setNewsletterEmail(e.target.value)}
+                required
                 data-testid="input-newsletter-email"
               />
-              <Button variant="default" size="sm" data-testid="button-newsletter-subscribe">
-                Subscribe
+              <Button
+                type="submit"
+                variant="default"
+                size="sm"
+                className="w-full"
+                disabled={isSubmitting}
+                data-testid="button-newsletter-subscribe"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-3 h-3 mr-1 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Subscribing...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3 h-3 mr-1" />
+                    Subscribe
+                  </>
+                )}
               </Button>
-            </div>
+            </form>
           </div>
         </div>
 

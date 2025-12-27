@@ -28,7 +28,7 @@ export default function Login() {
           title: "Login successful",
           description: "Welcome back!",
         });
-        setLocation("/admin/dashboard");
+        setLocation("/dashboard");
       }
     } catch (error: any) {
       toast({
@@ -45,9 +45,9 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center py-16 px-4">
       <Card className="w-full max-w-md p-8">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold mb-2">Admin Login</h1>
+          <h1 className="text-3xl font-bold mb-2">University Admin Login</h1>
           <p className="text-muted-foreground font-body">
-            Sign in to manage your club events
+            Sign in to access the admin dashboard
           </p>
         </div>
 
@@ -91,7 +91,7 @@ export default function Login() {
         <div className="mt-6 text-center text-sm text-muted-foreground">
           <p>Default credentials for testing:</p>
           <p className="font-mono mt-1">
-            Username: admin | Password: admin123
+            Username: university_admin | Password: admin123
           </p>
         </div>
       </Card>
