@@ -128,105 +128,44 @@ export default function StudentProfile() {
         </div>
       </div>
 
-      {/* Stats Section */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <Card className="p-6 border-l-4 border-l-primary">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-muted-foreground text-sm mb-1">Ranking</p>
-                <p className="text-4xl font-bold">#{studentData.ranking}</p>
+      {/* Main Content Sections */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-12">
+        {/* Welcome Section */}
+        <section>
+          <h2 className="text-2xl font-bold mb-6">Welcome, {studentData.name}!</h2>
+          <p className="text-muted-foreground">Here's an overview of your club activities and achievements.</p>
+        </section>
+
+        {/* Points & Rank Section */}
+        <section>
+          <h2 className="text-2xl font-bold mb-6">Points & Rank</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="p-6 border-l-4 border-l-primary">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-muted-foreground text-sm mb-1">Ranking</p>
+                  <p className="text-4xl font-bold">#{studentData.ranking}</p>
+                </div>
+                <Trophy className="w-12 h-12 text-primary/30" />
               </div>
-              <Trophy className="w-12 h-12 text-primary/30" />
-            </div>
-          </Card>
+            </Card>
 
-          <Card className="p-6 border-l-4 border-l-yellow-500">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-muted-foreground text-sm mb-1">Total Points</p>
-                <p className="text-4xl font-bold">{studentData.totalPoints}</p>
+            <Card className="p-6 border-l-4 border-l-yellow-500">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-muted-foreground text-sm mb-1">Total Points</p>
+                  <p className="text-4xl font-bold">{studentData.totalPoints}</p>
+                </div>
+                <Zap className="w-12 h-12 text-yellow-500/30" />
               </div>
-              <Zap className="w-12 h-12 text-yellow-500/30" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Achievements Section */}
-        {studentData.achievements.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-6">
-              <Star className="w-5 h-5 text-primary" />
-              <h2 className="text-2xl font-bold">Achievements</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {studentData.achievements.map((achievement) => (
-                <Card key={achievement.id} className="p-4 hover:shadow-lg transition-shadow">
-                  <div className="text-2xl mb-2">{achievement.icon}</div>
-                  <h3 className="font-semibold mb-1">{achievement.title}</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    {achievement.description}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{achievement.date}</p>
-                </Card>
-              ))}
-            </div>
+            </Card>
           </div>
-        )}
+        </section>
 
-        {/* Certificates Section */}
-        {studentData.certificates.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-6">
-              <BookOpen className="w-5 h-5 text-primary" />
-              <h2 className="text-2xl font-bold">Certificates</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {studentData.certificates.map((cert: Certificate) => (
-                <Card
-                  key={cert.id}
-                  className="p-4 border-l-4 border-l-green-500 hover:shadow-lg transition-shadow"
-                >
-                  <h3 className="font-semibold mb-2">{cert.title}</h3>
-                  <p className="text-sm text-muted-foreground mb-2">{cert.issuer}</p>
-                  <p className="text-xs text-muted-foreground">{cert.date}</p>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Awards Section */}
-        {studentData.awards.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-6">
-              <Award className="w-5 h-5 text-primary" />
-              <h2 className="text-2xl font-bold">Awards</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {studentData.awards.map((award: StudentAward) => (
-                <Card
-                  key={award.id}
-                  className="p-4 border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow"
-                >
-                  <h3 className="font-semibold mb-2">{award.title}</h3>
-                  <Badge className="mb-3 bg-primary/20 text-primary hover:bg-primary/20">
-                    {award.category}
-                  </Badge>
-                  <p className="text-xs text-muted-foreground">{award.date}</p>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Joined Clubs Section */}
-        {studentData.clubs.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-6">
-              <Users className="w-5 h-5 text-primary" />
-              <h2 className="text-2xl font-bold">Joined Clubs ({studentData.clubs.length})</h2>
-            </div>
+        {/* My Clubs Section */}
+        <section>
+          <h2 className="text-2xl font-bold mb-6">My Clubs</h2>
+          {studentData.clubs.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {studentData.clubs.map((club: JoinedClub) => (
                 <Card
@@ -251,7 +190,115 @@ export default function StudentProfile() {
                 </Card>
               ))}
             </div>
-          </div>
+          ) : (
+            <Card className="p-6 text-center">
+              <p className="text-muted-foreground">No clubs joined yet. Explore clubs to get started!</p>
+            </Card>
+          )}
+        </section>
+
+        {/* My Events Section */}
+        <section>
+          <h2 className="text-2xl font-bold mb-6">My Events</h2>
+          <Card className="p-6 text-center">
+            <p className="text-muted-foreground">Events you've registered for will appear here.</p>
+            <p className="text-sm text-muted-foreground mt-2">Feature coming soon - track your event participation and history.</p>
+          </Card>
+        </section>
+
+        {/* Skills Earned Section */}
+        <section>
+          <h2 className="text-2xl font-bold mb-6">Skills Earned</h2>
+          <Card className="p-6 text-center">
+            <p className="text-muted-foreground">Skills developed through club activities.</p>
+            <p className="text-sm text-muted-foreground mt-2">Coming soon: Leadership, Communication, Teamwork, etc.</p>
+          </Card>
+        </section>
+
+        {/* Badges Section */}
+        <section>
+          <h2 className="text-2xl font-bold mb-6">Badges</h2>
+          <Card className="p-6 text-center">
+            <p className="text-muted-foreground">Earn badges for achievements and milestones.</p>
+            <p className="text-sm text-muted-foreground mt-2">Badges will be awarded based on your club participation.</p>
+          </Card>
+        </section>
+
+        {/* Notifications Section */}
+        <section>
+          <h2 className="text-2xl font-bold mb-6">Notifications</h2>
+          <Card className="p-6 text-center">
+            <p className="text-muted-foreground">Stay updated with club announcements and reminders.</p>
+            <p className="text-sm text-muted-foreground mt-2">Notifications for upcoming events and important updates.</p>
+          </Card>
+        </section>
+
+        {/* Existing Achievements Section */}
+        {studentData.achievements.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-6">
+              <Star className="w-5 h-5 text-primary" />
+              <h2 className="text-2xl font-bold">Achievements</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {studentData.achievements.map((achievement) => (
+                <Card key={achievement.id} className="p-4 hover:shadow-lg transition-shadow">
+                  <div className="text-2xl mb-2">{achievement.icon}</div>
+                  <h3 className="font-semibold mb-1">{achievement.title}</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    {achievement.description}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{achievement.date}</p>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Certificates Section */}
+        {studentData.certificates.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-6">
+              <BookOpen className="w-5 h-5 text-primary" />
+              <h2 className="text-2xl font-bold">Certificates</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {studentData.certificates.map((cert: Certificate) => (
+                <Card
+                  key={cert.id}
+                  className="p-4 border-l-4 border-l-green-500 hover:shadow-lg transition-shadow"
+                >
+                  <h3 className="font-semibold mb-2">{cert.title}</h3>
+                  <p className="text-sm text-muted-foreground mb-2">{cert.issuer}</p>
+                  <p className="text-xs text-muted-foreground">{cert.date}</p>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Awards Section */}
+        {studentData.awards.length > 0 && (
+          <section>
+            <div className="flex items-center gap-2 mb-6">
+              <Award className="w-5 h-5 text-primary" />
+              <h2 className="text-2xl font-bold">Awards</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {studentData.awards.map((award: StudentAward) => (
+                <Card
+                  key={award.id}
+                  className="p-4 border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow"
+                >
+                  <h3 className="font-semibold mb-2">{award.title}</h3>
+                  <Badge className="mb-3 bg-primary/20 text-primary hover:bg-primary/20">
+                    {award.category}
+                  </Badge>
+                  <p className="text-xs text-muted-foreground">{award.date}</p>
+                </Card>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>

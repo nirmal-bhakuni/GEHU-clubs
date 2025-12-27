@@ -22,13 +22,13 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/student" component={StudentProfile} />
+      <Route path="/admin/login" component={Login} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route path="/clubs" component={Clubs} />
       <Route path="/clubs/:id" component={ClubDetail} />
       <Route path="/events" component={Events} />
       <Route path="/events/:id" component={EventDetail} />
-      <Route path="/login" component={Login} />
-      <Route path="/profile" component={StudentProfile} />
-      <Route path="/dashboard" component={Dashboard} />
       <Route component={NotFound} />
     </Switch>
   );

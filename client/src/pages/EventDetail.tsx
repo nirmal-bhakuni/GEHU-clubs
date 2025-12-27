@@ -1,10 +1,10 @@
-import React, { ReactNode } from "react";
-import { useParams } from "wouter";
+import React, { ReactNode, useState, useRef } from "react";
+import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Clock, MapPin } from "lucide-react";
-import { Link } from "wouter";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import RegistrationForm from "@/components/RegistrationForm";
 import ClubMembership from "@/components/ClubMembership";
 import StudentReviews from "@/components/StudentReviews";
@@ -14,9 +14,16 @@ import type { Event } from "@shared/schema";
 export default function EventDetail() {
   const params = useParams<{ id: string }>();
   const eventId = params?.id;
+  const [activeTab, setActiveTab] = useState("overview");
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   const { data: event, isLoading, error } = useQuery<Event>({
     queryKey: [`/api/events/${eventId}`],
+    queryFn: async () => {
+      const res = await fetch(`/api/events/${eventId}`);
+      if (!res.ok) throw new Error("Event not found");
+      return res.json();
+    },
     enabled: !!eventId,
   });
 
@@ -109,20 +116,41 @@ export default function EventDetail() {
               </div>
             </div>
 
-            <div className="mb-8">
+            <div className="flex gap-4 mb-8">
+              <Button 
+                size="lg" 
+                className="flex-1 md:flex-none"
+                onClick={() => {
+                  setActiveTab("register");
+                  tabsRef.current?.scrollIntoView({ behavior: "smooth" });
+                }}
+              >
+                Register for this Event
+              </Button>
+              <Button variant="outline" size="lg">Share Event</Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabbed Content */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} ref={tabsRef} className="space-y-8">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="register">Register</TabsTrigger>
+            <TabsTrigger value="club-info">Club Info</TabsTrigger>
+            <TabsTrigger value="feedback">Feedback</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-8">
+            <div className="bg-card border border-card-border rounded-lg p-8">
               <h2 className="text-2xl font-bold mb-4">About This Event</h2>
               <p className="text-lg text-foreground leading-relaxed font-body">
                 {event.description}
               </p>
             </div>
-          </div>
-        </div>
+          </TabsContent>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Registration Form */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Registration Form */}
+          <TabsContent value="register" className="space-y-8">
             <RegistrationForm
               eventTitle={event.title}
               eventDate={event.date}
@@ -131,26 +159,28 @@ export default function EventDetail() {
                 console.log("Registration Data:", data);
               }}
             />
+          </TabsContent>
 
-            {/* Club Membership Info */}
+          <TabsContent value="club-info" className="space-y-8">
             <ClubMembership
               clubName={event.clubName}
               description={`Join ${event.clubName} to be part of a vibrant community of innovators and learners. This event is just the beginning of an amazing journey with us!`}
               memberCount={125}
               joinFee={0}
             />
+            <ClubContact clubName={event.clubName} />
+          </TabsContent>
 
-            {/* Student Reviews */}
-            <StudentReviews clubName={event.clubName} />
-          </div>
-
-          {/* Right Column - Contact Info */}
-          <div>
-            <div className="sticky top-20">
-              <ClubContact clubName={event.clubName} />
+          <TabsContent value="feedback" className="space-y-8">
+            <div className="bg-card border border-card-border rounded-lg p-8">
+              <h2 className="text-2xl font-bold mb-4">Student Feedback</h2>
+              <p className="text-muted-foreground mb-6">Share your thoughts and experiences from this event.</p>
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">Feedback system coming soon. Check back after the event!</p>
+              </div>
             </div>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

@@ -28,7 +28,7 @@ export default function Login() {
           title: "Login successful",
           description: "Welcome back!",
         });
-        setLocation("/dashboard");
+        setLocation("/admin/dashboard");
       }
     } catch (error: any) {
       toast({
