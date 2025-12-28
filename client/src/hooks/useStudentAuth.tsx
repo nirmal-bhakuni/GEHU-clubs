@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { getQueryFn } from "@/lib/queryClient";
 
 interface Student {
   id: string;
@@ -9,9 +10,10 @@ interface Student {
 }
 
 export function useStudentAuth() {
-  const { data: student, isLoading, error } = useQuery<Student>({
+  const { data: student, isLoading, error } = useQuery<Student | null>({
     queryKey: ["/api/student/me"],
     retry: false,
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   return {

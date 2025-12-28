@@ -33,7 +33,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<void> {
   app.use("/uploads", express.static(uploadsDir));
 
   app.post("/api/auth/login", async (req: Request, res: Response) => {
@@ -300,13 +300,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/student/login", async (req: Request, res: Response) => {
     try {
-      const { email, password } = req.body;
+      const { enrollment, password } = req.body;
 
-      const student = await Student.findOne({ email });
-      if (!student) return res.status(401).json({ error: "Invalid email or password" });
+      const student = await Student.findOne({ enrollment });
+      if (!student) return res.status(401).json({ error: "Invalid enrollment or password" });
 
       const valid = await bcrypt.compare(password, student.password);
-      if (!valid) return res.status(401).json({ error: "Invalid email or password" });
+      if (!valid) return res.status(401).json({ error: "Invalid enrollment or password" });
 
       req.session.studentId = student._id;
 
@@ -315,7 +315,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         student: {
           id: student._id,
           name: student.name,
-          email: student.email
+          enrollment: student.enrollment
         }
       });
     } catch {
@@ -329,6 +329,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  app.get("/api/student/me", async (req: Request, res: Response) => {
+    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+
+    const student = await Student.findById(req.session.studentId);
+    if (!student) return res.status(404).json({ error: "Student not found" });
+
+    res.json({
+      id: student._id,
+      name: student.name,
+      email: student.email,
+      enrollment: student.enrollment,
+      branch: student.branch
+    });
+  });
 }

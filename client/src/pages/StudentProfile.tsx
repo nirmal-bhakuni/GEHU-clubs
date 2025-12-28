@@ -100,13 +100,11 @@ export default function StudentProfile() {
                 <div className="flex flex-wrap items-center gap-4 text-sm">
                   <div className="flex items-center gap-2">
                     <Mail className="w-4 h-4 text-muted-foreground" />
-                    <a href={`mailto:${studentData.email}`} className="text-primary hover:underline">
-                      {studentData.email}
-                    </a>
+                    <span>Enrollment: {studentData.studentId}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-muted-foreground" />
-                    <span>{studentData.phone}</span>
+                    <Briefcase className="w-4 h-4 text-muted-foreground" />
+                    <span>{studentData.major || "Computer Science"}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Briefcase className="w-4 h-4 text-muted-foreground" />

@@ -4,7 +4,7 @@ import { ThemeProvider } from '../ThemeProvider'
 export default function NavbarExample() {
   return (
     <ThemeProvider>
-      <Navbar />
+      <Navbar onToggleSidebar={() => {}} />
     </ThemeProvider>
   )
 }

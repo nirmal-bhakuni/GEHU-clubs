@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function StudentLogin() {
   const [, setLocation] = useLocation();
-  const [email, setEmail] = useState("");
+  const [enrollment, setEnrollment] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -19,11 +19,12 @@ export default function StudentLogin() {
     setIsLoading(true);
 
     try {
-      const response = await apiRequest("POST", "/api/student/login", { email, password });
+      const response = await apiRequest("POST", "/api/student/login", { enrollment, password });
       const data = await response.json();
 
       if (data.success) {
-        await queryClient.invalidateQueries({ queryKey: ["/api/student/me"] });
+        // Set the student data in the query cache
+        queryClient.setQueryData(["/api/student/me"], data.student);
         toast({
           title: "Login successful",
           description: "Welcome back!",
@@ -53,14 +54,14 @@ export default function StudentLogin() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="enrollment">Enrollment Number</Label>
             <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="enrollment"
+              type="text"
+              value={enrollment}
+              onChange={(e) => setEnrollment(e.target.value)}
               required
-              placeholder="your.email@gehu.ac.in"
+              placeholder="GEHU/2024/001"
             />
           </div>
 

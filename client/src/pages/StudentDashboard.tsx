@@ -4,14 +4,20 @@ import { useQuery } from "@tanstack/react-query";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard,
   Users,
   Calendar,
-  BookOpen,
   Trophy,
   LogOut,
-  User,
+  Star,
+  Award,
+  Bell,
+  Target,
+  TrendingUp,
+  BookOpen,
+  Zap,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -19,7 +25,6 @@ import type { Event, Club } from "@shared/schema";
 
 export default function StudentDashboard() {
   const [, setLocation] = useLocation();
-  const [activeTab, setActiveTab] = useState("dashboard");
   const { student, isAuthenticated, isLoading: authLoading } = useStudentAuth();
   const { toast } = useToast();
 
@@ -75,9 +80,9 @@ export default function StudentDashboard() {
     .slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-card shadow-sm border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -85,7 +90,7 @@ export default function StudentDashboard() {
               <h1 className="text-xl font-semibold">Student Dashboard</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">Welcome, {student?.name}</span>
+              <span className="text-sm text-muted-foreground">Welcome, {student?.name}</span>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
@@ -96,177 +101,245 @@ export default function StudentDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {/* Sidebar */}
-          <div className="md:col-span-1">
-            <Card className="p-4">
-              <nav className="space-y-2">
-                <button
-                  onClick={() => setActiveTab("dashboard")}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
-                    activeTab === "dashboard"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  <LayoutDashboard className="h-4 w-4 inline mr-2" />
-                  Dashboard
-                </button>
-                <button
-                  onClick={() => setActiveTab("profile")}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
-                    activeTab === "profile"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  <User className="h-4 w-4 inline mr-2" />
-                  Profile
-                </button>
-                <button
-                  onClick={() => setActiveTab("clubs")}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
-                    activeTab === "clubs"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  <Users className="h-4 w-4 inline mr-2" />
-                  Clubs
-                </button>
-                <button
-                  onClick={() => setActiveTab("events")}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium ${
-                    activeTab === "events"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  <Calendar className="h-4 w-4 inline mr-2" />
-                  Events
-                </button>
-              </nav>
+        <div className="space-y-8">
+          {/* Welcome Section */}
+          <Card className="p-6 bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-primary mb-2">
+                  Welcome back, {student?.name}! 👋
+                </h2>
+                <p className="text-muted-foreground">
+                  Ready to explore clubs and events? Your journey starts here.
+                </p>
+                <div className="flex items-center gap-4 mt-4">
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    <Star className="h-3 w-3" />
+                    Enrollment: {student?.enrollment}
+                  </Badge>
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <BookOpen className="h-3 w-3" />
+                    {student?.branch}
+                  </Badge>
+                </div>
+              </div>
+              <div className="hidden md:block">
+                <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center">
+                  <Users className="h-10 w-10 text-primary" />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Stats Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <Card className="p-6">
+              <div className="flex items-center">
+                <Users className="h-8 w-8 text-primary mr-3" />
+                <div>
+                  <p className="text-2xl font-bold">{clubs.length}</p>
+                  <p className="text-sm text-muted-foreground">Available Clubs</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-6">
+              <div className="flex items-center">
+                <Calendar className="h-8 w-8 text-chart-2 mr-3" />
+                <div>
+                  <p className="text-2xl font-bold">{events.length}</p>
+                  <p className="text-sm text-muted-foreground">Total Events</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-6">
+              <div className="flex items-center">
+                <Trophy className="h-8 w-8 text-chart-3 mr-3" />
+                <div>
+                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-sm text-muted-foreground">Achievements</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-6">
+              <div className="flex items-center">
+                <Target className="h-8 w-8 text-chart-4 mr-3" />
+                <div>
+                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-sm text-muted-foreground">Points</p>
+                </div>
+              </div>
             </Card>
           </div>
 
-          {/* Main Content */}
-          <div className="md:col-span-3">
-            {activeTab === "dashboard" && (
-              <div className="space-y-6">
-                {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Card className="p-6">
-                    <div className="flex items-center">
-                      <Users className="h-8 w-8 text-blue-500 mr-3" />
-                      <div>
-                        <p className="text-2xl font-bold">{clubs.length}</p>
-                        <p className="text-sm text-gray-600">Available Clubs</p>
-                      </div>
-                    </div>
-                  </Card>
-                  <Card className="p-6">
-                    <div className="flex items-center">
-                      <Calendar className="h-8 w-8 text-green-500 mr-3" />
-                      <div>
-                        <p className="text-2xl font-bold">{events.length}</p>
-                        <p className="text-sm text-gray-600">Total Events</p>
-                      </div>
-                    </div>
-                  </Card>
-                  <Card className="p-6">
-                    <div className="flex items-center">
-                      <Trophy className="h-8 w-8 text-yellow-500 mr-3" />
-                      <div>
-                        <p className="text-2xl font-bold">0</p>
-                        <p className="text-sm text-gray-600">Achievements</p>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-
-                {/* Upcoming Events */}
-                <Card className="p-6">
-                  <h3 className="text-lg font-semibold mb-4">Upcoming Events</h3>
-                  {upcomingEvents.length > 0 ? (
-                    <div className="space-y-4">
-                      {upcomingEvents.map((event) => (
-                        <div key={event.id} className="flex items-center justify-between p-4 border rounded-lg">
-                          <div>
-                            <h4 className="font-medium">{event.title}</h4>
-                            <p className="text-sm text-gray-600">{event.date} at {event.time}</p>
-                            <p className="text-sm text-gray-600">{event.location}</p>
-                          </div>
-                          <Button variant="outline" size="sm">
-                            View Details
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-600">No upcoming events</p>
-                  )}
-                </Card>
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* My Clubs */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  My Clubs
+                </h3>
+                <Button variant="outline" size="sm">
+                  View All
+                </Button>
               </div>
-            )}
-
-            {activeTab === "profile" && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Student Profile</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Name</label>
-                    <p className="mt-1 text-sm text-gray-900">{student?.name}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Email</label>
-                    <p className="mt-1 text-sm text-gray-900">{student?.email}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Enrollment</label>
-                    <p className="mt-1 text-sm text-gray-900">{student?.enrollment}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Branch</label>
-                    <p className="mt-1 text-sm text-gray-900">{student?.branch}</p>
-                  </div>
-                </div>
-              </Card>
-            )}
-
-            {activeTab === "clubs" && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Available Clubs</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {clubs.map((club) => (
-                    <div key={club.id} className="p-4 border rounded-lg">
+              <div className="space-y-3">
+                {clubs.slice(0, 3).map((club) => (
+                  <div key={club.id} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
+                    <div>
                       <h4 className="font-medium">{club.name}</h4>
-                      <p className="text-sm text-gray-600">{club.description}</p>
-                      <p className="text-sm text-gray-600">Members: {club.memberCount}</p>
+                      <p className="text-sm text-muted-foreground">{club.description}</p>
                     </div>
-                  ))}
-                </div>
-              </Card>
-            )}
+                    <Badge variant="secondary">{club.memberCount} members</Badge>
+                  </div>
+                ))}
+                {clubs.length === 0 && (
+                  <p className="text-muted-foreground text-center py-8">
+                    No clubs joined yet. Explore available clubs to get started!
+                  </p>
+                )}
+              </div>
+            </Card>
 
-            {activeTab === "events" && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">All Events</h3>
-                <div className="space-y-4">
-                  {events.map((event) => (
-                    <div key={event.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div>
-                        <h4 className="font-medium">{event.title}</h4>
-                        <p className="text-sm text-gray-600">{event.date} at {event.time}</p>
-                        <p className="text-sm text-gray-600">{event.location}</p>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        View Details
-                      </Button>
+            {/* My Events */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-primary" />
+                  My Events
+                </h3>
+                <Button variant="outline" size="sm">
+                  View All
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {upcomingEvents.map((event) => (
+                  <div key={event.id} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
+                    <div>
+                      <h4 className="font-medium">{event.title}</h4>
+                      <p className="text-sm text-muted-foreground">{event.date} at {event.time}</p>
+                    </div>
+                    <Button variant="outline" size="sm">
+                      View Details
+                    </Button>
+                  </div>
+                ))}
+                {upcomingEvents.length === 0 && (
+                  <p className="text-muted-foreground text-center py-8">
+                    No upcoming events. Check back later for new opportunities!
+                  </p>
+                )}
+              </div>
+            </Card>
+
+            {/* Points & Rank */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-primary" />
+                  Points & Rank
+                </h3>
+              </div>
+              <div className="space-y-4">
+                <div className="text-center p-6 bg-muted/50 rounded-lg">
+                  <div className="text-3xl font-bold text-primary mb-2">0</div>
+                  <p className="text-sm text-muted-foreground mb-4">Total Points Earned</p>
+                  <Badge variant="secondary" className="mb-2">Beginner Rank</Badge>
+                  <p className="text-xs text-muted-foreground">
+                    Earn points by participating in events and joining clubs
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="text-lg font-semibold">0</div>
+                    <p className="text-xs text-muted-foreground">This Month</p>
+                  </div>
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="text-lg font-semibold">0</div>
+                    <p className="text-xs text-muted-foreground">This Week</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Skills Earned */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                  Skills Earned
+                </h3>
+              </div>
+              <div className="space-y-3">
+                <div className="text-center p-6 bg-muted/50 rounded-lg">
+                  <BookOpen className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Skills will be unlocked as you participate in club activities and events
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {["Leadership", "Teamwork", "Communication", "Problem Solving"].map((skill) => (
+                    <div key={skill} className="p-2 bg-muted/30 rounded text-center">
+                      <p className="text-xs font-medium text-muted-foreground">{skill}</p>
                     </div>
                   ))}
                 </div>
-              </Card>
-            )}
+              </div>
+            </Card>
+
+            {/* Badges */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Award className="h-5 w-5 text-primary" />
+                  Badges
+                </h3>
+              </div>
+              <div className="space-y-3">
+                <div className="text-center p-6 bg-muted/50 rounded-lg">
+                  <Trophy className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Earn badges by achieving milestones and completing challenges
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {["First Event", "Club Member", "Active Participant"].map((badge) => (
+                    <div key={badge} className="p-3 bg-muted/30 rounded-lg text-center">
+                      <Award className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
+                      <p className="text-xs font-medium text-muted-foreground">{badge}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+
+            {/* Notifications */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-primary" />
+                  Notifications
+                </h3>
+                <Badge variant="secondary">0</Badge>
+              </div>
+              <div className="space-y-3">
+                <div className="text-center p-6 bg-muted/50 rounded-lg">
+                  <Bell className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Stay updated with club announcements, event reminders, and achievements
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <div className="p-3 border border-border rounded-lg">
+                    <p className="text-sm text-muted-foreground">No new notifications</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      You'll receive updates about your clubs and events here
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
       </div>

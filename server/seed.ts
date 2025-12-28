@@ -65,12 +65,14 @@ export async function seedDatabase() {
 
   const clubs = await Club.find({});
   for (const club of clubs) {
-    const adminUsername = clubNameToAdmin[club.name];
-    if (adminUsername) {
-      const admin = await Admin.findOne({ username: adminUsername });
-      if (admin) {
-        await Admin.findByIdAndUpdate(admin._id, { clubId: club.id });
-        console.log(`✅ Updated admin ${adminUsername} with clubId ${club.id}`);
+    if (club.name) {
+      const adminUsername = clubNameToAdmin[club.name as keyof typeof clubNameToAdmin];
+      if (adminUsername) {
+        const admin = await Admin.findOne({ username: adminUsername });
+        if (admin) {
+          await Admin.findByIdAndUpdate(admin._id, { clubId: club.id });
+          console.log(`✅ Updated admin ${adminUsername} with clubId ${club.id}`);
+        }
       }
     }
   }
