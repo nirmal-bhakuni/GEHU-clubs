@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Users, Lock } from "lucide-react";
+import CaptchaComponent from "@/components/CaptchaComponent";
 
 export default function ClubAdminLogin() {
   const [, setLocation] = useLocation();
@@ -16,6 +17,7 @@ export default function ClubAdminLogin() {
     username: "",
     password: "",
   });
+  const [captchaVerified, setCaptchaVerified] = useState(false);
   const { toast } = useToast();
 
   const loginMutation = useMutation({
@@ -53,6 +55,16 @@ export default function ClubAdminLogin() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!captchaVerified) {
+      toast({
+        title: "Captcha required",
+        description: "Please verify you're human first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     loginMutation.mutate(formData);
   };
 
@@ -102,10 +114,13 @@ export default function ClubAdminLogin() {
             />
           </div>
 
+          {/* Interactive Captcha */}
+          <CaptchaComponent onVerify={setCaptchaVerified} />
+
           <Button
             type="submit"
             className="w-full"
-            disabled={loginMutation.isPending}
+            disabled={loginMutation.isPending || !captchaVerified}
           >
             {loginMutation.isPending ? (
               "Signing in..."

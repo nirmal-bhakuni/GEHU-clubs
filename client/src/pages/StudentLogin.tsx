@@ -6,16 +6,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import CaptchaComponent from "@/components/CaptchaComponent";
 
 export default function StudentLogin() {
   const [, setLocation] = useLocation();
   const [enrollment, setEnrollment] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaVerified, setCaptchaVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!captchaVerified) {
+      toast({
+        title: "Captcha required",
+        description: "Please verify you're human first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -76,7 +88,10 @@ export default function StudentLogin() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          {/* Interactive Captcha */}
+          <CaptchaComponent onVerify={setCaptchaVerified} />
+
+          <Button type="submit" className="w-full" disabled={isLoading || !captchaVerified}>
             {isLoading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
