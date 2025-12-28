@@ -43,7 +43,7 @@ export default function StudentProfile() {
   }, []);
 
   function handleLogout() {
-    sessionStorage.removeItem("studentId");
+    logoutUser();
     navigate("/");
   }
 

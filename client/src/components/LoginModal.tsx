@@ -65,7 +65,7 @@ export default function LoginModal() {
         setAnswer("")
         setIsLoading(false)
         regen()
-        navigate("/profile")
+        navigate("/student")
       } else {
         setError(result.message)
         setIsLoading(false)

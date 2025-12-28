@@ -17,6 +17,9 @@ import Dashboard from "@/pages/Dashboard";
 import ClubAdmin from "@/pages/ClubAdmin";
 import ClubAdminLogin from "@/pages/ClubAdminLogin";
 import Login from "@/pages/Login";
+import StudentLogin from "@/pages/StudentLogin";
+import StudentSignup from "@/pages/StudentSignup";
+import StudentDashboard from "@/pages/StudentDashboard";
 import StudentProfile from "@/pages/StudentProfile";
 import NotFound from "@/pages/not-found";
 
@@ -25,6 +28,9 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/student" component={StudentProfile} />
+      <Route path="/student/login" component={StudentLogin} />
+      <Route path="/student/signup" component={StudentSignup} />
+      <Route path="/student/dashboard" component={StudentDashboard} />
       <Route path="/admin/login" component={Login} />
       <Route path="/club-admin/login" component={ClubAdminLogin} />
       <Route path="/dashboard" component={Dashboard} />

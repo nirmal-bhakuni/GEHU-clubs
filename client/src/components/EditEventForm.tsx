@@ -56,16 +56,7 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
       const url = event ? `/api/events/${event.id}` : "/api/events";
       const method = event ? "PATCH" : "POST";
 
-      const response = await fetch(url, {
-        method,
-        body: formDataToSend,
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to ${event ? "update" : "create"} event`);
-      }
-
+      const response = await apiRequest(method, url, formDataToSend);
       return response.json();
     },
     onSuccess: () => {

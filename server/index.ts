@@ -62,10 +62,10 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
     // Temporarily skip route registration to test
     await registerRoutes(app);
-    app.get("/test", (req, res) => res.json({ message: "Server is working", timestamp: new Date().toISOString() }));
+    app.get("/test", (req: Request, res: Response) => res.json({ message: "Server is working", timestamp: new Date().toISOString() }));
 
-    const port = parseInt(process.env.PORT || "5000", 10);
-    const host = "0.0.0.0";
+    const port = parseInt(process.env.PORT || "12346", 10);
+    const host = "127.0.0.1";
 
     try {
       const server = app.listen(port, host, () => {
@@ -74,7 +74,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       });
 
       // Handle server errors
-      server.on('error', (error) => {
+      server.on('error', (error: any) => {
         console.error('Server error:', error);
         process.exit(1);
       });

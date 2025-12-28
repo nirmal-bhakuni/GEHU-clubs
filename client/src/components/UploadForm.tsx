@@ -15,7 +15,7 @@ import {
 import { Upload, X } from "lucide-react";
 
 // Fixed import — only queryClient is needed
-import { queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 import { useToast } from "@/hooks/use-toast";
 import type { Club } from "@shared/schema";
@@ -52,16 +52,7 @@ export default function UploadForm() {
         formDataToSend.append("image", selectedFiles[0]);
       }
 
-      const response = await fetch("/api/events", {
-        method: "POST",
-        body: formDataToSend,
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create event");
-      }
-
+      const response = await apiRequest("POST", "/api/events", formDataToSend);
       return response.json();
     },
 

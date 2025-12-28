@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
-import UploadForm from "@/components/UploadForm";
 import EditEventForm from "@/components/EditEventForm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,12 +22,11 @@ export default function ClubAdmin() {
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
-  const { data: club, isLoading: clubLoading } = useQuery<Club | null>({
+  const { data: club, isLoading: clubLoading, error: clubError } = useQuery<Club | null>({
     queryKey: ["/api/clubs", admin?.clubId],
     queryFn: async () => {
       if (!admin?.clubId) return null;
-      const res = await fetch(`/api/clubs/${admin.clubId}`);
-      if (!res.ok) return null;
+      const res = await apiRequest("GET", `/api/clubs/${admin.clubId}`);
       return res.json();
     },
     enabled: !!admin?.clubId && isAuthenticated,
@@ -111,10 +109,38 @@ export default function ClubAdmin() {
     );
   }
 
+  if (clubError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground font-body mb-4">
+            Error loading club information.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Club ID: {admin?.clubId}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Please contact administrator.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!club) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground font-body">Club not found or access denied.</p>
+        <div className="text-center">
+          <p className="text-muted-foreground font-body mb-4">
+            Club not found or access denied.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Club ID: {admin?.clubId}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Please contact administrator.
+          </p>
+        </div>
       </div>
     );
   }
@@ -129,7 +155,7 @@ export default function ClubAdmin() {
     {
       icon: Image,
       label: "Media Uploads",
-      value: "45", // This could be fetched from API
+      value: clubEvents.filter(event => event.imageUrl).length.toString(),
       trend: "+28%",
     },
     {
@@ -144,16 +170,25 @@ export default function ClubAdmin() {
     <div className="min-h-screen py-16 md:py-20 bg-background">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">
-              {club.name} Admin Panel
-            </h1>
-            <p className="text-muted-foreground">
-              Manage your club's events, content, and settings
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Logged in as: <span className="font-medium">{admin?.username}</span>
-            </p>
+          <div className="flex items-center space-x-4">
+            {club.logoUrl && (
+              <img
+                src={club.logoUrl}
+                alt={`${club.name} logo`}
+                className="w-16 h-16 rounded-lg object-cover"
+              />
+            )}
+            <div>
+              <h1 className="text-3xl font-bold text-foreground mb-2">
+                {club.name} Admin Panel
+              </h1>
+              <p className="text-muted-foreground">
+                Manage your club's events, content, and settings
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Logged in as: <span className="font-medium">{admin?.username}</span>
+              </p>
+            </div>
           </div>
           <Button
             variant="outline"
@@ -210,8 +245,9 @@ export default function ClubAdmin() {
                     <div>
                       <h3 className="font-semibold">{event.title}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(event.date).toLocaleDateString()}
+                        {new Date(event.date).toLocaleDateString()} at {event.time}
                       </p>
+                      <p className="text-sm text-muted-foreground">{event.location}</p>
                       <p className="text-sm mt-2">{event.description}</p>
                     </div>
                     <div className="flex gap-2">
@@ -239,9 +275,40 @@ export default function ClubAdmin() {
 
           <TabsContent value="uploads" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Media Uploads</h2>
+              <h2 className="text-xl font-semibold">Media Gallery</h2>
+              <Button onClick={() => setCreatingEvent(true)}>
+                <Image className="mr-2 h-4 w-4" />
+                Upload New Image
+              </Button>
             </div>
-            <UploadForm />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {clubEvents
+                .filter(event => event.imageUrl)
+                .map((event) => (
+                  <Card key={event.id} className="p-4">
+                    <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden mb-3">
+                      <img
+                        src={event.imageUrl}
+                        alt={event.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <h3 className="font-medium text-sm">{event.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {new Date(event.date).toLocaleDateString()}
+                    </p>
+                  </Card>
+                ))}
+            </div>
+            {clubEvents.filter(event => event.imageUrl).length === 0 && (
+              <Card className="p-8 text-center">
+                <Image className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No images uploaded yet</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Create an event with an image to see it here
+                </p>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="members" className="space-y-6">
@@ -278,22 +345,12 @@ export default function ClubAdmin() {
                     e.preventDefault();
                     const formData = new FormData(e.target as HTMLFormElement);
                     updateClubMutation.mutate({
-                      name: formData.get("name") as string,
                       description: formData.get("description") as string,
                       category: formData.get("category") as string,
                     });
                   }}
                   className="space-y-4"
                 >
-                  <div>
-                    <Label htmlFor="name">Club Name</Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      defaultValue={club.name}
-                      required
-                    />
-                  </div>
                   <div>
                     <Label htmlFor="description">Description</Label>
                     <Textarea
@@ -320,6 +377,18 @@ export default function ClubAdmin() {
             ) : (
               <Card className="p-6">
                 <div className="space-y-4">
+                  <div>
+                    <Label>Club Logo</Label>
+                    {club.logoUrl ? (
+                      <img
+                        src={club.logoUrl}
+                        alt={`${club.name} logo`}
+                        className="w-20 h-20 rounded-lg object-cover mt-2"
+                      />
+                    ) : (
+                      <p className="text-muted-foreground">No logo uploaded</p>
+                    )}
+                  </div>
                   <div>
                     <Label>Club Name</Label>
                     <p className="text-foreground">{club.name}</p>

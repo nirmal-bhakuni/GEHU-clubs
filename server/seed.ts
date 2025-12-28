@@ -53,6 +53,28 @@ export async function seedDatabase() {
   // Clean up duplicates first
   await cleanupDuplicates();
 
+  // Update existing club admins with clubId if missing or incorrect
+  const clubNameToAdmin = {
+    'IEEE': 'ieee_admin',
+    'ARYAVRAT': 'aryavrat_admin',
+    'PAPERTECH-GEHU': 'papertech_admin',
+    'Entrepreneurship Hub': 'entrepreneurship_admin',
+    'CODE_HUNTERS': 'codehunters_admin',
+    'RANGMANCH': 'rangmanch_admin'
+  };
+
+  const clubs = await Club.find({});
+  for (const club of clubs) {
+    const adminUsername = clubNameToAdmin[club.name];
+    if (adminUsername) {
+      const admin = await Admin.findOne({ username: adminUsername });
+      if (admin) {
+        await Admin.findByIdAndUpdate(admin._id, { clubId: club.id });
+        console.log(`✅ Updated admin ${adminUsername} with clubId ${club.id}`);
+      }
+    }
+  }
+
   const adminExists = await Admin.findOne({ username: "rangmanch_admin" });
   if (adminExists) {
     console.log("✅ Database already seeded, skipping...");
@@ -69,45 +91,7 @@ export async function seedDatabase() {
   const socialClubId = randomUUID();
 
   const hashedPassword = await bcrypt.hash("admin123", 10);
-
-  // Create club admin accounts for each club (only if they don't exist)
-  const clubAdmins = [
-    { username: "ieee_admin", clubId: techClubId },
-    { username: "aryavrat_admin", clubId: debateClubId },
-    { username: "papertech_admin", clubId: artClubId },
-    { username: "entrepreneurship_admin", clubId: businessClubId },
-    { username: "codehunters_admin", clubId: scienceClubId },
-    { username: "rangmanch_admin", clubId: socialClubId }
-  ];
-
-  for (const adminData of clubAdmins) {
-    const existingAdmin = await Admin.findOne({ username: adminData.username });
-    if (!existingAdmin) {
-      await Admin.create({
-        id: randomUUID(),
-        username: adminData.username,
-        password: hashedPassword,
-        clubId: adminData.clubId
-      });
-      console.log(`✅ Created admin: ${adminData.username}`);
-    } else {
-      console.log(`⏭️ Admin already exists: ${adminData.username}`);
-    }
-  }
-
-  // University admin (no clubId)
-  const existingUniAdmin = await Admin.findOne({ username: "university_admin" });
-  if (!existingUniAdmin) {
-    await Admin.create({
-      id: randomUUID(),
-      username: "university_admin",
-      password: hashedPassword,
-      clubId: null
-    });
-    console.log("✅ Created admin: university_admin");
-  } else {
-    console.log("⏭️ Admin already exists: university_admin");
-  }
+  const studentPassword = await bcrypt.hash("password123", 10);
 
   // Create clubs (only if they don't exist)
   const clubsData = [
@@ -175,6 +159,45 @@ export async function seedDatabase() {
     } else {
       console.log(`⏭️ Club already exists: ${clubData.name}`);
     }
+  }
+
+  // Create club admin accounts for each club (only if they don't exist)
+  const clubAdmins = [
+    { username: "ieee_admin", clubId: techClubId },
+    { username: "aryavrat_admin", clubId: debateClubId },
+    { username: "papertech_admin", clubId: artClubId },
+    { username: "entrepreneurship_admin", clubId: businessClubId },
+    { username: "codehunters_admin", clubId: scienceClubId },
+    { username: "rangmanch_admin", clubId: socialClubId }
+  ];
+
+  for (const adminData of clubAdmins) {
+    const existingAdmin = await Admin.findOne({ username: adminData.username });
+    if (!existingAdmin) {
+      await Admin.create({
+        id: randomUUID(),
+        username: adminData.username,
+        password: hashedPassword,
+        clubId: adminData.clubId
+      });
+      console.log(`✅ Created admin: ${adminData.username}`);
+    } else {
+      console.log(`⏭️ Admin already exists: ${adminData.username}`);
+    }
+  }
+
+  // University admin (no clubId)
+  const existingUniAdmin = await Admin.findOne({ username: "university_admin" });
+  if (!existingUniAdmin) {
+    await Admin.create({
+      id: randomUUID(),
+      username: "university_admin",
+      password: hashedPassword,
+      clubId: null
+    });
+    console.log("✅ Created admin: university_admin");
+  } else {
+    console.log("⏭️ Admin already exists: university_admin");
   }
 
   // Create events (only if they don't exist)
