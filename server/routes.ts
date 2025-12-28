@@ -343,4 +343,136 @@ export async function registerRoutes(app: Express): Promise<void> {
       branch: student.branch
     });
   });
+
+  app.get("/api/students/count", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const count = await Student.countDocuments();
+      res.json({ count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get student count" });
+    }
+  });
+
+  // Event Registration Routes
+  app.post("/api/events/:eventId/register", async (req: Request, res: Response) => {
+    try {
+      const { eventId } = req.params;
+      const registrationData = req.body;
+
+      // Get event details
+      const event = await storage.getEvent(eventId);
+      if (!event) return res.status(404).json({ error: "Event not found" });
+
+      // Create registration with event details
+      const registration = await storage.createEventRegistration({
+        ...registrationData,
+        eventId,
+        eventTitle: event.title,
+        eventDate: event.date,
+        eventTime: event.time,
+        clubName: event.clubName,
+      });
+
+      res.json({ success: true, registration });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ error: "Failed to register for event" });
+    }
+  });
+
+  app.get("/api/student/registrations", async (req: Request, res: Response) => {
+    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const registrations = await storage.getEventRegistrationsByStudent(student.enrollment);
+      res.json(registrations);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch registrations" });
+    }
+  });
+
+  // Club Membership Routes
+  app.post("/api/clubs/:clubId/join", async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const membershipData = req.body;
+
+      console.log("Join request received:", { clubId, membershipData });
+
+      // Get club details
+      const club = await storage.getClub(clubId);
+      if (!club) {
+        console.log("Club not found:", clubId);
+        return res.status(404).json({ error: "Club not found" });
+      }
+
+      // Create membership with club details and mapped field names
+      const membership = await storage.createClubMembership({
+        studentName: membershipData.name,
+        studentEmail: membershipData.email,
+        enrollmentNumber: membershipData.enrollmentNumber,
+        department: membershipData.department,
+        reason: membershipData.reason,
+        clubId,
+        clubName: club.name,
+      });
+
+      console.log("Membership created:", membership);
+      res.json({ success: true, membership });
+    } catch (error) {
+      console.error("Membership error:", error);
+      res.status(500).json({ error: "Failed to join club" });
+    }
+  });
+
+  app.get("/api/student/club-memberships", async (req: Request, res: Response) => {
+    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const memberships = await storage.getClubMembershipsByStudent(student.enrollment);
+      res.json(memberships);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch memberships" });
+    }
+  });
+
+  // Club Admin Routes for Membership Management
+  app.get("/api/admin/club-memberships/:clubId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const memberships = await storage.getClubMembershipsByClub(clubId);
+      res.json(memberships);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch memberships" });
+    }
+  });
+
+  app.patch("/api/admin/club-memberships/:membershipId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { membershipId } = req.params;
+      const { status } = req.body;
+
+      if (!['approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+
+      const membership = await storage.updateClubMembershipStatus(membershipId, status);
+      if (!membership) return res.status(404).json({ error: "Membership not found" });
+
+      // Update club member count if membership is approved
+      if (status === 'approved') {
+        await storage.incrementClubMemberCount(membership.clubId);
+      }
+
+      res.json(membership);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update membership status" });
+    }
+  });
 }

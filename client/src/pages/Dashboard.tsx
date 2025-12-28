@@ -43,6 +43,15 @@ export default function Dashboard() {
     enabled: isAuthenticated,
   });
 
+  const { data: studentCount = 0 } = useQuery<{ count: number }>({
+    queryKey: ["/api/students/count"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/students/count");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       setLocation("/admin/login");
@@ -210,7 +219,7 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="p-6">
                   <h3 className="font-semibold mb-4">Student Users</h3>
-                  <p className="text-3xl font-bold text-blue-500">892</p>
+                  <p className="text-3xl font-bold text-blue-500">{studentCount.count || 0}</p>
                   <p className="text-sm text-muted-foreground">Active students</p>
                 </Card>
                 <Card className="p-6">

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import CaptchaComponent from "@/components/CaptchaComponent";
+import { UserPlus } from "lucide-react";
 
 export default function StudentSignup() {
   const [, setLocation] = useLocation();
@@ -144,9 +145,10 @@ export default function StudentSignup() {
 
           <Button
             type="submit"
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            className="w-full bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground"
             disabled={isLoading || !captchaVerified}
           >
+            <UserPlus className="w-4 h-4 mr-2" />
             {isLoading ? "Creating Account..." : "Create Account"}
           </Button>
         </form>

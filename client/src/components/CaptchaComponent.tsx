@@ -132,7 +132,7 @@ export default function CaptchaComponent({ onVerify, className = "" }: CaptchaCo
             captchaVerified ? 'border-green-300 dark:border-green-700 text-green-700 dark:text-green-400' : 'border-border'
           }`}>
             <span className="text-primary">{captcha.num1}</span>
-            <span className="text-accent mx-2">{captcha.operation}</span>
+            <span className="text-orange-500 dark:text-orange-400 mx-2">{captcha.operation}</span>
             <span className="text-primary">{captcha.num2}</span>
             <span className="text-muted-foreground ml-2">=</span>
             <span className="text-muted-foreground">?</span>

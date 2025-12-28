@@ -22,6 +22,8 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
+import type { EventRegistration } from "@shared/schema";
+import type { ClubMembership } from "@shared/schema";
 
 export default function StudentDashboard() {
   const [, setLocation] = useLocation();
@@ -35,6 +37,16 @@ export default function StudentDashboard() {
 
   const { data: clubs = [] } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: registrations = [] } = useQuery<EventRegistration[]>({
+    queryKey: ["/api/student/registrations"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: memberships = [] } = useQuery<ClubMembership[]>({
+    queryKey: ["/api/student/club-memberships"],
     enabled: isAuthenticated,
   });
 
@@ -137,8 +149,8 @@ export default function StudentDashboard() {
               <div className="flex items-center">
                 <Users className="h-8 w-8 text-primary mr-3" />
                 <div>
-                  <p className="text-2xl font-bold">{clubs.length}</p>
-                  <p className="text-sm text-muted-foreground">Available Clubs</p>
+                  <p className="text-2xl font-bold">{memberships.length}</p>
+                  <p className="text-sm text-muted-foreground">Joined Clubs</p>
                 </div>
               </div>
             </Card>
@@ -146,8 +158,8 @@ export default function StudentDashboard() {
               <div className="flex items-center">
                 <Calendar className="h-8 w-8 text-chart-2 mr-3" />
                 <div>
-                  <p className="text-2xl font-bold">{events.length}</p>
-                  <p className="text-sm text-muted-foreground">Total Events</p>
+                  <p className="text-2xl font-bold">{registrations.length}</p>
+                  <p className="text-sm text-muted-foreground">Registered Events</p>
                 </div>
               </div>
             </Card>
@@ -185,18 +197,19 @@ export default function StudentDashboard() {
                 </Button>
               </div>
               <div className="space-y-3">
-                {clubs.slice(0, 3).map((club) => (
-                  <div key={club.id} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
+                {memberships.slice(0, 3).map((membership) => (
+                  <div key={membership.id} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
                     <div>
-                      <h4 className="font-medium">{club.name}</h4>
-                      <p className="text-sm text-muted-foreground">{club.description}</p>
+                      <h4 className="font-medium">{membership.clubName}</h4>
+                      <p className="text-sm text-muted-foreground">Status: <Badge variant={membership.status === 'approved' ? 'default' : membership.status === 'pending' ? 'secondary' : 'destructive'}>{membership.status}</Badge></p>
+                      <p className="text-xs text-muted-foreground">Enrollment: {membership.enrollmentNumber}</p>
                     </div>
-                    <Badge variant="secondary">{club.memberCount} members</Badge>
+                    <Badge variant="outline">{membership.department}</Badge>
                   </div>
                 ))}
-                {clubs.length === 0 && (
+                {memberships.length === 0 && (
                   <p className="text-muted-foreground text-center py-8">
-                    No clubs joined yet. Explore available clubs to get started!
+                    No club memberships yet. Join clubs to see them here!
                   </p>
                 )}
               </div>
@@ -207,27 +220,26 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-primary" />
-                  My Events
+                  My Registered Events
                 </h3>
                 <Button variant="outline" size="sm">
                   View All
                 </Button>
               </div>
               <div className="space-y-3">
-                {upcomingEvents.map((event) => (
-                  <div key={event.id} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
+                {registrations.slice(0, 3).map((registration) => (
+                  <div key={registration.id} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
                     <div>
-                      <h4 className="font-medium">{event.title}</h4>
-                      <p className="text-sm text-muted-foreground">{event.date} at {event.time}</p>
+                      <h4 className="font-medium">{registration.eventTitle}</h4>
+                      <p className="text-sm text-muted-foreground">{registration.eventDate} at {registration.eventTime}</p>
+                      <p className="text-xs text-muted-foreground">Enrollment: {registration.enrollmentNumber}</p>
                     </div>
-                    <Button variant="outline" size="sm">
-                      View Details
-                    </Button>
+                    <Badge variant="secondary">{registration.clubName}</Badge>
                   </div>
                 ))}
-                {upcomingEvents.length === 0 && (
+                {registrations.length === 0 && (
                   <p className="text-muted-foreground text-center py-8">
-                    No upcoming events. Check back later for new opportunities!
+                    No registered events yet. Register for events to see them here!
                   </p>
                 )}
               </div>

@@ -19,23 +19,39 @@ export default function ClubDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [joinForm, setJoinForm] = useState({
     name: '',
     email: '',
     department: '',
+    enrollmentNumber: '',
     reason: ''
   });
   const { toast } = useToast();
 
-  const handleJoinSubmit = (e: React.FormEvent) => {
+  const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // UI-only: show success message
-    toast({
-      title: "Join Request Submitted",
-      description: "Your request to join has been submitted and is pending approval.",
-    });
-    setIsJoinModalOpen(false);
-    setJoinForm({ name: '', email: '', department: '', reason: '' });
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+
+    try {
+      await apiRequest("POST", `/api/clubs/${id}/join`, joinForm);
+      toast({
+        title: "Join Request Submitted",
+        description: "Your request has been sent to the club admin for approval. You'll be notified once it's reviewed.",
+      });
+      setIsJoinModalOpen(false);
+      setJoinForm({ name: '', email: '', department: '', enrollmentNumber: '', reason: '' });
+    } catch (error: any) {
+      toast({
+        title: "Join Request Failed",
+        description: error.message || "Failed to submit join request. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const { data: club, isLoading: clubLoading } = useQuery<Club | null>({
@@ -83,7 +99,13 @@ export default function ClubDetail() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Dialog open={isJoinModalOpen} onOpenChange={setIsJoinModalOpen}>
+            <Dialog open={isJoinModalOpen} onOpenChange={(open) => {
+              setIsJoinModalOpen(open);
+              if (!open) {
+                setJoinForm({ name: '', email: '', department: '', enrollmentNumber: '', reason: '' });
+                setIsSubmitting(false);
+              }
+            }}>
               <DialogTrigger asChild>
                 <Button>Join Club</Button>
               </DialogTrigger>
@@ -98,6 +120,7 @@ export default function ClubDetail() {
                       id="name"
                       value={joinForm.name}
                       onChange={(e) => setJoinForm(prev => ({ ...prev, name: e.target.value }))}
+                      disabled={isSubmitting}
                       required
                     />
                   </div>
@@ -108,6 +131,7 @@ export default function ClubDetail() {
                       type="email"
                       value={joinForm.email}
                       onChange={(e) => setJoinForm(prev => ({ ...prev, email: e.target.value }))}
+                      disabled={isSubmitting}
                       required
                     />
                   </div>
@@ -117,6 +141,18 @@ export default function ClubDetail() {
                       id="department"
                       value={joinForm.department}
                       onChange={(e) => setJoinForm(prev => ({ ...prev, department: e.target.value }))}
+                      disabled={isSubmitting}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="enrollmentNumber">Enrollment Number</Label>
+                    <Input
+                      id="enrollmentNumber"
+                      value={joinForm.enrollmentNumber}
+                      onChange={(e) => setJoinForm(prev => ({ ...prev, enrollmentNumber: e.target.value }))}
+                      placeholder="GEHU/2024/001"
+                      disabled={isSubmitting}
                       required
                     />
                   </div>
@@ -127,10 +163,13 @@ export default function ClubDetail() {
                       value={joinForm.reason}
                       onChange={(e) => setJoinForm(prev => ({ ...prev, reason: e.target.value }))}
                       rows={3}
+                      disabled={isSubmitting}
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full">Submit Join Request</Button>
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? "Submitting..." : "Submit Join Request"}
+                  </Button>
                 </form>
               </DialogContent>
             </Dialog>

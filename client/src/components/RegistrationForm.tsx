@@ -20,6 +20,7 @@ export interface StudentRegistration {
   rollNumber: string;
   department: string;
   year: string;
+  enrollmentNumber: string;
   interests: string[];
   experience?: string;
   eventId?: string;
@@ -39,6 +40,7 @@ export default function RegistrationForm({
     rollNumber: "",
     department: "",
     year: "First Year",
+    enrollmentNumber: "",
     interests: [],
     experience: "",
   });
@@ -90,6 +92,7 @@ export default function RegistrationForm({
       !formData.email ||
       !formData.phone ||
       !formData.rollNumber ||
+      !formData.enrollmentNumber ||
       !formData.department
     ) {
       alert("Please fill in all required fields");
@@ -108,6 +111,7 @@ export default function RegistrationForm({
         rollNumber: "",
         department: "",
         year: "First Year",
+        enrollmentNumber: "",
         interests: [],
         experience: "",
       });
@@ -197,6 +201,20 @@ export default function RegistrationForm({
                 name="rollNumber"
                 placeholder="Enter your roll number"
                 value={formData.rollNumber}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Enrollment Number <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="text"
+                name="enrollmentNumber"
+                placeholder="GEHU/2024/001"
+                value={formData.enrollmentNumber}
                 onChange={handleInputChange}
                 required
               />

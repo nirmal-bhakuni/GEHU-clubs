@@ -9,6 +9,8 @@ import RegistrationForm from "@/components/RegistrationForm";
 import ClubMembership from "@/components/ClubMembership";
 import StudentReviews from "@/components/StudentReviews";
 import ClubContact from "@/components/ClubContact";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Event } from "@shared/schema";
 
 export default function EventDetail() {
@@ -16,6 +18,7 @@ export default function EventDetail() {
   const eventId = params?.id;
   const [activeTab, setActiveTab] = useState("overview");
   const tabsRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   const { data: event, isLoading, error } = useQuery<Event>({
     queryKey: [`/api/events/${eventId}`],
@@ -155,8 +158,25 @@ export default function EventDetail() {
               eventTitle={event.title}
               eventDate={event.date}
               clubName={event.clubName}
-              onSubmit={(data) => {
-                console.log("Registration Data:", data);
+              onSubmit={async (data) => {
+                try {
+                  await apiRequest("POST", `/api/events/${eventId}/register`, {
+                    ...data,
+                    eventId,
+                    studentName: data.fullName,
+                    studentEmail: data.email,
+                  });
+                  toast({
+                    title: "Registration successful!",
+                    description: `You have been registered for ${event.title}`,
+                  });
+                } catch (error: any) {
+                  toast({
+                    title: "Registration failed",
+                    description: error.message || "Failed to register for the event",
+                    variant: "destructive",
+                  });
+                }
               }}
             />
           </TabsContent>

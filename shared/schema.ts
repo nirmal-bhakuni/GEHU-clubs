@@ -21,3 +21,35 @@ export interface Club {
   logoUrl?: string;
   createdAt?: Date;
 }
+
+export interface EventRegistration {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  eventDate: string;
+  eventTime: string;
+  clubName: string;
+  studentName: string;
+  studentEmail: string;
+  enrollmentNumber: string;
+  phone: string;
+  rollNumber: string;
+  department: string;
+  year: string;
+  interests: string[];
+  experience?: string;
+  registeredAt: Date;
+}
+
+export interface ClubMembership {
+  id: string;
+  clubId: string;
+  clubName: string;
+  studentName: string;
+  studentEmail: string;
+  enrollmentNumber: string;
+  department: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  joinedAt: Date;
+}

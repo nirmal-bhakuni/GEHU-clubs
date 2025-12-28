@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import EditEventForm from "@/components/EditEventForm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ import { Calendar, Image, Users, Settings, Edit } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
+import type { ClubMembership } from "@shared/schema";
 
 export default function ClubAdmin() {
   const [, setLocation] = useLocation();
@@ -37,8 +39,40 @@ export default function ClubAdmin() {
     enabled: isAuthenticated,
   });
 
+  const { data: memberships = [] } = useQuery<ClubMembership[]>({
+    queryKey: ["/api/admin/club-memberships", admin?.clubId],
+    queryFn: async () => {
+      if (!admin?.clubId) return [];
+      const res = await apiRequest("GET", `/api/admin/club-memberships/${admin.clubId}`);
+      return res.json();
+    },
+    enabled: !!admin?.clubId && isAuthenticated,
+  });
+
   // Filter events for this club
   const clubEvents = events.filter(event => event.clubId === admin?.clubId);
+
+  const updateMembershipStatusMutation = useMutation({
+    mutationFn: async ({ membershipId, status }: { membershipId: string; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/club-memberships/${membershipId}`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/club-memberships", admin?.clubId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clubs", admin?.clubId] });
+      toast({
+        title: "Status updated",
+        description: "Membership status has been updated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Update failed",
+        description: "Failed to update membership status.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -313,17 +347,83 @@ export default function ClubAdmin() {
 
           <TabsContent value="members" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Club Members</h2>
-              <Button>
-                <Users className="mr-2 h-4 w-4" />
-                Manage Members
-              </Button>
+              <h2 className="text-xl font-semibold">Membership Requests</h2>
+              <div className="flex gap-2">
+                <Badge variant="secondary">
+                  {memberships.filter(m => m.status === 'pending').length} Pending
+                </Badge>
+                <Badge variant="default">
+                  {memberships.filter(m => m.status === 'approved').length} Approved
+                </Badge>
+              </div>
             </div>
-            <Card className="p-6">
-              <p className="text-muted-foreground">
-                Member management functionality coming soon...
-              </p>
-            </Card>
+
+            <div className="space-y-4">
+              {memberships.length === 0 ? (
+                <Card className="p-6">
+                  <p className="text-muted-foreground text-center">
+                    No membership requests yet.
+                  </p>
+                </Card>
+              ) : (
+                memberships.map((membership) => (
+                  <Card key={membership.id} className="p-4">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold">{membership.studentName}</h3>
+                          <Badge variant={
+                            membership.status === 'approved' ? 'default' :
+                            membership.status === 'rejected' ? 'destructive' : 'secondary'
+                          }>
+                            {membership.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{membership.studentEmail}</p>
+                        <p className="text-sm">
+                          <span className="font-medium">Enrollment:</span> {membership.enrollmentNumber}
+                        </p>
+                        <p className="text-sm">
+                          <span className="font-medium">Department:</span> {membership.department}
+                        </p>
+                        <p className="text-sm">
+                          <span className="font-medium">Reason:</span> {membership.reason}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Applied on {new Date(membership.joinedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+
+                      {membership.status === 'pending' && (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => updateMembershipStatusMutation.mutate({
+                              membershipId: membership.id,
+                              status: 'approved'
+                            })}
+                            disabled={updateMembershipStatusMutation.isPending}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => updateMembershipStatusMutation.mutate({
+                              membershipId: membership.id,
+                              status: 'rejected'
+                            })}
+                            disabled={updateMembershipStatusMutation.isPending}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
