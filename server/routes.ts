@@ -8,6 +8,7 @@ import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared
 import path from "path";
 import fs from "fs";
 import { Student } from "./models/Student";
+import { Admin } from "./models/Admin";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -44,6 +45,9 @@ export async function registerRoutes(app: Express): Promise<void> {
 
       const valid = await bcrypt.compare(password, admin.password);
       if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+
+      // Update last login
+      await Admin.findOneAndUpdate({ id: admin.id }, { lastLogin: new Date() });
 
       req.session.adminId = admin.id;
 
@@ -280,7 +284,8 @@ export async function registerRoutes(app: Express): Promise<void> {
         email,
         password: hashed,
         enrollment,
-        branch
+        branch,
+        lastLogin: new Date()
       });
 
       req.session.studentId = student._id;
@@ -290,7 +295,10 @@ export async function registerRoutes(app: Express): Promise<void> {
         student: {
           id: student._id,
           name: student.name,
-          email: student.email
+          email: student.email,
+          enrollment: student.enrollment,
+          branch: student.branch,
+          lastLogin: student.lastLogin
         }
       });
     } catch {
@@ -305,8 +313,17 @@ export async function registerRoutes(app: Express): Promise<void> {
       const student = await Student.findOne({ enrollment });
       if (!student) return res.status(401).json({ error: "Invalid enrollment or password" });
 
+      // Check if account is disabled
+      if (student.isDisabled) {
+        return res.status(403).json({ error: "Account is disabled. Please contact administrator." });
+      }
+
       const valid = await bcrypt.compare(password, student.password);
       if (!valid) return res.status(401).json({ error: "Invalid enrollment or password" });
+
+      // update lastLogin timestamp
+      student.lastLogin = new Date();
+      await student.save();
 
       req.session.studentId = student._id;
 
@@ -315,7 +332,8 @@ export async function registerRoutes(app: Express): Promise<void> {
         student: {
           id: student._id,
           name: student.name,
-          enrollment: student.enrollment
+          enrollment: student.enrollment,
+          lastLogin: student.lastLogin
         }
       });
     } catch {
@@ -353,6 +371,108 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  // Admin: list all students for user management
+  // Admin: list students who have logged in (lastLogin present)
+  app.get("/api/admin/students", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const students = await Student.find({ lastLogin: { $exists: true, $ne: null } }).sort({ lastLogin: -1 });
+      const payload = students.map(s => ({
+        id: s._id.toString(),
+        name: s.name,
+        email: s.email,
+        enrollment: s.enrollment,
+        branch: s.branch,
+        lastLogin: s.lastLogin,
+        isDisabled: s.isDisabled,
+        createdAt: s.createdAt
+      }));
+      res.json(payload);
+    } catch (error) {
+      console.error("Failed to fetch students:", error);
+      res.status(500).json({ error: "Failed to fetch students" });
+    }
+  });
+  // Admin: get student memberships by enrollment
+  app.get("/api/admin/student-memberships/:enrollment", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { enrollment } = req.params;
+      const memberships = await storage.getClubMembershipsByStudent(enrollment);
+      res.json(memberships);
+    } catch (error) {
+      console.error("Failed to fetch student memberships:", error);
+      res.status(500).json({ error: "Failed to fetch student memberships" });
+    }
+  });
+
+  // Admin: get admin details by club ID
+  app.get("/api/admin/club-admin/:clubId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const admin = await Admin.findOne({ clubId });
+      if (!admin) return res.status(404).json({ error: "Admin not found" });
+
+      // Get additional statistics
+      const eventsCount = await storage.getAllEvents().then(events => events.filter(e => e.clubId === clubId).length);
+      const membershipsCount = await storage.getClubMembershipsByClub(clubId).then(memberships => memberships.length);
+      const recentEvents = await storage.getAllEvents().then(events =>
+        events.filter(e => e.clubId === clubId)
+          .sort((a, b) => new Date(b.createdAt || new Date()).getTime() - new Date(a.createdAt || new Date()).getTime())
+          .slice(0, 5)
+      );
+
+      res.json({
+        id: admin.id,
+        username: admin.username,
+        email: admin.email || "",
+        fullName: admin.fullName || "",
+        phone: admin.phone || "",
+        clubId: admin.clubId,
+        lastLogin: admin.lastLogin,
+        isActive: admin.isActive,
+        role: admin.role,
+        permissions: admin.permissions,
+        createdAt: admin.createdAt,
+        updatedAt: admin.updatedAt,
+        statistics: {
+          totalEvents: eventsCount,
+          totalMembers: membershipsCount,
+          recentEvents: recentEvents.map(event => ({
+            id: event.id,
+            title: event.title,
+            date: event.date,
+            status: new Date(event.date || new Date()) > new Date() ? 'upcoming' : 'past'
+          }))
+        }
+      });
+    } catch (error) {
+      console.error("Failed to fetch admin:", error);
+      res.status(500).json({ error: "Failed to fetch admin" });
+    }
+  });
+
+  // Admin: reset admin password
+  app.patch("/api/admin/reset-admin-password/:clubId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const { newPassword } = req.body;
+
+      if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+      }
+
+      const admin = await Admin.findOne({ clubId });
+      if (!admin) return res.status(404).json({ error: "Admin not found" });
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      admin.password = hashedPassword;
+      await admin.save();
+
+      res.json({ success: true, message: "Password reset successfully" });
+    } catch (error) {
+      console.error("Failed to reset admin password:", error);
+      res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
   // Event Registration Routes
   app.post("/api/events/:eventId/register", async (req: Request, res: Response) => {
     try {
@@ -473,6 +593,152 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.json(membership);
     } catch (error) {
       res.status(500).json({ error: "Failed to update membership status" });
+    }
+  });
+
+  // Analytics Endpoints
+  app.get("/api/analytics/overview", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const [clubs, events, students] = await Promise.all([
+        storage.getAllClubs(),
+        storage.getAllEvents(),
+        Student.find({}).select('id name email enrollment branch lastLogin isDisabled')
+      ]);
+
+      const totalStudents = students.length;
+      const activeStudents = students.filter(s => !s.isDisabled).length;
+      const totalClubs = clubs.length;
+      const activeClubs = clubs.filter(c => (c.memberCount || 0) > 0).length;
+      const totalEvents = events.length;
+      const upcomingEvents = events.filter(e => new Date(e.date || new Date()) > new Date()).length;
+
+      // Club categories distribution
+      const clubCategories = clubs.reduce((acc: Record<string, number>, club) => {
+        const category = club.category?.toLowerCase() || 'uncategorized';
+        acc[category] = (acc[category] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Event categories distribution
+      const eventCategories = events.reduce((acc: Record<string, number>, event) => {
+        const category = event.category?.toLowerCase() || 'uncategorized';
+        acc[category] = (acc[category] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Top performing clubs
+      const topClubs = clubs
+        .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0))
+        .slice(0, 5)
+        .map(club => ({
+          id: club.id,
+          name: club.name,
+          category: club.category,
+          memberCount: club.memberCount || 0,
+          eventCount: events.filter(e => e.clubId === club.id).length
+        }));
+
+      // Monthly trends (current month)
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const eventsThisMonth = events.filter(e => {
+        const eventDate = new Date(e.date || new Date());
+        return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear;
+      }).length;
+
+      res.json({
+        overview: {
+          totalClubs,
+          activeClubs,
+          totalEvents,
+          upcomingEvents,
+          totalStudents,
+          activeStudents
+        },
+        distributions: {
+          clubCategories,
+          eventCategories
+        },
+        topClubs,
+        trends: {
+          eventsThisMonth,
+          clubCoverage: totalClubs > 0 ? Math.round((activeClubs / totalClubs) * 100) : 0,
+          eventDiversity: Object.keys(eventCategories).length,
+          studentEngagement: totalStudents > 0 ? Math.round((totalEvents / totalStudents) * 100) / 100 : 0
+        }
+      });
+    } catch (error) {
+      console.error("Failed to fetch analytics:", error);
+      res.status(500).json({ error: "Failed to fetch analytics data" });
+    }
+  });
+
+  app.get("/api/analytics/events", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const events = await storage.getAllEvents();
+
+      // Event status breakdown
+      const upcoming = events.filter(e => new Date(e.date || new Date()) > new Date()).length;
+      const past = events.filter(e => new Date(e.date || new Date()) <= new Date()).length;
+
+      // Events by month (last 6 months)
+      const monthlyData = [];
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date();
+        date.setMonth(date.getMonth() - i);
+        const month = date.getMonth();
+        const year = date.getFullYear();
+
+        const count = events.filter(e => {
+          const eventDate = new Date(e.date || new Date());
+          return eventDate.getMonth() === month && eventDate.getFullYear() === year;
+        }).length;
+
+        monthlyData.push({
+          month: date.toLocaleString('default', { month: 'short' }),
+          year,
+          count
+        });
+      }
+
+      res.json({
+        statusBreakdown: { upcoming, past },
+        monthlyTrends: monthlyData
+      });
+    } catch (error) {
+      console.error("Failed to fetch event analytics:", error);
+      res.status(500).json({ error: "Failed to fetch event analytics" });
+    }
+  });
+
+  app.get("/api/analytics/students", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const students = await Student.find({}).select('branch enrollment lastLogin isDisabled');
+
+      // Branch distribution
+      const branchDistribution = students.reduce((acc: Record<string, number>, student) => {
+        const branch = student.branch || 'Unknown';
+        acc[branch] = (acc[branch] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Activity metrics
+      const activeStudents = students.filter(s => !s.isDisabled).length;
+      const recentlyActive = students.filter(s => {
+        if (!s.lastLogin) return false;
+        const daysSinceLogin = (new Date().getTime() - new Date(s.lastLogin).getTime()) / (1000 * 60 * 60 * 24);
+        return daysSinceLogin <= 30;
+      }).length;
+
+      res.json({
+        totalStudents: students.length,
+        activeStudents,
+        recentlyActive,
+        branchDistribution
+      });
+    } catch (error) {
+      console.error("Failed to fetch student analytics:", error);
+      res.status(500).json({ error: "Failed to fetch student analytics" });
     }
   });
 }
