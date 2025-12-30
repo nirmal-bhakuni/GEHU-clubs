@@ -4,6 +4,7 @@ import { Admin } from "./models/Admin";
 import { Club } from "./models/Club";
 import { Event } from "./models/Event";
 import { Student } from "./models/Student";
+import { Achievement } from "./models/Achievement";
 
 async function cleanupDuplicates() {
   console.log("🧹 Cleaning up duplicate data...");
@@ -104,6 +105,7 @@ export async function seedDatabase() {
       category: "Technology",
       memberCount: 125,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRGCvDLx2YLXsTqnLYhQPbyv6wDRXXhNkU7ww&s",
+      coverImageUrl: "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop",
       createdAt: new Date()
     },
     {
@@ -113,6 +115,7 @@ export async function seedDatabase() {
       category: "Academic",
       memberCount: 85,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHSQ26pPoXAi8YKQZQPoLwPeETRdh9ywhCAQ&s",
+      coverImageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=400&fit=crop",
       createdAt: new Date()
     },
     {
@@ -122,6 +125,7 @@ export async function seedDatabase() {
       category: "Arts",
       memberCount: 95,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRN4okYreu0Yak1U5bjkWeSCRBUuagbLTanHg&s",
+      coverImageUrl: "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=800&h=400&fit=crop",
       createdAt: new Date()
     },
     {
@@ -131,6 +135,7 @@ export async function seedDatabase() {
       category: "Business",
       memberCount: 150,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRkdkjI3VT0FR0WkyDb_xIOPfPpoULRDPybNA&s",
+      coverImageUrl: "https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=400&fit=crop",
       createdAt: new Date()
     },
     {
@@ -140,6 +145,7 @@ export async function seedDatabase() {
       category: "Academic",
       memberCount: 110,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR-SeTgtHQSr0YhjNgYKbk3y_arKfREH0DdNA&s",
+      coverImageUrl: "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop",
       createdAt: new Date()
     },
     {
@@ -149,6 +155,7 @@ export async function seedDatabase() {
       category: "Social",
       memberCount: 175,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxB5o3X1zEYYTEL6XAalXWOiubGY_mrVJCvA&s",
+      coverImageUrl: "https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800&h=400&fit=crop",
       createdAt: new Date()
     }
   ];
@@ -260,6 +267,88 @@ export async function seedDatabase() {
     console.log("✅ Created demo student");
   } else {
     console.log("⏭️ Demo student already exists");
+  }
+
+  // Create achievements (only if they don't exist)
+  const achievementsData = [
+    {
+      id: randomUUID(),
+      clubId: techClubId,
+      title: "IEEE Best Student Chapter Award 2024",
+      description: "Recognized as the best student chapter in the region for outstanding technical activities and community engagement.",
+      imageUrl: "https://images.unsplash.com/photo-1567427018141-0584cfcbf1b8?w=400&h=300&fit=crop",
+      achievementDate: "2024-10-15",
+      category: "Award",
+      createdAt: new Date()
+    },
+    {
+      id: randomUUID(),
+      clubId: techClubId,
+      title: "Hackathon Winners - TechFest 2024",
+      description: "First place in the national level hackathon with an innovative IoT solution for smart agriculture.",
+      imageUrl: "https://images.unsplash.com/photo-1556075798-4825dfaaf498?w=400&h=300&fit=crop",
+      achievementDate: "2024-09-20",
+      category: "Competition",
+      createdAt: new Date()
+    },
+    {
+      id: randomUUID(),
+      clubId: debateClubId,
+      title: "Inter-College Debate Championship",
+      description: "Won the regional inter-college debate championship with outstanding performances in parliamentary debate.",
+      imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=300&fit=crop",
+      achievementDate: "2024-08-30",
+      category: "Competition",
+      createdAt: new Date()
+    },
+    {
+      id: randomUUID(),
+      clubId: artClubId,
+      title: "Art Exhibition - People's Choice Award",
+      description: "Received the people's choice award at the annual university art exhibition for contemporary digital art series.",
+      imageUrl: "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
+      achievementDate: "2024-07-15",
+      category: "Award",
+      createdAt: new Date()
+    },
+    {
+      id: randomUUID(),
+      clubId: businessClubId,
+      title: "Startup Incubation Program Success",
+      description: "Successfully incubated 5 student startups that raised over ₹50 lakhs in funding through our entrepreneurship program.",
+      imageUrl: "https://images.unsplash.com/photo-1556761175-b413da4baf72?w=400&h=300&fit=crop",
+      achievementDate: "2024-11-10",
+      category: "Achievement",
+      createdAt: new Date()
+    },
+    {
+      id: randomUUID(),
+      clubId: scienceClubId,
+      title: "Research Paper Publication",
+      description: "Published groundbreaking research on AI applications in healthcare in IEEE Transactions journal.",
+      imageUrl: "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=400&h=300&fit=crop",
+      achievementDate: "2024-06-25",
+      category: "Publication",
+      createdAt: new Date()
+    },
+    {
+      id: randomUUID(),
+      clubId: socialClubId,
+      title: "Community Service Excellence Award",
+      description: "Recognized for outstanding community service with over 5000 hours of volunteer work in local communities.",
+      imageUrl: "https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=400&h=300&fit=crop",
+      achievementDate: "2024-12-01",
+      category: "Award",
+      createdAt: new Date()
+    }
+  ];
+
+  for (const achievementData of achievementsData) {
+    const existingAchievement = await Achievement.findOne({ id: achievementData.id });
+    if (!existingAchievement) {
+      await Achievement.create(achievementData);
+      console.log(`✅ Created achievement: ${achievementData.title}`);
+    }
   }
 
   console.log("✅ Database seeding completed successfully!");

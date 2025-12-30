@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
 import type { EventRegistration } from "@shared/schema";
 import type { ClubMembership } from "@shared/schema";
+import type { StudentPoints } from "@shared/schema";
 
 export default function StudentDashboard() {
   const [, setLocation] = useLocation();
@@ -47,6 +48,43 @@ export default function StudentDashboard() {
 
   const { data: memberships = [] } = useQuery<ClubMembership[]>({
     queryKey: ["/api/student/club-memberships"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: studentPointsData } = useQuery<{
+    totalPoints: number;
+    rank: number;
+    badges: string[];
+    skills: string[];
+    pointsThisMonth: number;
+    pointsThisWeek: number;
+    clubBreakdown: Array<{
+      clubId: string;
+      clubName: string;
+      points: number;
+      badges: string[];
+      skills: string[];
+    }>;
+  }>({
+    queryKey: ["/api/student/points"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: announcements = [] } = useQuery<any[]>({
+    queryKey: ["/api/announcements"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/announcements");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: studentAnnouncements = [] } = useQuery<any[]>({
+    queryKey: ["/api/student/announcements"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/student/announcements");
+      return res.json();
+    },
     enabled: isAuthenticated,
   });
 
@@ -167,7 +205,7 @@ export default function StudentDashboard() {
               <div className="flex items-center">
                 <Trophy className="h-8 w-8 text-chart-3 mr-3" />
                 <div>
-                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-2xl font-bold">{studentPointsData?.badges?.length || 0}</p>
                   <p className="text-sm text-muted-foreground">Achievements</p>
                 </div>
               </div>
@@ -176,7 +214,7 @@ export default function StudentDashboard() {
               <div className="flex items-center">
                 <Target className="h-8 w-8 text-chart-4 mr-3" />
                 <div>
-                  <p className="text-2xl font-bold">0</p>
+                  <p className="text-2xl font-bold">{studentPointsData?.totalPoints || 0}</p>
                   <p className="text-sm text-muted-foreground">Points</p>
                 </div>
               </div>
@@ -252,26 +290,60 @@ export default function StudentDashboard() {
                   <TrendingUp className="h-5 w-5 text-primary" />
                   Points & Rank
                 </h3>
+                {studentPointsData?.rank && (
+                  <Badge variant="secondary" className="text-sm">
+                    Rank #{studentPointsData.rank}
+                  </Badge>
+                )}
               </div>
               <div className="space-y-4">
                 <div className="text-center p-6 bg-muted/50 rounded-lg">
-                  <div className="text-3xl font-bold text-primary mb-2">0</div>
+                  <div className="text-3xl font-bold text-primary mb-2">
+                    {studentPointsData?.totalPoints || 0}
+                  </div>
                   <p className="text-sm text-muted-foreground mb-4">Total Points Earned</p>
-                  <Badge variant="secondary" className="mb-2">Beginner Rank</Badge>
+                  <div className="flex flex-wrap justify-center gap-2 mb-3">
+                    {studentPointsData?.badges?.map((badge, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {badge}
+                      </Badge>
+                    ))}
+                    {(!studentPointsData?.badges || studentPointsData.badges.length === 0) && (
+                      <Badge variant="secondary" className="text-xs">Beginner</Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Earn points by participating in events and joining clubs
                   </p>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div className="p-3 bg-muted/30 rounded-lg">
-                    <div className="text-lg font-semibold">0</div>
+                    <div className="text-lg font-semibold">{studentPointsData?.pointsThisMonth || 0}</div>
                     <p className="text-xs text-muted-foreground">This Month</p>
                   </div>
                   <div className="p-3 bg-muted/30 rounded-lg">
-                    <div className="text-lg font-semibold">0</div>
+                    <div className="text-lg font-semibold">{studentPointsData?.pointsThisWeek || 0}</div>
                     <p className="text-xs text-muted-foreground">This Week</p>
                   </div>
                 </div>
+                {studentPointsData?.clubBreakdown && studentPointsData.clubBreakdown.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-muted-foreground">Points by Club</h4>
+                    {studentPointsData.clubBreakdown.map((club) => (
+                      <div key={club.clubId} className="flex items-center justify-between p-2 bg-muted/20 rounded">
+                        <span className="text-sm">{club.clubName}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{club.points} pts</span>
+                          {club.badges?.map((badge, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {badge}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -280,22 +352,33 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Zap className="h-5 w-5 text-primary" />
-                  Skills Earned
+                  Skills Developed
                 </h3>
               </div>
               <div className="space-y-3">
-                <div className="text-center p-6 bg-muted/50 rounded-lg">
-                  <BookOpen className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Skills will be unlocked as you participate in club activities and events
-                  </p>
-                </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {["Leadership", "Teamwork", "Communication", "Problem Solving"].map((skill) => (
-                    <div key={skill} className="p-2 bg-muted/30 rounded text-center">
-                      <p className="text-xs font-medium text-muted-foreground">{skill}</p>
+                  {[
+                    { name: "Leadership", earned: studentPointsData?.badges?.includes("Club Champion") || studentPointsData?.skills?.includes("Leadership") },
+                    { name: "Teamwork", earned: studentPointsData?.badges?.includes("Active Member") || studentPointsData?.skills?.includes("Teamwork") },
+                    { name: "Communication", earned: studentPointsData?.badges?.includes("Regular Attendee") || studentPointsData?.skills?.includes("Communication") },
+                    { name: "Problem Solving", earned: studentPointsData?.totalPoints && studentPointsData.totalPoints > 100 || studentPointsData?.skills?.includes("Problem Solving") },
+                    { name: "Creativity", earned: studentPointsData?.skills?.includes("Creativity") },
+                    { name: "Organization", earned: studentPointsData?.skills?.includes("Organization") },
+                    { name: "Public Speaking", earned: studentPointsData?.skills?.includes("Public Speaking") },
+                    { name: "Project Management", earned: studentPointsData?.skills?.includes("Project Management") }
+                  ].map((skill) => (
+                    <div key={skill.name} className={`p-2 rounded text-center transition-colors ${
+                      skill.earned ? 'bg-primary/10 border border-primary/20' : 'bg-muted/30'
+                    }`}>
+                      <p className={`text-xs font-medium ${skill.earned ? 'text-primary' : 'text-muted-foreground'}`}>
+                        {skill.name}
+                      </p>
+                      {skill.earned && <div className="w-1 h-1 bg-primary rounded-full mx-auto mt-1"></div>}
                     </div>
                   ))}
+                </div>
+                <div className="text-xs text-muted-foreground text-center">
+                  Skills are developed through active participation and recognition by club admins
                 </div>
               </div>
             </Card>
@@ -305,23 +388,30 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
                   <Award className="h-5 w-5 text-primary" />
-                  Badges
+                  Badges Earned
                 </h3>
+                <Badge variant="secondary">{studentPointsData?.badges?.length || 0}</Badge>
               </div>
               <div className="space-y-3">
-                <div className="text-center p-6 bg-muted/50 rounded-lg">
-                  <Trophy className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Earn badges by achieving milestones and completing challenges
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {["First Event", "Club Member", "Active Participant"].map((badge) => (
-                    <div key={badge} className="p-3 bg-muted/30 rounded-lg text-center">
-                      <Award className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
-                      <p className="text-xs font-medium text-muted-foreground">{badge}</p>
-                    </div>
-                  ))}
+                {studentPointsData?.badges && studentPointsData.badges.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {studentPointsData.badges.map((badge, index) => (
+                      <div key={index} className="p-3 bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-lg text-center">
+                        <Award className="h-8 w-8 text-primary mx-auto mb-2" />
+                        <p className="text-sm font-medium text-primary">{badge}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center p-6 bg-muted/50 rounded-lg">
+                    <Trophy className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Earn badges by achieving milestones and completing challenges
+                    </p>
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground text-center">
+                  Keep participating to unlock more badges!
                 </div>
               </div>
             </Card>
@@ -333,23 +423,42 @@ export default function StudentDashboard() {
                   <Bell className="h-5 w-5 text-primary" />
                   Notifications
                 </h3>
-                <Badge variant="secondary">0</Badge>
+                <Badge variant="secondary">{announcements.length || 0}</Badge>
               </div>
               <div className="space-y-3">
-                <div className="text-center p-6 bg-muted/50 rounded-lg">
-                  <Bell className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Stay updated with club announcements, event reminders, and achievements
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <div className="p-3 border border-border rounded-lg">
-                    <p className="text-sm text-muted-foreground">No new notifications</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      You'll receive updates about your clubs and events here
-                    </p>
+                {studentAnnouncements.length === 0 ? (
+                  <div className="text-center p-6 bg-muted/50 rounded-lg">
+                    <Bell className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No new announcements</p>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    {studentAnnouncements.map((a) => (
+                      <div key={a.id} className={`p-3 border border-border rounded-lg ${a.isRead ? 'opacity-60' : ''}`}>
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium">{a.title} {!a.isRead && <Badge variant="destructive" className="ml-2">New</Badge>}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{a.content}</p>
+                          </div>
+                          <div className="text-right text-xs text-muted-foreground">
+                            <div>{a.authorName}</div>
+                            <div>{a.createdAt ? new Date(a.createdAt).toLocaleString() : ""}</div>
+                            <div className="mt-2 flex gap-2">
+                              {!a.isRead && (
+                                <Button size="sm" onClick={async () => { await apiRequest('POST', `/api/student/announcements/${a.id}/read`); queryClient.invalidateQueries({ queryKey: ['/api/student/announcements'] }); }}>
+                                  Mark read
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" onClick={async () => { await apiRequest('DELETE', `/api/announcements/${a.id}`); queryClient.invalidateQueries({ queryKey: ['/api/announcements', '/api/student/announcements'] }); }}>
+                                Dismiss
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </Card>
           </div>

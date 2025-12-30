@@ -26,9 +26,97 @@ import {
   Eye,
   KeyRound
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
+
+// Static data for when API is not available
+const staticClubs: Club[] = [
+  {
+    id: "484c2b24-6193-42c1-879b-185457a9598f",
+    name: "ARYAVRAT",
+    description: "Sharpen your argumentation skills and debate with passion.",
+    category: "Academic",
+    memberCount: 86,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHSQ26pPoXAi8YKQZQPoLwPeETRdh9ywhCAQ&s",
+    createdAt: new Date("2025-11-18T15:02:01.265Z")
+  },
+  {
+    id: "ff82f1ca-01be-4bff-b0f5-8a1e44dcf951",
+    name: "RANGMANCH",
+    description: "Make a difference in our community through social service.",
+    category: "Social",
+    memberCount: 175,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxB5o3X1zEYYTEL6XAalXWOiubGY_mrVJCvA&s",
+    createdAt: new Date("2025-11-18T15:02:01.265Z")
+  },
+  {
+    id: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    name: "IEEE",
+    description: "Building innovative solutions and exploring technology.",
+    category: "Technology",
+    memberCount: 125,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRGCvDLx2YLXsTqnLYhQPbyv6wDRXXhNkU7ww&s",
+    createdAt: new Date("2025-11-18T15:02:01.265Z")
+  },
+  {
+    id: "181d3e7d-d6cd-4f40-b712-7182fcd77154",
+    name: "PAPERTECH-GEHU",
+    description: "Express yourself through various art forms.",
+    category: "Arts",
+    memberCount: 96,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRN4okYreu0Yak1E5bjkWeSCRBUuagbLTanHg&s",
+    createdAt: new Date("2025-11-18T15:02:01.265Z")
+  },
+  {
+    id: "cc71501e-1525-4e3b-959c-f3874db96396",
+    name: "Entrepreneurship Hub",
+    description: "Connect with fellow entrepreneurs.",
+    category: "Business",
+    memberCount: 150,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRkdkjI3VT0FR0WkyDb_xIOPfPpoULRDPybNA&s",
+    createdAt: new Date("2025-11-18T15:02:01.265Z")
+  },
+  {
+    id: "485300f0-e4cc-4116-aa49-d60dd19070d8",
+    name: "CODE_HUNTERS",
+    description: "Discover the wonders of science.",
+    category: "Academic",
+    memberCount: 110,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR-SeTgtHQSr0YhjNgYKbk3y_arKfREH0DdNA&s",
+    createdAt: new Date("2025-11-18T15:02:01.265Z")
+  }
+];
+
+const staticEvents: Event[] = [
+  {
+    id: "737b3d2b-78e9-4929-a70b-41444884d697",
+    title: "Winter Tech Fest",
+    description: "Two-day technology festival...",
+    date: "December 20, 2025",
+    time: "10:00 AM - 6:00 PM",
+    location: "Main Auditorium",
+    category: "Festival",
+    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    clubName: "IEEE",
+    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSI9p1_QlWws8d3TwlotQjB_Itnxyb_BYoRBQ&s",
+    createdAt: new Date("2025-11-18T15:02:01.343Z")
+  },
+  {
+    id: "b46225da-8989-4dab-84ba-0441426b12d6",
+    title: "Web Development Bootcamp",
+    description: "Learn modern web development...",
+    date: "November 15, 2025",
+    time: "9:00 AM - 5:00 PM",
+    location: "Engineering Building",
+    category: "Bootcamp",
+    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    clubName: "IEEE",
+    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUzgijNqFpoWRSWhPKpXOqB-W2ccjhrFBeKw&s",
+    createdAt: new Date("2025-11-18T15:02:01.343Z")
+  }
+];
 
 interface AdminDetails {
   id: string;
@@ -91,15 +179,38 @@ export default function Dashboard() {
   const [newPassword, setNewPassword] = useState("");
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
+  const [targetForAnnouncement, setTargetForAnnouncement] = useState<string>("all");
 
   const { data: events = [] } = useQuery<Event[]>({
     queryKey: ["/api/events"],
+    queryFn: async () => {
+      // Try API first, fallback to static data
+      try {
+        const res = await apiRequest("GET", "/api/events");
+        return res.json();
+      } catch (error) {
+        return staticEvents;
+      }
+    },
     enabled: isAuthenticated,
+    initialData: staticEvents,
+    staleTime: Infinity,
   });
 
   const { data: clubs = [] } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
+    queryFn: async () => {
+      // Try API first, fallback to static data
+      try {
+        const res = await apiRequest("GET", "/api/clubs");
+        return res.json();
+      } catch (error) {
+        return staticClubs;
+      }
+    },
     enabled: isAuthenticated,
+    initialData: staticClubs,
+    staleTime: Infinity,
   });
 
   const { data: students = [] } = useQuery<any[]>({
@@ -149,6 +260,50 @@ export default function Dashboard() {
       return res.json();
     },
     enabled: isAuthenticated && activeTab === "analytics",
+  });
+
+  const { data: announcements = [] } = useQuery<any[]>({
+    queryKey: ["/api/announcements"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/announcements");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<any | null>(null);
+
+  const deleteAnnouncementMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/announcements/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/student/announcements"] });
+      toast({ title: "Deleted", description: "Announcement deleted." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete announcement.", variant: "destructive" });
+    }
+  });
+
+  const editAnnouncementMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await apiRequest("PATCH", `/api/announcements/${payload.id}`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/student/announcements"] });
+      setIsEditOpen(false);
+      setEditingAnnouncement(null);
+      toast({ title: "Updated", description: "Announcement updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update announcement.", variant: "destructive" });
+    }
   });
 
   const { data: eventAnalytics } = useQuery<any>({
@@ -235,9 +390,14 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      setLocation("/admin/login");
-    }
+    // Add a small delay to allow authentication state to settle
+    const timer = setTimeout(() => {
+      if (!authLoading && !isAuthenticated) {
+        setLocation("/admin/login");
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
   }, [authLoading, isAuthenticated, setLocation]);
 
   const logoutMutation = useMutation({
@@ -245,16 +405,17 @@ export default function Dashboard() {
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {
+      // Clear stored admin session
+      localStorage.removeItem("currentAdmin");
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setLocation("/admin/login");
     },
   });
 
   const createAnnouncementMutation = useMutation({
-    mutationFn: async (data: { title: string; content: string }) => {
-      // This would be implemented when announcements API is ready
-      console.log("Creating announcement:", data);
-      return { success: true };
+    mutationFn: async (data: { title: string; content: string; target?: string }) => {
+      const res = await apiRequest("POST", "/api/announcements", data);
+      return res.json();
     },
     onSuccess: () => {
       toast({
@@ -263,6 +424,7 @@ export default function Dashboard() {
       });
       setAnnouncementTitle("");
       setAnnouncementContent("");
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
     },
     onError: () => {
       toast({
@@ -482,22 +644,42 @@ export default function Dashboard() {
             {/* Club Activity Overview */}
             <div>
               <h2 className="text-2xl font-bold mb-6">Club Activity Overview</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="p-6">
                   <h3 className="font-semibold mb-4 flex items-center gap-2">
                     <Building2 className="w-5 h-5" />
                     Active Clubs by Category
                   </h3>
                   <div className="space-y-3">
-                    {["Technology", "Academic", "Arts", "Business", "Social"].map((category) => {
-                      const count = clubs.filter(club => club.category === category.toLowerCase()).length;
-                      return (
-                        <div key={category} className="flex justify-between items-center">
-                          <span className="text-sm">{category}</span>
-                          <span className="font-semibold">{count}</span>
-                        </div>
-                      );
-                    })}
+                    {analyticsData?.distributions?.clubCategories ? (
+                      Object.entries(analyticsData.distributions.clubCategories)
+                        .sort(([,a], [,b]) => (b as number) - (a as number))
+                        .map(([category, count]: [string, any]) => {
+                          const total = analyticsData.overview.totalClubs || clubs.length;
+                          const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+                          return (
+                            <div key={category} className="flex justify-between items-center">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm capitalize">{category}</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {percentage}%
+                                </Badge>
+                              </div>
+                              <span className="font-semibold">{count}</span>
+                            </div>
+                          );
+                        })
+                    ) : (
+                      ["Technology", "Academic", "Arts", "Business", "Social"].map((category) => {
+                        const count = clubs.filter(club => club.category === category.toLowerCase()).length;
+                        return (
+                          <div key={category} className="flex justify-between items-center">
+                            <span className="text-sm">{category}</span>
+                            <span className="font-semibold">{count}</span>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </Card>
 
@@ -506,8 +688,74 @@ export default function Dashboard() {
                     <Users className="w-5 h-5" />
                     Club Membership Trends
                   </h3>
-                  <div className="h-32 bg-muted/50 rounded flex items-center justify-center">
-                    <p className="text-muted-foreground text-sm">Membership growth chart</p>
+                  {analyticsData?.membershipTrends && analyticsData.membershipTrends.length > 0 ? (
+                    <div className="h-32">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={analyticsData.membershipTrends}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis
+                            dataKey="month"
+                            fontSize={12}
+                            tick={{ fontSize: 10 }}
+                          />
+                          <YAxis
+                            fontSize={12}
+                            tick={{ fontSize: 10 }}
+                          />
+                          <Tooltip
+                            formatter={(value) => [value, 'New Members']}
+                            labelFormatter={(label, payload) => {
+                              if (payload && payload[0]) {
+                                const data = payload[0].payload;
+                                return `${label} ${data.year}`;
+                              }
+                              return label;
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="newMembers"
+                            stroke="#8884d8"
+                            strokeWidth={2}
+                            dot={{ fill: '#8884d8', strokeWidth: 2, r: 4 }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-32 bg-muted/50 rounded flex items-center justify-center">
+                      <p className="text-muted-foreground text-sm">No membership data available</p>
+                    </div>
+                  )}
+                </Card>
+
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" />
+                    Top Performing Clubs
+                  </h3>
+                  <div className="space-y-3">
+                    {(analyticsData?.topClubs || clubs
+                      .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0))
+                      .slice(0, 5)
+                    ).map((club: any, index: number) => (
+                      <div key={club.id || index} className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold">
+                            {index + 1}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{club.name}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{club.category}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold">{club.memberCount || 0}</p>
+                          <p className="text-xs text-muted-foreground">{club.eventCount || 0} events</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </Card>
               </div>
@@ -517,13 +765,49 @@ export default function Dashboard() {
             <div>
               <h2 className="text-2xl font-bold mb-6">Event Registrations vs Attendance</h2>
               <Card className="p-6">
-                <div className="h-64 bg-muted/50 rounded flex items-center justify-center">
-                  <div className="text-center">
-                    <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground">Interactive chart showing registration vs attendance trends</p>
-                    <p className="text-xs text-muted-foreground mt-2">UI-only implementation</p>
+                {eventAnalytics?.registrationVsAttendance && eventAnalytics.registrationVsAttendance.length > 0 ? (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={eventAnalytics.registrationVsAttendance.slice(0, 10)} // Show top 10 events
+                        margin={{
+                          top: 20,
+                          right: 30,
+                          left: 20,
+                          bottom: 60,
+                        }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="eventTitle"
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                          fontSize={12}
+                        />
+                        <YAxis />
+                        <Tooltip
+                          formatter={(value, name) => [
+                            value,
+                            name === 'registrations' ? 'Registrations' : 'Attendance'
+                          ]}
+                          labelFormatter={(label) => `Event: ${label}`}
+                        />
+                        <Legend />
+                        <Bar dataKey="registrations" fill="#8884d8" name="Registrations" />
+                        <Bar dataKey="attendance" fill="#82ca9d" name="Attendance" />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
-                </div>
+                ) : (
+                  <div className="h-64 bg-muted/50 rounded flex items-center justify-center">
+                    <div className="text-center">
+                      <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                      <p className="text-muted-foreground">No event registration data available</p>
+                      <p className="text-xs text-muted-foreground mt-2">Events need registrations to show analytics</p>
+                    </div>
+                  </div>
+                )}
               </Card>
             </div>
 
@@ -1415,6 +1699,7 @@ export default function Dashboard() {
                     createAnnouncementMutation.mutate({
                       title: announcementTitle,
                       content: announcementContent,
+                      target: targetForAnnouncement || "all",
                     });
                   }}
                   className="space-y-4"
@@ -1428,6 +1713,20 @@ export default function Dashboard() {
                       placeholder="Announcement title"
                       required
                     />
+                  </div>
+                  <div>
+                    <Label htmlFor="target">Target</Label>
+                    <select
+                      id="target"
+                      className="w-full rounded-md border border-border bg-input text-foreground px-2 py-2"
+                      value={targetForAnnouncement}
+                      onChange={(e) => setTargetForAnnouncement(e.target.value)}
+                    >
+                      <option value="all">All Students</option>
+                      {clubs.map((c) => (
+                        <option key={c.id} value={c.id}>{`Club: ${c.name}`}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <Label htmlFor="content">Content</Label>
@@ -1454,24 +1753,79 @@ export default function Dashboard() {
               <Card className="p-6">
                 <h3 className="font-semibold mb-4">Recent Announcements</h3>
                 <div className="space-y-4">
-                  <div className="p-4 border rounded-lg">
-                    <h4 className="font-semibold">Welcome to GEHU Clubs Platform</h4>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      The new clubs management system is now live...
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2">2 hours ago</p>
-                  </div>
-                  <div className="p-4 border rounded-lg">
-                    <h4 className="font-semibold">Event Registration Milestone</h4>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Congratulations! We've reached 1000+ registrations...
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2">1 day ago</p>
-                  </div>
+                  {announcements.length === 0 ? (
+                    <div className="p-4 border rounded-lg text-center text-muted-foreground">No announcements yet.</div>
+                  ) : (
+                    announcements.map((a: any) => (
+                      <div key={a.id} className="p-4 border rounded-lg">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h4 className="font-semibold">{a.title} {a.pinned && <Badge variant="secondary">Pinned</Badge>}</h4>
+                            <p className="text-sm text-muted-foreground mt-2">{a.content}</p>
+                            <p className="text-xs text-muted-foreground mt-2">{a.createdAt ? new Date(a.createdAt).toLocaleString() : ''}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            {admin && (
+                              <>
+                                <Button size="sm" variant="outline" onClick={() => { setEditingAnnouncement(a); setIsEditOpen(true); }}>
+                                  Edit
+                                </Button>
+                                <Button size="sm" variant="destructive" onClick={() => { if (confirm('Delete this announcement?')) deleteAnnouncementMutation.mutate(a.id); }} disabled={deleteAnnouncementMutation.isPending}>
+                                  Delete
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => { editAnnouncementMutation.mutate({ id: a.id, pinned: !a.pinned }); }}>
+                                  {a.pinned ? 'Unpin' : 'Pin'}
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
+                {/* Edit Announcement Dialog */}
+                <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Edit Announcement</DialogTitle>
+                    </DialogHeader>
+                    {editingAnnouncement && (
+                      <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget as HTMLFormElement;
+                        const title = (form.elements.namedItem('editTitle') as HTMLInputElement).value;
+                        const content = (form.elements.namedItem('editContent') as HTMLTextAreaElement).value;
+                        const target = (form.elements.namedItem('editTarget') as HTMLSelectElement).value;
+                        editAnnouncementMutation.mutate({ id: editingAnnouncement.id, title, content, target });
+                      }} className="space-y-4 p-2">
+                        <div>
+                          <Label>Title</Label>
+                          <Input name="editTitle" defaultValue={editingAnnouncement.title} />
+                        </div>
+                        <div>
+                          <Label>Target</Label>
+                          <select name="editTarget" className="w-full rounded-md border border-border bg-input text-foreground px-2 py-2" defaultValue={editingAnnouncement.target || 'all'}>
+                            <option value="all">All Students</option>
+                            {clubs.map(c => <option key={c.id} value={c.id}>{`Club: ${c.name}`}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <Label>Content</Label>
+                          <Textarea name="editContent" defaultValue={editingAnnouncement.content} rows={6} />
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button type="button" variant="outline" onClick={() => { setIsEditOpen(false); setEditingAnnouncement(null); }}>Cancel</Button>
+                          <Button type="submit">Save</Button>
+                        </div>
+                      </form>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </Card>
             </div>
           </div>
+          
         );
 
       default:

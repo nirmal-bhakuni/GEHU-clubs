@@ -13,12 +13,45 @@ import {
 import { Search } from "lucide-react";
 import type { Event } from "@shared/schema";
 
+// Temporary static data until server is fixed
+const staticEvents: Event[] = [
+  {
+    id: "737b3d2b-78e9-4929-a70b-41444884d697",
+    title: "Winter Tech Fest",
+    description: "Two-day technology festival featuring workshops, hackathons, and networking opportunities with industry experts.",
+    date: "December 20, 2025",
+    time: "10:00 AM - 6:00 PM",
+    location: "Main Auditorium",
+    category: "Festival",
+    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    clubName: "IEEE",
+    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSI9p1_QlWws8d3TwlotQjB_Itnxyb_BYoRBQ&s",
+    createdAt: new Date("2025-11-18T15:02:01.343Z")
+  },
+  {
+    id: "b46225da-8989-4dab-84ba-0441426b12d6",
+    title: "Web Development Bootcamp",
+    description: "Learn modern web development technologies including React, Node.js, and database design. Perfect for beginners and intermediate developers.",
+    date: "November 15, 2025",
+    time: "9:00 AM - 5:00 PM",
+    location: "Engineering Building",
+    category: "Bootcamp",
+    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    clubName: "IEEE",
+    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUzgijNqFpoWRSWhPKpXOqB-W2ccjhrFBeKw&s",
+    createdAt: new Date("2025-11-18T15:02:01.343Z")
+  }
+];
+
 export default function Events() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
 
-  const { data: events = [], isLoading } = useQuery<Event[]>({
+  // Temporarily use static data until server is fixed
+  const { data: events = staticEvents, isLoading } = useQuery<Event[]>({
     queryKey: ["/api/events"],
+    initialData: staticEvents,
+    staleTime: Infinity, // Keep data fresh
   });
 
   const filteredEvents = events.filter((event) => {

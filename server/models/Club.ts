@@ -7,6 +7,7 @@ const clubSchema = new mongoose.Schema({
   category: String,
   memberCount: Number,
   logoUrl: String,
+  coverImageUrl: String,
   createdAt: Date
 });
 

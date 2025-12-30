@@ -19,6 +19,7 @@ export interface Club {
   category: string;
   memberCount: number;
   logoUrl?: string;
+  coverImageUrl?: string;
   createdAt?: Date;
 }
 
@@ -38,6 +39,7 @@ export interface EventRegistration {
   year: string;
   interests: string[];
   experience?: string;
+  attended?: boolean;
   registeredAt: Date;
 }
 
@@ -52,4 +54,52 @@ export interface ClubMembership {
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   joinedAt: Date;
+}
+
+export interface Achievement {
+  id: string;
+  clubId: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  achievementDate: string;
+  category: string;
+  createdAt: Date;
+}
+
+export interface ClubLeadership {
+  id: string;
+  clubId: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  phoneNumber: string;
+  role: string;
+  assignedAt: Date;
+}
+
+export interface StudentPoints {
+  id: string;
+  clubId: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  enrollmentNumber: string;
+  points: number;
+  badges: string[];
+  skills: string[];
+  lastAwardReason?: string;
+  lastUpdated: Date;
+}
+
+export interface Message {
+  id: string;
+  clubId: string;
+  senderName: string;
+  senderEmail: string;
+  enrollmentNumber: string;
+  subject: string;
+  message: string;
+  sentAt: Date;
+  read: boolean;
 }

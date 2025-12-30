@@ -28,6 +28,7 @@ interface ClubLeader {
 
 interface ClubContactProps {
   clubName: string;
+  clubId?: string;
   leaders?: ClubLeader[];
   clubEmail?: string;
   clubPhone?: string;
@@ -52,6 +53,7 @@ const defaultLeaders: ClubLeader[] = [
 
 export default function ClubContact({
   clubName,
+  clubId,
   leaders = defaultLeaders,
   clubEmail = "contact@club.gehu.ac.in",
   clubPhone = "+91-0120-XXXX-XXX",
@@ -63,6 +65,7 @@ export default function ClubContact({
   const [contactForm, setContactForm] = useState({
     name: "",
     email: "",
+    enrollmentNumber: "",
     subject: "",
     message: "",
   });
@@ -86,6 +89,7 @@ export default function ClubContact({
     if (
       !contactForm.name ||
       !contactForm.email ||
+      !contactForm.enrollmentNumber ||
       !contactForm.subject ||
       !contactForm.message
     ) {
@@ -93,14 +97,37 @@ export default function ClubContact({
       return;
     }
 
+    if (!clubId) {
+      alert("Club ID is required");
+      return;
+    }
+
     setMessageState("sending");
 
-    // Simulate sending message
-    setTimeout(() => {
+    try {
+      const response = await fetch(`/api/clubs/${clubId}/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          senderName: contactForm.name,
+          senderEmail: contactForm.email,
+          enrollmentNumber: contactForm.enrollmentNumber,
+          subject: contactForm.subject,
+          message: contactForm.message,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to send message");
+      }
+
       setMessageState("success");
       setContactForm({
         name: "",
         email: "",
+        enrollmentNumber: "",
         subject: "",
         message: "",
       });
@@ -108,7 +135,13 @@ export default function ClubContact({
       setTimeout(() => {
         setMessageState("form");
       }, 3000);
-    }, 1500);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      setMessageState("error");
+      setTimeout(() => {
+        setMessageState("form");
+      }, 3000);
+    }
   };
 
   return (
@@ -196,82 +229,6 @@ export default function ClubContact({
         </Card>
       </div>
 
-      {/* Club Leaders */}
-      <Card className="p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/30 transition-all">
-        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5 text-foreground" />
-          Meet Our Leadership Team
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {leaders.map((leader) => (
-            <div
-              key={leader.id}
-              className="p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/30 transition-all group"
-            >
-              <div className="flex flex-col items-center text-center gap-3">
-                <Avatar className="w-12 h-12 flex-shrink-0">
-                  <AvatarImage src={leader.avatar} className="object-cover rounded-full" />
-                  <AvatarFallback className="flex items-center justify-center w-full h-full rounded-full bg-primary/10 text-primary font-bold text-base leading-none">
-                    {leader.name.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-
-                <div className="min-w-0">
-                  <p className="font-semibold text-sm truncate">{leader.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1 truncate">{leader.role}</p>
-                </div>
-
-                <div className="w-full mt-2 space-y-2">
-                  <div className="flex items-center justify-center gap-2">
-                    <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    <a
-                      href={`mailto:${leader.email}`}
-                      className="text-primary hover:underline truncate text-sm"
-                    >
-                      {leader.email}
-                    </a>
-                    <button
-                      onClick={() => handleCopyEmail(leader.email)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0"
-                      aria-label={`Copy ${leader.email}`}
-                    >
-                      {copiedEmail === leader.email ? (
-                        <CheckCircle2 className="w-4 h-4 text-foreground" />
-                      ) : (
-                        <Copy className="w-4 h-4 text-muted-foreground hover:text-primary" />
-                      )}
-                    </button>
-                  </div>
-
-                  {leader.phone && (
-                    <div className="flex items-center justify-center gap-2">
-                      <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <a
-                        href={`tel:${leader.phone}`}
-                        className="text-primary hover:underline truncate text-sm"
-                      >
-                        {leader.phone}
-                      </a>
-                      <button
-                        onClick={() => handleCopyEmail(leader.phone!)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0"
-                        aria-label={`Copy ${leader.phone}`}
-                      >
-                        {copiedEmail === leader.phone ? (
-                          <CheckCircle2 className="w-4 h-4 text-foreground" />
-                        ) : (
-                          <Copy className="w-4 h-4 text-muted-foreground hover:text-primary" />
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
       {/* Contact Form */}
       <Card className="p-6 border-2">
         <div className="flex items-center gap-2 mb-6">
@@ -333,6 +290,20 @@ export default function ClubContact({
                   disabled={messageState === "sending"}
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Enrollment Number <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="text"
+                name="enrollmentNumber"
+                placeholder="GEHU/2021/001"
+                value={contactForm.enrollmentNumber}
+                onChange={handleInputChange}
+                disabled={messageState === "sending"}
+              />
             </div>
 
             <div>

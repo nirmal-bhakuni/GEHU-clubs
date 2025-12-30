@@ -9,6 +9,13 @@ import path from "path";
 import fs from "fs";
 import { Student } from "./models/Student";
 import { Admin } from "./models/Admin";
+import { EventRegistration } from "./models/EventRegistration";
+import { ClubMembership } from "./models/ClubMembership";
+import { Achievement } from "./models/Achievement";
+import { ClubLeadership } from "./models/ClubLeadership";
+import StudentPoints from "./models/StudentPoints";
+import { Club } from "./models/Club";
+import { Message } from "./models/Message";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -36,6 +43,18 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 
 export async function registerRoutes(app: Express): Promise<void> {
   app.use("/uploads", express.static(uploadsDir));
+
+  // General file upload endpoint
+  app.post("/api/upload", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+      const fileUrl = `/uploads/${req.file.filename}`;
+      res.json({ url: fileUrl, filename: req.file.filename });
+    } catch {
+      res.status(500).json({ error: "Failed to upload file" });
+    }
+  });
 
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
@@ -137,6 +156,17 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.json({ success: true });
     } catch {
       res.status(500).json({ error: "Failed to delete club" });
+    }
+  });
+
+  // Public Achievements Routes
+  app.get("/api/achievements/:clubId", async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const achievements = await storage.getAchievementsByClub(clubId);
+      res.json(achievements);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch achievements" });
     }
   });
 
@@ -289,6 +319,7 @@ export async function registerRoutes(app: Express): Promise<void> {
       });
 
       req.session.studentId = student._id;
+      req.session.studentEmail = student.email;
 
       res.json({
         success: true,
@@ -303,6 +334,108 @@ export async function registerRoutes(app: Express): Promise<void> {
       });
     } catch {
       res.status(500).json({ error: "Signup failed" });
+    }
+  });
+
+  // Announcements: create (admin) and list (public)
+  app.post("/api/announcements", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { title, content, target } = req.body;
+      if (!title || !content) return res.status(400).json({ error: "Title and content required" });
+
+      const admin = await Admin.findOne({ id: req.session.adminId });
+      const announcement = await storage.createAnnouncement({
+        title,
+        content,
+        authorId: admin?.id || "",
+        authorName: admin?.username || "System",
+        target: target || "all",
+      });
+
+      res.status(201).json({ success: true, announcement });
+    } catch (error) {
+      console.error("Failed to create announcement:", error);
+      res.status(500).json({ error: "Failed to create announcement" });
+    }
+  });
+
+  app.get("/api/announcements", async (req: Request, res: Response) => {
+    try {
+      const limit = Number(req.query.limit || 20);
+      const announcements = await storage.getAnnouncements(limit);
+      res.json(announcements);
+    } catch (error) {
+      console.error("Failed to fetch announcements:", error);
+      res.status(500).json({ error: "Failed to fetch announcements" });
+    }
+  });
+
+  // Admin: pin/unpin announcement
+  app.patch("/api/announcements/:id/pin", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { pinned } = req.body;
+      const updated = await storage.pinAnnouncement(id, !!pinned);
+      res.json({ success: true, announcement: updated });
+    } catch (error) {
+      console.error("Failed to pin announcement:", error);
+      res.status(500).json({ error: "Failed to pin announcement" });
+    }
+  });
+
+  // Admin: delete announcement
+  app.delete("/api/announcements/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const ok = await storage.deleteAnnouncement(id);
+      if (!ok) return res.status(404).json({ error: "Announcement not found" });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete announcement:", error);
+      res.status(500).json({ error: "Failed to delete announcement" });
+    }
+  });
+
+  // Admin: edit announcement
+  app.patch("/api/announcements/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { title, content, target, pinned } = req.body;
+      const updated = await storage.updateAnnouncement(id, { title, content, target, pinned });
+      if (!updated) return res.status(404).json({ error: "Announcement not found" });
+      res.json({ success: true, announcement: updated });
+    } catch (error) {
+      console.error("Failed to update announcement:", error);
+      res.status(500).json({ error: "Failed to update announcement" });
+    }
+  });
+
+  // Student: get announcements with read flag
+  app.get("/api/student/announcements", async (req: Request, res: Response) => {
+    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+      const announcements = await storage.getAnnouncementsForStudent(student.enrollment);
+      res.json(announcements);
+    } catch (error) {
+      console.error("Failed to fetch student announcements:", error);
+      res.status(500).json({ error: "Failed to fetch announcements" });
+    }
+  });
+
+  // Student: mark announcement as read
+  app.post("/api/student/announcements/:id/read", async (req: Request, res: Response) => {
+    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+      const { id } = req.params;
+      const read = await storage.markAnnouncementRead(id, student.enrollment);
+      res.json({ success: true, read });
+    } catch (error) {
+      console.error("Failed to mark announcement read:", error);
+      res.status(500).json({ error: "Failed to mark read" });
     }
   });
 
@@ -326,6 +459,7 @@ export async function registerRoutes(app: Express): Promise<void> {
       await student.save();
 
       req.session.studentId = student._id;
+      req.session.studentEmail = student.email;
 
       res.json({
         success: true,
@@ -514,6 +648,137 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  // Event Feedback Routes
+  app.post("/api/events/:eventId/feedback", async (req: Request, res: Response) => {
+    try {
+      const { eventId } = req.params;
+      const { rating, comment } = req.body;
+
+      // Validate input
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: "Rating must be between 1 and 5" });
+      }
+
+      // Get event details
+      const event = await storage.getEvent(eventId);
+      if (!event) {
+        return res.status(404).json({ error: "Event not found" });
+      }
+
+      // Create feedback record (you might want to create a proper Feedback model)
+      // For now, we'll just return success
+      console.log("Event feedback received:", {
+        eventId,
+        eventTitle: event.title,
+        rating,
+        comment,
+        submittedAt: new Date()
+      });
+
+      res.status(201).json({
+        message: "Feedback submitted successfully",
+        feedback: {
+          eventId,
+          rating,
+          comment,
+          submittedAt: new Date()
+        }
+      });
+    } catch (error) {
+      console.error("Feedback submission error:", error);
+      res.status(500).json({ error: "Failed to submit feedback" });
+    }
+  });
+
+  // Message Routes
+  app.post("/api/clubs/:clubId/messages", async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const { senderName, senderEmail, enrollmentNumber, subject, message: messageContent } = req.body;
+
+      // Validate input
+      if (!senderName || !senderEmail || !enrollmentNumber || !subject || !messageContent) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      // Get club details
+      const club = await storage.getClub(clubId);
+      if (!club) {
+        return res.status(404).json({ error: "Club not found" });
+      }
+
+      // Create message
+      const message = new Message({
+        id: Date.now().toString(),
+        clubId,
+        senderName,
+        senderEmail,
+        enrollmentNumber,
+        subject,
+        message: messageContent,
+        sentAt: new Date(),
+        read: false
+      });
+
+      await message.save();
+
+      res.status(201).json({
+        message: "Message sent successfully",
+        messageId: message.id
+      });
+    } catch (error) {
+      console.error("Message submission error:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  app.get("/api/clubs/:clubId/messages", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+
+      // Check if admin has access to this club
+      if (req.session.adminId) {
+        const admin = await Admin.findOne({ id: req.session.adminId });
+        if (!admin || admin.clubId !== clubId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      const messages = await Message.find({ clubId }).sort({ sentAt: -1 });
+      res.json(messages);
+    } catch (error) {
+      console.error("Failed to fetch messages:", error);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  app.put("/api/messages/:messageId/read", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { messageId } = req.params;
+
+      const message = await Message.findOne({ id: messageId });
+      if (!message) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+
+      // Check if admin has access to this club's messages
+      if (req.session.adminId) {
+        const admin = await Admin.findOne({ id: req.session.adminId });
+        if (!admin || admin.clubId !== message.clubId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+      }
+
+      message.read = true;
+      await message.save();
+
+      res.json({ message: "Message marked as read" });
+    } catch (error) {
+      console.error("Failed to mark message as read:", error);
+      res.status(500).json({ error: "Failed to mark message as read" });
+    }
+  });
+
   // Club Membership Routes
   app.post("/api/clubs/:clubId/join", async (req: Request, res: Response) => {
     try {
@@ -562,6 +827,237 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  // Achievement Routes
+  app.post("/api/admin/achievements", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
+    try {
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin) return res.status(401).json({ error: "Admin not found" });
+
+      const club = await storage.getClub(admin.clubId!);
+      if (!club) return res.status(400).json({ error: "Club not found" });
+
+      const achievementData = {
+        ...req.body,
+        clubId: admin.clubId,
+        imageUrl: req.file ? `/uploads/${req.file.filename}` : null
+      };
+
+      const achievement = await storage.createAchievement(achievementData);
+      res.status(201).json(achievement);
+    } catch (error) {
+      console.error("Achievement creation error:", error);
+      res.status(400).json({ error: "Invalid achievement data" });
+    }
+  });
+
+  app.get("/api/admin/achievements/:clubId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const achievements = await storage.getAchievementsByClub(clubId);
+      res.json(achievements);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch achievements" });
+    }
+  });
+
+  app.delete("/api/admin/achievements/:achievementId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { achievementId } = req.params;
+
+      const achievement = await Achievement.findOne({ id: achievementId });
+      if (!achievement) return res.status(404).json({ error: "Achievement not found" });
+
+      // Check if admin owns this club
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin || achievement.clubId !== admin.clubId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const success = await storage.deleteAchievement(achievementId);
+      if (!success) return res.status(404).json({ error: "Achievement not found" });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete achievement" });
+    }
+  });
+
+  // Club Leadership Routes
+  app.post("/api/admin/club-leadership", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin) return res.status(401).json({ error: "Admin not found" });
+
+      const leadershipData = {
+        ...req.body,
+        clubId: admin.clubId,
+      };
+
+      const leadership = await storage.createClubLeadership(leadershipData);
+      res.status(201).json(leadership);
+    } catch (error) {
+      console.error("Leadership creation error:", error);
+      res.status(400).json({ error: "Invalid leadership data" });
+    }
+  });
+
+  app.get("/api/club-leadership/:clubId", async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const leadership = await storage.getClubLeadershipByClub(clubId);
+      res.json(leadership);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch leadership" });
+    }
+  });
+
+  app.delete("/api/admin/club-leadership/:leadershipId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { leadershipId } = req.params;
+
+      const leadership = await ClubLeadership.findOne({ id: leadershipId });
+      if (!leadership) return res.status(404).json({ error: "Leadership not found" });
+
+      // Check if admin owns this club
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin || leadership.clubId !== admin.clubId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const success = await storage.deleteClubLeadership(leadershipId);
+      if (!success) return res.status(404).json({ error: "Leadership not found" });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete leadership" });
+    }
+  });
+
+  // Student Points and Badges Management
+  app.get("/api/admin/student-points/:clubId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin || admin.clubId !== clubId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const studentPoints = await StudentPoints.find({ clubId }).sort({ points: -1 });
+      res.json(studentPoints);
+    } catch (error) {
+      console.error("Failed to fetch student points:", error);
+      res.status(500).json({ error: "Failed to fetch student points" });
+    }
+  });
+
+  app.post("/api/admin/student-points", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId, studentId, studentName, studentEmail, enrollmentNumber, points, badges, skills, reason } = req.body;
+
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin || admin.clubId !== clubId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      const studentPoints = await StudentPoints.findOneAndUpdate(
+        { clubId, studentId },
+        {
+          $inc: { points: points || 0 },
+          $addToSet: {
+            badges: { $each: badges || [] },
+            skills: { $each: skills || [] }
+          },
+          $set: {
+            studentName,
+            studentEmail,
+            enrollmentNumber,
+            lastAwardReason: reason || "",
+            lastUpdated: new Date()
+          }
+        },
+        { upsert: true, new: true }
+      );
+
+      res.status(201).json(studentPoints);
+    } catch (error) {
+      console.error("Failed to create/update student points:", error);
+      res.status(500).json({ error: "Failed to create/update student points" });
+    }
+  });
+
+  app.patch("/api/admin/student-points/:studentPointsId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { studentPointsId } = req.params;
+      const { points, badges } = req.body;
+
+      const studentPoints = await StudentPoints.findOne({ id: studentPointsId });
+      if (!studentPoints) return res.status(404).json({ error: "Student points not found" });
+
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin || studentPoints.clubId.toString() !== admin.clubId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      studentPoints.points = points !== undefined ? points : studentPoints.points;
+      studentPoints.badges = badges !== undefined ? badges : studentPoints.badges;
+      studentPoints.lastUpdated = new Date();
+
+      await studentPoints.save();
+      res.json(studentPoints);
+    } catch (error) {
+      console.error("Failed to update student points:", error);
+      res.status(500).json({ error: "Failed to update student points" });
+    }
+  });
+
+  app.post("/api/admin/student-points/award-attendance", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId, studentId, studentName, studentEmail, enrollmentNumber, eventId } = req.body;
+
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin || admin.clubId !== clubId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      // Award points for attendance (10 points per event)
+      const attendancePoints = 10;
+
+      const studentPoints = await StudentPoints.findOneAndUpdate(
+        { clubId, studentId },
+        {
+          $inc: { points: attendancePoints },
+          $set: {
+            studentName,
+            studentEmail,
+            enrollmentNumber,
+            lastUpdated: new Date()
+          }
+        },
+        { upsert: true, new: true }
+      );
+
+      // Check for badges based on points
+      const badges = [];
+      if (studentPoints.points >= 50) badges.push("Regular Attendee");
+      if (studentPoints.points >= 100) badges.push("Active Member");
+      if (studentPoints.points >= 200) badges.push("Club Champion");
+
+      if (badges.length > 0) {
+        studentPoints.badges = [...new Set([...(studentPoints.badges || []), ...badges])];
+        await studentPoints.save();
+      }
+
+      res.json({
+        studentPoints,
+        pointsAwarded: attendancePoints,
+        newBadges: badges.length > 0 ? badges : null
+      });
+    } catch (error) {
+      console.error("Failed to award attendance points:", error);
+      res.status(500).json({ error: "Failed to award attendance points" });
+    }
+  });
+
   // Club Admin Routes for Membership Management
   app.get("/api/admin/club-memberships/:clubId", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -596,13 +1092,93 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  app.delete("/api/admin/club-memberships/:membershipId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { membershipId } = req.params;
+
+      const membership = await ClubMembership.findOne({ id: membershipId });
+      if (!membership) return res.status(404).json({ error: "Membership not found" });
+
+      // Check if admin owns this club
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin || membership.clubId !== admin.clubId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
+      // If membership was approved, decrement club member count
+      if (membership.status === 'approved') {
+        await Club.findOneAndUpdate({ id: membership.clubId }, { $inc: { memberCount: -1 } });
+      }
+
+      const success = await storage.deleteClubMembership(membershipId);
+      if (!success) return res.status(404).json({ error: "Membership not found" });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete membership" });
+    }
+  });
+
+  app.get("/api/admin/event-registrations/:clubId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const registrations = await EventRegistration.find({ clubName: { $exists: true } }).populate('eventId');
+
+      // Filter registrations for events of this club
+      const clubEvents = await storage.getAllEvents();
+      const clubEventIds = clubEvents.filter(e => e.clubId === clubId).map(e => e.id);
+
+      const filteredRegistrations = registrations.filter(r => clubEventIds.includes(r.eventId));
+
+      res.json(filteredRegistrations);
+    } catch (error) {
+      console.error("Failed to fetch event registrations:", error);
+      res.status(500).json({ error: "Failed to fetch event registrations" });
+    }
+  });
+
+  app.patch("/api/admin/event-registrations/:registrationId/attendance", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { registrationId } = req.params;
+      const { attended } = req.body;
+
+      const registration = await EventRegistration.findOneAndUpdate(
+        { id: registrationId },
+        { attended: attended },
+        { new: true }
+      );
+
+      if (!registration) return res.status(404).json({ error: "Registration not found" });
+
+      res.json(registration);
+    } catch (error) {
+      console.error("Failed to update attendance:", error);
+      res.status(500).json({ error: "Failed to update attendance" });
+    }
+  });
+
+  // Club Admin: get announcements
+  app.get("/api/admin/announcements", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const admin = await Admin.findOne({ id: req.session.adminId });
+      if (!admin) return res.status(404).json({ error: "Admin not found" });
+
+      const announcements = await storage.getAnnouncements(50); // Get more announcements for admins
+      res.json(announcements);
+    } catch (error) {
+      console.error("Failed to fetch admin announcements:", error);
+      res.status(500).json({ error: "Failed to fetch announcements" });
+    }
+  });
+
   // Analytics Endpoints
   app.get("/api/analytics/overview", requireAuth, async (req: Request, res: Response) => {
     try {
-      const [clubs, events, students] = await Promise.all([
+      const [clubs, events, students, memberships] = await Promise.all([
         storage.getAllClubs(),
         storage.getAllEvents(),
-        Student.find({}).select('id name email enrollment branch lastLogin isDisabled')
+        Student.find({}).select('id name email enrollment branch lastLogin isDisabled'),
+        ClubMembership.find({ status: 'approved' }).select('joinedAt clubId')
       ]);
 
       const totalStudents = students.length;
@@ -638,6 +1214,26 @@ export async function registerRoutes(app: Express): Promise<void> {
           eventCount: events.filter(e => e.clubId === club.id).length
         }));
 
+      // Membership trends over last 6 months
+      const membershipTrends = [];
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date();
+        date.setMonth(date.getMonth() - i);
+        const month = date.getMonth();
+        const year = date.getFullYear();
+
+        const count = memberships.filter(m => {
+          const joinedDate = new Date(m.joinedAt);
+          return joinedDate.getMonth() === month && joinedDate.getFullYear() === year;
+        }).length;
+
+        membershipTrends.push({
+          month: date.toLocaleString('default', { month: 'short' }),
+          year,
+          newMembers: count
+        });
+      }
+
       // Monthly trends (current month)
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
@@ -660,6 +1256,7 @@ export async function registerRoutes(app: Express): Promise<void> {
           eventCategories
         },
         topClubs,
+        membershipTrends,
         trends: {
           eventsThisMonth,
           clubCoverage: totalClubs > 0 ? Math.round((activeClubs / totalClubs) * 100) : 0,
@@ -676,6 +1273,7 @@ export async function registerRoutes(app: Express): Promise<void> {
   app.get("/api/analytics/events", requireAuth, async (req: Request, res: Response) => {
     try {
       const events = await storage.getAllEvents();
+      const registrations = await EventRegistration.find({});
 
       // Event status breakdown
       const upcoming = events.filter(e => new Date(e.date || new Date()) > new Date()).length;
@@ -701,9 +1299,26 @@ export async function registerRoutes(app: Express): Promise<void> {
         });
       }
 
+      // Registration vs Attendance data
+      const registrationVsAttendance = events.map(event => {
+        const eventRegistrations = registrations.filter(r => r.eventId === event.id);
+        const totalRegistrations = eventRegistrations.length;
+        const totalAttended = eventRegistrations.filter(r => r.attended).length;
+
+        return {
+          eventId: event.id,
+          eventTitle: event.title,
+          eventDate: event.date,
+          registrations: totalRegistrations,
+          attendance: totalAttended,
+          attendanceRate: totalRegistrations > 0 ? Math.round((totalAttended / totalRegistrations) * 100) : 0
+        };
+      }).filter(item => item.registrations > 0); // Only show events with registrations
+
       res.json({
         statusBreakdown: { upcoming, past },
-        monthlyTrends: monthlyData
+        monthlyTrends: monthlyData,
+        registrationVsAttendance
       });
     } catch (error) {
       console.error("Failed to fetch event analytics:", error);
@@ -739,6 +1354,142 @@ export async function registerRoutes(app: Express): Promise<void> {
     } catch (error) {
       console.error("Failed to fetch student analytics:", error);
       res.status(500).json({ error: "Failed to fetch student analytics" });
+    }
+  });
+
+  // Student Points and Rank
+  app.get("/api/student/points", async (req: Request, res: Response) => {
+    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const studentEmail = student.email;
+
+      // Get all clubs for club name lookup
+      const clubs = await storage.getAllClubs();
+
+      // Get all student points across all clubs
+      const studentPoints = await StudentPoints.find({ studentEmail }).sort({ points: -1 });
+
+      // Calculate total points and rank
+      const totalPoints = studentPoints.reduce((sum, sp) => sum + sp.points, 0);
+
+      // Get all students' total points to calculate rank
+      const allStudentTotals = await StudentPoints.aggregate([
+        {
+          $group: {
+            _id: "$studentEmail",
+            totalPoints: { $sum: "$points" }
+          }
+        },
+        {
+          $sort: { totalPoints: -1 }
+        }
+      ]);
+
+      const studentRank = allStudentTotals.findIndex(s => s._id === studentEmail) + 1;
+
+      // Get badges from all clubs
+      const allBadges = studentPoints.flatMap(sp => sp.badges || []);
+
+      // Get skills from all clubs
+      const allSkills = studentPoints.flatMap(sp => sp.skills || []);
+
+      // Calculate points this month and this week
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+
+      const pointsThisMonth = studentPoints.reduce((sum, sp) => {
+        const lastUpdated = new Date(sp.lastUpdated);
+        return lastUpdated >= startOfMonth ? sum + sp.points : sum;
+      }, 0);
+
+      const pointsThisWeek = studentPoints.reduce((sum, sp) => {
+        const lastUpdated = new Date(sp.lastUpdated);
+        return lastUpdated >= startOfWeek ? sum + sp.points : sum;
+      }, 0);
+
+      res.json({
+        totalPoints,
+        rank: studentRank,
+        badges: [...new Set(allBadges)],
+        skills: [...new Set(allSkills)],
+        pointsThisMonth,
+        pointsThisWeek,
+        clubBreakdown: studentPoints.map(sp => ({
+          clubId: sp.clubId,
+          clubName: clubs.find(c => c.id === sp.clubId.toString())?.name || 'Unknown Club',
+          points: sp.points,
+          badges: sp.badges || [],
+          skills: sp.skills || []
+        }))
+      });
+    } catch (error) {
+      console.error("Failed to fetch student points:", error);
+      res.status(500).json({ error: "Failed to fetch student points" });
+    }
+  });
+
+  // Global Points Leaderboard for Club Admins
+  app.get("/api/admin/global-points-leaderboard", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Get all students' total points and badges
+      const allStudentPoints = await StudentPoints.aggregate([
+        {
+          $group: {
+            _id: "$studentEmail",
+            totalPoints: { $sum: "$points" },
+            studentName: { $first: "$studentName" },
+            enrollmentNumber: { $first: "$enrollmentNumber" },
+            badges: { $push: "$badges" }
+          }
+        },
+        {
+          $project: {
+            studentEmail: "$_id",
+            totalPoints: 1,
+            studentName: 1,
+            enrollmentNumber: 1,
+            badges: {
+              $reduce: {
+                input: "$badges",
+                initialValue: [],
+                in: { $concatArrays: ["$$value", "$$this"] }
+              }
+            }
+          }
+        },
+        {
+          $project: {
+            studentEmail: 1,
+            totalPoints: 1,
+            studentName: 1,
+            enrollmentNumber: 1,
+            badges: {
+              $filter: {
+                input: { $setUnion: "$badges" },
+                as: "badge",
+                cond: { $ne: ["$$badge", null] }
+              }
+            }
+          }
+        },
+        {
+          $sort: { totalPoints: -1 }
+        },
+        {
+          $limit: 20
+        }
+      ]);
+
+      res.json(allStudentPoints);
+    } catch (error) {
+      console.error("Failed to fetch global points leaderboard:", error);
+      res.status(500).json({ error: "Failed to fetch global points leaderboard" });
     }
   });
 }

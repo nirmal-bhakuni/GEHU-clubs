@@ -16,6 +16,7 @@ const eventRegistrationSchema = new mongoose.Schema({
   year: { type: String, required: true },
   interests: [{ type: String }],
   experience: { type: String },
+  attended: { type: Boolean, default: false },
   registeredAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 

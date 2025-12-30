@@ -3,7 +3,9 @@ import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, MapPin } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Calendar, Clock, MapPin, Share2, Users, Star, MessageSquare } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import RegistrationForm from "@/components/RegistrationForm";
 import ClubMembership from "@/components/ClubMembership";
@@ -13,21 +15,117 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event } from "@shared/schema";
 
+// Static event data for when API is not available
+const staticEvents: Record<string, Event> = {
+  "737b3d2b-78e9-4929-a70b-41444884d697": {
+    id: "737b3d2b-78e9-4929-a70b-41444884d697",
+    title: "Winter Tech Fest",
+    description: "Two-day technology festival featuring workshops, hackathons, and networking opportunities with industry experts. Join us for an immersive experience in cutting-edge technology and innovation.",
+    date: "December 20, 2025",
+    time: "10:00 AM - 6:00 PM",
+    location: "Main Auditorium",
+    category: "Festival",
+    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    clubName: "IEEE",
+    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSI9p1_QlWws8d3TwlotQjB_Itnxyb_BYoRBQ&s",
+    createdAt: new Date("2025-11-18T15:02:01.343Z")
+  },
+  "b46225da-8989-4dab-84ba-0441426b12d6": {
+    id: "b46225da-8989-4dab-84ba-0441426b12d6",
+    title: "Web Development Bootcamp",
+    description: "Learn modern web development technologies including React, Node.js, and database design. Perfect for beginners and intermediate developers looking to enhance their skills.",
+    date: "November 15, 2025",
+    time: "9:00 AM - 5:00 PM",
+    location: "Engineering Building",
+    category: "Bootcamp",
+    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    clubName: "IEEE",
+    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUzgijNqFpoWRSWhPKpXOqB-W2ccjhrFBeKw&s",
+    createdAt: new Date("2025-11-18T15:02:01.343Z")
+  }
+};
+
 export default function EventDetail() {
   const params = useParams<{ id: string }>();
   const eventId = params?.id;
   const [activeTab, setActiveTab] = useState("overview");
   const tabsRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+
+  const handleShare = async () => {
+    const shareData = {
+      title: `${event?.title} - GEHU Events`,
+      text: `Check out this event: ${event?.title} by ${event?.clubName}`,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(shareData.url);
+        toast({
+          title: "Link copied!",
+          description: "Event link has been copied to your clipboard.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Share failed",
+        description: "Unable to share this event.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmittingFeedback || feedbackRating === 0) return;
+
+    setIsSubmittingFeedback(true);
+
+    try {
+      await apiRequest("POST", `/api/events/${eventId}/feedback`, {
+        rating: feedbackRating,
+        comment: feedbackComment,
+      });
+
+      toast({
+        title: "Feedback submitted!",
+        description: "Thank you for your feedback on this event.",
+      });
+
+      setFeedbackRating(0);
+      setFeedbackComment("");
+    } catch (error: any) {
+      toast({
+        title: "Feedback submission failed",
+        description: error.message || "Failed to submit feedback. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
 
   const { data: event, isLoading, error } = useQuery<Event>({
     queryKey: [`/api/events/${eventId}`],
     queryFn: async () => {
-      const res = await fetch(`/api/events/${eventId}`);
-      if (!res.ok) throw new Error("Event not found");
-      return res.json();
+      // Try API first, fallback to static data
+      try {
+        const res = await fetch(`/api/events/${eventId}`);
+        if (res.ok) return res.json();
+      } catch (error) {
+        // Fallback to static data
+      }
+      return staticEvents[eventId || ""] || null;
     },
+    initialData: staticEvents[eventId || ""],
     enabled: !!eventId,
+    staleTime: Infinity,
   });
 
   if (!eventId) {
@@ -130,17 +228,25 @@ export default function EventDetail() {
               >
                 Register for this Event
               </Button>
-              <Button variant="outline" size="lg">Share Event</Button>
+              <Link href={`/clubs/${event.clubId}`}>
+                <Button variant="outline" size="lg" className="flex items-center gap-2">
+                  <Users className="w-4 h-4" />
+                  View Club
+                </Button>
+              </Link>
+              <Button variant="outline" size="lg" onClick={handleShare} className="flex items-center gap-2">
+                <Share2 className="w-4 h-4" />
+                Share Event
+              </Button>
             </div>
           </div>
         </div>
 
         {/* Tabbed Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} ref={tabsRef} className="space-y-8">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="register">Register</TabsTrigger>
-            <TabsTrigger value="club-info">Club Info</TabsTrigger>
             <TabsTrigger value="feedback">Feedback</TabsTrigger>
           </TabsList>
 
@@ -181,22 +287,83 @@ export default function EventDetail() {
             />
           </TabsContent>
 
-          <TabsContent value="club-info" className="space-y-8">
-            <ClubMembership
-              clubName={event.clubName}
-              description={`Join ${event.clubName} to be part of a vibrant community of innovators and learners. This event is just the beginning of an amazing journey with us!`}
-              memberCount={125}
-              joinFee={0}
-            />
-            <ClubContact clubName={event.clubName} />
-          </TabsContent>
-
           <TabsContent value="feedback" className="space-y-8">
-            <div className="bg-card border border-card-border rounded-lg p-8">
-              <h2 className="text-2xl font-bold mb-4">Student Feedback</h2>
-              <p className="text-muted-foreground mb-6">Share your thoughts and experiences from this event.</p>
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">Feedback system coming soon. Check back after the event!</p>
+            <div className="space-y-6">
+              {/* Feedback Form */}
+              <div className="bg-card border border-card-border rounded-lg p-8">
+                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                  <MessageSquare className="w-6 h-6" />
+                  Share Your Feedback
+                </h2>
+                <p className="text-muted-foreground mb-6">
+                  Help us improve by sharing your experience from this event.
+                </p>
+
+                <form onSubmit={handleFeedbackSubmit} className="space-y-6">
+                  {/* Rating */}
+                  <div>
+                    <Label className="text-base font-medium">Rating</Label>
+                    <div className="flex gap-1 mt-2">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setFeedbackRating(star)}
+                          className="focus:outline-none focus:ring-2 focus:ring-primary rounded"
+                        >
+                          <Star
+                            className={`w-8 h-8 ${
+                              star <= feedbackRating
+                                ? "fill-yellow-400 text-yellow-400"
+                                : "text-gray-300 hover:text-yellow-400"
+                            } transition-colors`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {feedbackRating === 0 ? "Select a rating" : `${feedbackRating} star${feedbackRating > 1 ? 's' : ''}`}
+                    </p>
+                  </div>
+
+                  {/* Comment */}
+                  <div>
+                    <Label htmlFor="feedback-comment" className="text-base font-medium">
+                      Comments (Optional)
+                    </Label>
+                    <Textarea
+                      id="feedback-comment"
+                      placeholder="Tell us about your experience... What did you like? What could be improved?"
+                      value={feedbackComment}
+                      onChange={(e) => setFeedbackComment(e.target.value)}
+                      rows={4}
+                      className="mt-2"
+                    />
+                  </div>
+
+                  {/* Submit Button */}
+                  <Button
+                    type="submit"
+                    disabled={feedbackRating === 0 || isSubmittingFeedback}
+                    className="w-full"
+                  >
+                    {isSubmittingFeedback ? "Submitting..." : "Submit Feedback"}
+                  </Button>
+                </form>
+              </div>
+
+              {/* Recent Feedback Display */}
+              <div className="bg-card border border-card-border rounded-lg p-8">
+                <h3 className="text-xl font-bold mb-4">Recent Feedback</h3>
+                <div className="text-center py-8">
+                  <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">
+                    Feedback from attendees will appear here after the event.
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Check back after the event date to see what others thought!
+                  </p>
+                </div>
               </div>
             </div>
           </TabsContent>
