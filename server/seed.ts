@@ -86,12 +86,13 @@ export async function seedDatabase() {
 
   console.log("🌱 Starting database seeding...");
 
-  const techClubId = randomUUID();
-  const debateClubId = randomUUID();
-  const artClubId = randomUUID();
-  const businessClubId = randomUUID();
-  const scienceClubId = randomUUID();
-  const socialClubId = randomUUID();
+  // Use fixed UUIDs for consistency
+  const techClubId = "f54a2526-787b-4de5-9582-0a42f4aaa61b";
+  const debateClubId = "484c2b24-6193-42c1-879b-185457a9598f";
+  const artClubId = "181d3e7d-d6cd-4f40-b712-7182fcd77154";
+  const businessClubId = "cc71501e-1525-4e3b-959c-f3874db96396";
+  const scienceClubId = "485300f0-e4cc-4116-aa49-d60dd19070d8";
+  const socialClubId = "ff82f1ca-01be-4bff-b0f5-8a1e44dcf951";
 
   const hashedPassword = await bcrypt.hash("admin123", 10);
   const studentPassword = await bcrypt.hash("password123", 10);
@@ -161,12 +162,18 @@ export async function seedDatabase() {
   ];
 
   for (const clubData of clubsData) {
-    const existingClub = await Club.findOne({ id: clubData.id });
+    const existingClub = await Club.findOne({ name: clubData.name });
     if (!existingClub) {
       await Club.create(clubData);
       console.log(`✅ Created club: ${clubData.name}`);
     } else {
-      console.log(`⏭️ Club already exists: ${clubData.name}`);
+      // Update existing club with correct ID if different
+      if (existingClub.id !== clubData.id) {
+        await Club.findOneAndUpdate({ name: clubData.name }, { id: clubData.id });
+        console.log(`✅ Updated club ID: ${clubData.name}`);
+      } else {
+        console.log(`⏭️ Club already exists: ${clubData.name}`);
+      }
     }
   }
 
@@ -195,18 +202,31 @@ export async function seedDatabase() {
     }
   }
 
-  // University admin (no clubId)
-  const existingUniAdmin = await Admin.findOne({ username: "university_admin" });
+  // University admin (no clubId) - migrate from old username if needed
+  let existingUniAdmin = await Admin.findOne({ username: "admin" });
   if (!existingUniAdmin) {
-    await Admin.create({
-      id: randomUUID(),
-      username: "university_admin",
-      password: hashedPassword,
-      clubId: null
-    });
-    console.log("✅ Created admin: university_admin");
+    // Check if there's an old "university_admin" account to migrate
+    const oldUniAdmin = await Admin.findOne({ username: "university_admin" });
+    if (oldUniAdmin) {
+      // Update the existing account
+      await Admin.findOneAndUpdate(
+        { username: "university_admin" },
+        { username: "admin" }
+      );
+      console.log("✅ Migrated university_admin to admin");
+      existingUniAdmin = await Admin.findOne({ username: "admin" });
+    } else {
+      // Create new admin account
+      await Admin.create({
+        id: randomUUID(),
+        username: "admin",
+        password: hashedPassword,
+        clubId: null
+      });
+      console.log("✅ Created admin: admin");
+    }
   } else {
-    console.log("⏭️ Admin already exists: university_admin");
+    console.log("⏭️ Admin already exists: admin");
   }
 
   // Create events (only if they don't exist)

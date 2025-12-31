@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useParams, Link } from "wouter";
+import React, { useState, useEffect } from "react";
+import { useParams, Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,6 +19,7 @@ import type { ClubLeadership } from "@shared/schema";
 import type { Achievement } from "@shared/schema";
 import ClubMembership from "@/components/ClubMembership";
 import ClubContact from "@/components/ClubContact";
+import { useStudentAuth } from "@/hooks/useStudentAuth";
 
 // Static event data for when API is not available
 const staticEvents: Record<string, Event> = {
@@ -111,6 +112,7 @@ const staticClubs: Record<string, Club> = {
 export default function ClubDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
+  const [, setLocation] = useLocation();
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
@@ -122,27 +124,94 @@ export default function ClubDetail() {
     reason: ''
   });
   const { toast } = useToast();
+  const { student, isAuthenticated } = useStudentAuth();
+
+  // Pre-fill form when student data is available
+  useEffect(() => {
+    if (student && isAuthenticated) {
+      setJoinForm(prev => ({
+        ...prev,
+        name: student.name,
+        email: student.email,
+        department: student.branch,
+        enrollmentNumber: student.enrollment
+      }));
+    }
+  }, [student, isAuthenticated]);
 
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
+    // Ensure user is authenticated and student data is available
+    if (!isAuthenticated || !student) {
+      toast({
+        title: "Authentication Required",
+        description: "Please login as a student to join clubs.",
+        variant: "destructive",
+      });
+      setIsJoinModalOpen(false);
+      return;
+    }
+
+    // Ensure form is properly filled
+    if (!joinForm.name || !joinForm.email || !joinForm.department || !joinForm.enrollmentNumber) {
+      toast({
+        title: "Form Incomplete",
+        description: "Please wait for your information to load and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate that reason is provided
+    if (!joinForm.reason.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please provide a reason for joining the club.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      await apiRequest("POST", `/api/clubs/${id}/join`, joinForm);
+      await apiRequest("POST", `/api/clubs/${id}/join`, { reason: joinForm.reason.trim() });
       toast({
         title: "Join Request Submitted",
         description: "Your request has been sent to the club admin for approval. You'll be notified once it's reviewed.",
       });
       setIsJoinModalOpen(false);
-      setJoinForm({ name: '', email: '', department: '', enrollmentNumber: '', reason: '' });
+      setJoinForm(prev => ({ ...prev, reason: '' }));
     } catch (error: any) {
+      console.error("Join request error:", error);
+      
+      // Fallback: store join request locally
+      const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+      const request = {
+        id: `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        clubId: id,
+        clubName: club?.name || "Unknown Club",
+        studentName: joinForm.name,
+        studentEmail: joinForm.email,
+        enrollmentNumber: joinForm.enrollmentNumber,
+        department: joinForm.department,
+        reason: joinForm.reason.trim(),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        isFallback: true
+      };
+      
+      pendingRequests.push(request);
+      localStorage.setItem("pendingJoinRequests", JSON.stringify(pendingRequests));
+      
       toast({
-        title: "Join Request Failed",
-        description: error.message || "Failed to submit join request. Please try again.",
-        variant: "destructive",
+        title: "Join Request Submitted (Offline)",
+        description: "Your request has been saved locally. It will be submitted when you're back online.",
       });
+      setIsJoinModalOpen(false);
+      setJoinForm(prev => ({ ...prev, reason: '' }));
     } finally {
       setIsSubmitting(false);
     }
@@ -333,16 +402,56 @@ export default function ClubDetail() {
               <Dialog open={isJoinModalOpen} onOpenChange={(open) => {
                 setIsJoinModalOpen(open);
                 if (!open) {
-                  setJoinForm({ name: '', email: '', department: '', enrollmentNumber: '', reason: '' });
+                  setJoinForm(prev => ({ ...prev, reason: '' }));
                   setIsSubmitting(false);
+                } else if (open && student && isAuthenticated) {
+                  // Ensure form is filled when modal opens
+                  setJoinForm(prev => ({
+                    ...prev,
+                    name: student.name,
+                    email: student.email,
+                    department: student.branch,
+                    enrollmentNumber: student.enrollment
+                  }));
                 }
               }}>
-                <DialogTrigger asChild>
-                  <Button className="hover:scale-105 transition-transform">
-                    <Users className="w-4 h-4 mr-2" />
-                    Join Club
-                  </Button>
-                </DialogTrigger>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {isAuthenticated ? (
+                      <DialogTrigger asChild>
+                        <Button 
+                          variant="default" 
+                          size="sm"
+                          className="hover:scale-105 transition-transform bg-primary hover:bg-primary/90"
+                        >
+                          <Users className="w-4 h-4 mr-2" />
+                          Join Club
+                        </Button>
+                      </DialogTrigger>
+                    ) : (
+                      <Button 
+                        variant="default"
+                        size="sm"
+                        className="hover:scale-105 transition-transform bg-primary hover:bg-primary/90"
+                        onClick={() => {
+                          toast({
+                            title: "Login Required",
+                            description: "Please login as a student to join clubs.",
+                            variant: "destructive",
+                          });
+                          // Redirect to student login page
+                          setLocation("/student/login");
+                        }}
+                      >
+                        <Users className="w-4 h-4 mr-2" />
+                        Join Club
+                      </Button>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isAuthenticated ? "Join this club" : "Login required to join clubs"}
+                  </TooltipContent>
+                </Tooltip>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Join {club.name}</DialogTitle>
@@ -354,7 +463,7 @@ export default function ClubDetail() {
                       id="name"
                       value={joinForm.name}
                       onChange={(e) => setJoinForm(prev => ({ ...prev, name: e.target.value }))}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isAuthenticated}
                       required
                     />
                   </div>
@@ -365,7 +474,7 @@ export default function ClubDetail() {
                       type="email"
                       value={joinForm.email}
                       onChange={(e) => setJoinForm(prev => ({ ...prev, email: e.target.value }))}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isAuthenticated}
                       required
                     />
                   </div>
@@ -375,7 +484,7 @@ export default function ClubDetail() {
                       id="department"
                       value={joinForm.department}
                       onChange={(e) => setJoinForm(prev => ({ ...prev, department: e.target.value }))}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isAuthenticated}
                       required
                     />
                   </div>
@@ -386,7 +495,7 @@ export default function ClubDetail() {
                       value={joinForm.enrollmentNumber}
                       onChange={(e) => setJoinForm(prev => ({ ...prev, enrollmentNumber: e.target.value }))}
                       placeholder="GEHU/2024/001"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isAuthenticated}
                       required
                     />
                   </div>

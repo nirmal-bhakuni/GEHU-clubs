@@ -25,7 +25,7 @@ interface EditEventFormProps {
 }
 
 export default function EditEventForm({ event, clubId, onClose, onSuccess }: EditEventFormProps) {
-  const [formData, setFormData] = useState({
+   const [formData, setFormData] = useState({
     title: event?.title || "",
     description: event?.description || "",
     date: event?.date || "",
@@ -57,7 +57,7 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
       const method = event ? "PATCH" : "POST";
 
       const response = await apiRequest(method, url, formDataToSend);
-      return response.json();
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
@@ -71,7 +71,7 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
     onError: () => {
       toast({
         title: "Error",
-        description: `Failed to ${event ? "update" : "create"} event. Please try again.`,
+        description: `Failed to ${event ? "update" : "create"} event. Please check your connection and try again.`,
         variant: "destructive",
       });
     },
@@ -88,6 +88,18 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.title.trim() || !formData.description.trim() || !formData.date || 
+        !formData.time || !formData.location.trim() || !formData.category) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields, including selecting a category.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     updateEventMutation.mutate(formData);
   };
 
@@ -95,7 +107,7 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 flex items-center justify-between p-6 border-b border-border bg-card">
-          <h2 className="text-2xl font-semibold">Edit Event</h2>
+          <h2 className="text-2xl font-semibold">{event ? "Edit Event" : "Create Event"}</h2>
           <Button
             variant="ghost"
             size="icon"

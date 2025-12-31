@@ -14,64 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Grid3X3, List, SortAsc, SortDesc } from "lucide-react";
 import type { Club } from "@shared/schema";
 
-// Temporary static data until server is fixed
-const staticClubs: Club[] = [
-  {
-    id: "484c2b24-6193-42c1-879b-185457a9598f",
-    name: "ARYAVRAT",
-    description: "Sharpen your argumentation skills and debate with passion. Join our vibrant community of thinkers and speakers.",
-    category: "Academic",
-    memberCount: 86,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHSQ26pPoXAi8YKQZQPoLwPeETRdh9ywhCAQ&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  {
-    id: "ff82f1ca-01be-4bff-b0f5-8a1e44dcf951",
-    name: "RANGMANCH",
-    description: "Make a difference in our community through social service and volunteer work. Join hands with us to create positive change.",
-    category: "Social",
-    memberCount: 175,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxB5o3X1zEYYTEL6XAalXWOiubGY_mrVJCvA&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  {
-    id: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
-    name: "IEEE",
-    description: "Building innovative solutions and exploring cutting-edge technology. Join the future of engineering and innovation.",
-    category: "Technology",
-    memberCount: 125,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRGCvDLx2YLXsTqnLYhQPbyv6wDRXXhNkU7ww&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  {
-    id: "181d3e7d-d6cd-4f40-b712-7182fcd77154",
-    name: "PAPERTECH-GEHU",
-    description: "Express yourself through various art forms including painting, drawing, and digital art. Unleash your creativity.",
-    category: "Arts",
-    memberCount: 96,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRN4okYreu0Yak1U5bjkWeSCRBUuagbLTanHg&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  {
-    id: "cc71501e-1525-4e3b-959c-f3874db96396",
-    name: "Entrepreneurship Hub",
-    description: "Connect with fellow entrepreneurs and learn the skills needed to build successful businesses. Turn ideas into reality.",
-    category: "Business",
-    memberCount: 150,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRkdkjI3VT0FR0WkyDb_xIOPfPpoULRDPybNA&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  {
-    id: "485300f0-e4cc-4116-aa49-d60dd19070d8",
-    name: "CODE_HUNTERS",
-    description: "Discover the wonders of science through hands-on experiments and research. Join our journey of scientific exploration.",
-    category: "Academic",
-    memberCount: 110,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR-SeTgtHQSr0YhjNgYKbk3y_arKfREH0DdNA&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  }
-];
-
 export default function Clubs() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -79,11 +21,14 @@ export default function Clubs() {
   const [sortBy, setSortBy] = useState<"name" | "members" | "category">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  // Temporarily use static data until server is fixed
-  const { data: clubs = staticClubs, isLoading } = useQuery<Club[]>({
+  // Fetch clubs from API
+  const { data: clubs = [], isLoading } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
-    initialData: staticClubs,
-    staleTime: Infinity, // Keep data fresh
+    queryFn: async () => {
+      const res = await fetch("/api/clubs");
+      if (!res.ok) throw new Error("Failed to fetch clubs");
+      return res.json();
+    },
   });
 
   const filteredClubs = clubs.filter((club) => {

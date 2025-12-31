@@ -390,14 +390,9 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    // Add a small delay to allow authentication state to settle
-    const timer = setTimeout(() => {
-      if (!authLoading && !isAuthenticated) {
-        setLocation("/admin/login");
-      }
-    }, 200);
-
-    return () => clearTimeout(timer);
+    if (!authLoading && !isAuthenticated) {
+      setLocation("/admin/login");
+    }
   }, [authLoading, isAuthenticated, setLocation]);
 
   const logoutMutation = useMutation({

@@ -32,11 +32,6 @@ export default function Login() {
 
     try {
       // Try API first, fallback to static authentication
-      const staticAdmins = {
-        "admin": { id: "admin-1", username: "admin", clubId: null },
-        "university_admin": { id: "admin-1", username: "admin", clubId: null }
-      };
-
       let loginSuccess = false;
       let loginData = null;
 
@@ -49,11 +44,15 @@ export default function Login() {
         }
       } catch (apiError) {
         // Fallback to static authentication
-        if ((username === "admin" || username === "university_admin") && password === "admin123") {
+        if (username === "admin" && password === "admin123") {
           loginSuccess = true;
           loginData = { 
             success: true, 
-            admin: staticAdmins[username as keyof typeof staticAdmins] || staticAdmins["admin"]
+            admin: { 
+              id: "admin-1", 
+              username: "admin", 
+              clubId: null 
+            } 
           };
         }
       }
@@ -65,10 +64,9 @@ export default function Login() {
         queryClient.setQueryData(["/api/auth/me"], loginData.admin);
         toast({
           title: "Login successful",
-          description: "Welcome to the admin dashboard.",
+          description: "Welcome back!",
         });
-        // Small delay to ensure state is updated before redirect
-        setTimeout(() => setLocation("/dashboard"), 100);
+        setLocation("/dashboard");
       } else {
         throw new Error("Invalid credentials");
       }
@@ -135,10 +133,9 @@ export default function Login() {
 
         <div className="mt-6 text-center text-sm text-muted-foreground">
           <p>Default credentials for testing:</p>
-          <div className="font-mono mt-1 space-y-1">
-            <p>Username: admin | Password: admin123</p>
-            <p>Username: university_admin | Password: admin123</p>
-          </div>
+          <p className="font-mono mt-1">
+            Username: admin | Password: admin123
+          </p>
         </div>
       </Card>
     </div>

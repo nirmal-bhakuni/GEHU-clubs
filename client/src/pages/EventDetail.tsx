@@ -274,13 +274,48 @@ export default function EventDetail() {
                   });
                   toast({
                     title: "Registration successful!",
-                    description: `You have been registered for ${event.title}`,
+                    description: `You have been registered for ${event.title}. A membership request has been sent to the club.`,
                   });
                 } catch (error: any) {
+                  // Fallback: store registration AND membership request locally
+                  const pendingRegistrations = JSON.parse(localStorage.getItem("pendingEventRegistrations") || "[]");
+                  const registration = {
+                    id: `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    ...data,
+                    eventId,
+                    eventTitle: event.title,
+                    eventDate: event.date,
+                    eventTime: event.time,
+                    clubName: event.clubName,
+                    registeredAt: new Date().toISOString(),
+                    isFallback: true
+                  };
+                  
+                  pendingRegistrations.push(registration);
+                  localStorage.setItem("pendingEventRegistrations", JSON.stringify(pendingRegistrations));
+                  
+                  // Also create a membership request locally
+                  const pendingMemberships = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+                  const membershipRequest = {
+                    id: `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    clubId: event.clubId,
+                    clubName: event.clubName,
+                    studentName: data.fullName,
+                    studentEmail: data.email,
+                    enrollmentNumber: data.enrollmentNumber,
+                    department: data.department,
+                    reason: `Registered for event: ${event.title}`,
+                    status: 'pending',
+                    createdAt: new Date().toISOString(),
+                    isFallback: true
+                  };
+                  
+                  pendingMemberships.push(membershipRequest);
+                  localStorage.setItem("pendingJoinRequests", JSON.stringify(pendingMemberships));
+                  
                   toast({
-                    title: "Registration failed",
-                    description: error.message || "Failed to register for the event",
-                    variant: "destructive",
+                    title: "Registration Saved (Offline)",
+                    description: "Your registration and membership request have been saved locally. They will be submitted when you're back online.",
                   });
                 }
               }}

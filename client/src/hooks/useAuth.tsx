@@ -13,11 +13,6 @@ const staticAdmins: Record<string, Admin> = {
     username: "admin",
     clubId: null // University admin
   },
-  "university_admin": {
-    id: "admin-1",
-    username: "admin",
-    clubId: null // University admin (alias)
-  },
   "aryavrat_admin": {
     id: "admin-2",
     username: "aryavrat_admin",
@@ -68,8 +63,7 @@ export function useAuth() {
       return null;
     },
     retry: false,
-    staleTime: 5 * 60 * 1000, // 5 minutes instead of Infinity
-    refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
 
   return {

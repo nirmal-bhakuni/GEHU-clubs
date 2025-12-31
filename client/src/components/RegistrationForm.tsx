@@ -33,6 +33,7 @@ export default function RegistrationForm({
   onSubmit,
 }: RegistrationFormProps) {
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState<StudentRegistration>({
     fullName: "",
     email: "",
@@ -84,7 +85,7 @@ export default function RegistrationForm({
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (
@@ -99,23 +100,32 @@ export default function RegistrationForm({
       return;
     }
 
-    setSubmitted(true);
-    onSubmit?.(formData);
+    setIsSubmitting(true);
 
-    setTimeout(() => {
-      setSubmitted(false);
-      setFormData({
-        fullName: "",
-        email: "",
-        phone: "",
-        rollNumber: "",
-        department: "",
-        year: "First Year",
-        enrollmentNumber: "",
-        interests: [],
-        experience: "",
-      });
-    }, 3000);
+    try {
+      await onSubmit?.(formData);
+      setSubmitted(true);
+      
+      setTimeout(() => {
+        setSubmitted(false);
+        setFormData({
+          fullName: "",
+          email: "",
+          phone: "",
+          rollNumber: "",
+          department: "",
+          year: "First Year",
+          enrollmentNumber: "",
+          interests: [],
+          experience: "",
+        });
+      }, 3000);
+    } catch (error) {
+      // Error is handled by the parent component
+      console.error("Registration failed:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -305,8 +315,13 @@ export default function RegistrationForm({
         </div>
 
         {/* Submit Button */}
-        <Button type="submit" size="lg" className="w-full">
-          Complete Registration
+        <Button 
+          type="submit" 
+          size="lg" 
+          className="w-full" 
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? "Registering..." : "Complete Registration"}
         </Button>
       </form>
     </Card>

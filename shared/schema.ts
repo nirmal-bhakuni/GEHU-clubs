@@ -41,6 +41,7 @@ export interface EventRegistration {
   experience?: string;
   attended?: boolean;
   registeredAt: Date;
+  isFallback?: boolean;
 }
 
 export interface ClubMembership {
@@ -54,6 +55,7 @@ export interface ClubMembership {
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   joinedAt: Date;
+  isFallback?: boolean;
 }
 
 export interface Achievement {

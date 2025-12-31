@@ -49,23 +49,23 @@ export default function ClubAdminLogin() {
         localStorage.setItem("currentAdmin", formData.username);
         // Set the admin data directly in the query cache
         queryClient.setQueryData(["/api/auth/me"], data.admin);
+        // Club admin logged in successfully
+        setLocation("/club-admin");
         toast({
           title: "Login successful",
           description: "Welcome to your club admin panel.",
         });
-        // Small delay to ensure state is updated before redirect
-        setTimeout(() => setLocation("/club-admin"), 100);
       } else {
         // Store admin session for offline functionality
         localStorage.setItem("currentAdmin", formData.username);
         // Set the admin data directly in the query cache
         queryClient.setQueryData(["/api/auth/me"], data.admin);
+        // University admin, redirect to dashboard
+        setLocation("/dashboard");
         toast({
           title: "Login successful",
           description: "Welcome to the admin dashboard.",
         });
-        // Small delay to ensure state is updated before redirect
-        setTimeout(() => setLocation("/dashboard"), 100);
       }
     },
     onError: () => {

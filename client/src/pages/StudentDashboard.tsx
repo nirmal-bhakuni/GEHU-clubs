@@ -43,6 +43,46 @@ export default function StudentDashboard() {
 
   const { data: registrations = [] } = useQuery<EventRegistration[]>({
     queryKey: ["/api/student/registrations"],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", "/api/student/registrations");
+        const apiRegistrations = await res.json();
+        
+        // Merge with locally stored pending registrations
+        const pendingRegistrations = JSON.parse(localStorage.getItem("pendingEventRegistrations") || "[]");
+        const localRegistrations = pendingRegistrations.map((reg: any) => ({
+          id: reg.id,
+          eventId: reg.eventId,
+          eventTitle: reg.eventTitle,
+          eventDate: reg.eventDate,
+          eventTime: reg.eventTime,
+          clubName: reg.clubName,
+          studentName: reg.fullName,
+          studentEmail: reg.email,
+          registeredAt: reg.registeredAt,
+          attended: false,
+          isFallback: true
+        }));
+        
+        return [...apiRegistrations, ...localRegistrations];
+      } catch (error) {
+        // Fallback: return locally stored registrations
+        const pendingRegistrations = JSON.parse(localStorage.getItem("pendingEventRegistrations") || "[]");
+        return pendingRegistrations.map((reg: any) => ({
+          id: reg.id,
+          eventId: reg.eventId,
+          eventTitle: reg.eventTitle,
+          eventDate: reg.eventDate,
+          eventTime: reg.eventTime,
+          clubName: reg.clubName,
+          studentName: reg.fullName,
+          studentEmail: reg.email,
+          registeredAt: reg.registeredAt,
+          attended: false,
+          isFallback: true
+        }));
+      }
+    },
     enabled: isAuthenticated,
   });
 
@@ -272,7 +312,14 @@ export default function StudentDashboard() {
                       <p className="text-sm text-muted-foreground">{registration.eventDate} at {registration.eventTime}</p>
                       <p className="text-xs text-muted-foreground">Enrollment: {registration.enrollmentNumber}</p>
                     </div>
-                    <Badge variant="secondary">{registration.clubName}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">{registration.clubName}</Badge>
+                      {registration.isFallback && (
+                        <Badge variant="outline" className="text-xs">
+                          Offline
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 ))}
                 {registrations.length === 0 && (

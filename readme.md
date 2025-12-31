@@ -103,6 +103,53 @@ Currently using Multer for local file storage. The system is designed to easily 
 6. ❌ Enable HTTPS in production
 7. ❌ Implement audit logging for admin actions
 
+## Deployment
+
+### Production Build
+```bash
+# Build the application
+npm run build
+
+# Start production server
+npm start
+```
+
+### Docker Deployment
+```bash
+# Build Docker image
+docker build -t gehu-clubs .
+
+# Run container
+docker run -p 12346:12346 -e NODE_ENV=production gehu-clubs
+```
+
+### Docker Compose (Recommended)
+```bash
+# Start with docker-compose
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Environment Variables
+Create a `.env` file with:
+```env
+NODE_ENV=production
+PORT=12346
+MONGO_URI=your_mongodb_connection_string
+SESSION_SECRET=your_secure_random_secret
+```
+
+### Server Requirements
+- Node.js 18+
+- MongoDB database
+- 512MB RAM minimum
+- 1GB storage for uploads
+
 ## Next Steps / Future Enhancements
 - Cloud storage integration (AWS S3, Cloudinary)
 - Real PostgreSQL database setup

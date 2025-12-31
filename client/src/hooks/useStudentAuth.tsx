@@ -25,16 +25,22 @@ export function useStudentAuth() {
     queryKey: ["/api/student/me"],
     retry: false,
     queryFn: async () => {
-      // Try API first, fallback to static data based on stored session
+      // Try API first
       try {
         const res = await fetch("/api/student/me", { credentials: "include" });
-        if (res.ok) return res.json();
-      } catch (error) {
-        // Check if we have a stored student session (simulate login state)
-        const storedStudent = localStorage.getItem("currentStudent");
-        if (storedStudent && staticStudents[storedStudent]) {
-          return staticStudents[storedStudent];
+        if (res.ok) {
+          const studentData = await res.json();
+          // Store in localStorage for offline functionality
+          localStorage.setItem("currentStudent", studentData.enrollment);
+          return studentData;
+        } else if (res.status === 401) {
+          // Not authenticated - clear localStorage
+          localStorage.removeItem("currentStudent");
+          return null;
         }
+      } catch (error) {
+        // Network error - don't trust localStorage for authentication
+        console.warn("Network error checking authentication");
       }
       return null;
     },

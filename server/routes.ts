@@ -627,6 +627,27 @@ export async function registerRoutes(app: Express): Promise<void> {
         clubName: event.clubName,
       });
 
+      // Automatically create a membership request for the club
+      // Check if student doesn't already have a membership for this club
+      const existingMembership = await ClubMembership.findOne({
+        enrollmentNumber: registrationData.enrollmentNumber,
+        clubId: event.clubId
+      });
+
+      if (!existingMembership) {
+        // Create a pending membership request
+        await storage.createClubMembership({
+          studentName: registrationData.fullName || registrationData.studentName,
+          studentEmail: registrationData.email || registrationData.studentEmail,
+          enrollmentNumber: registrationData.enrollmentNumber,
+          department: registrationData.department,
+          reason: `Registered for event: ${event.title}`,
+          clubId: event.clubId,
+          clubName: event.clubName,
+          status: 'pending'
+        });
+      }
+
       res.json({ success: true, registration });
     } catch (error) {
       console.error("Registration error:", error);
@@ -779,13 +800,30 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  // Club Membership Routes
-  app.post("/api/clubs/:clubId/join", async (req: Request, res: Response) => {
-    try {
-      const { clubId } = req.params;
-      const membershipData = req.body;
+  // Test route
+  app.get("/api/test-join", (req: Request, res: Response) => {
+    res.json({ message: "Test route works" });
+  });
 
-      console.log("Join request received:", { clubId, membershipData });
+  // Club Membership Routes
+  console.log("Registering club join route: /api/clubs/:clubId/join");
+  app.post("/api/clubs/:clubId/join", async (req: Request, res: Response) => {
+    console.log("Join route hit:", req.path, req.params, req.body, req.method, req.headers['content-type']);
+    console.log("ClubId from params:", req.params.clubId);
+
+    try {
+      // Check if student is authenticated
+      if (!req.session.studentId) {
+        return res.status(401).json({ error: "Not authenticated" });
+      }
+
+      const clubId = req.params.clubId;
+      const { reason } = req.body;
+
+      // Validate input
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: "Reason is required" });
+      }
 
       // Get club details
       const club = await storage.getClub(clubId);
@@ -794,15 +832,36 @@ export async function registerRoutes(app: Express): Promise<void> {
         return res.status(404).json({ error: "Club not found" });
       }
 
-      // Create membership with club details and mapped field names
+      // Get student details
+      const student = await Student.findById(req.session.studentId);
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      // Check if student is already a member or has a pending request
+      const existingMembership = await ClubMembership.findOne({
+        enrollmentNumber: student.enrollment,
+        clubId: clubId
+      });
+
+      if (existingMembership) {
+        if (existingMembership.status === 'approved') {
+          return res.status(400).json({ error: "You are already a member of this club" });
+        } else if (existingMembership.status === 'pending') {
+          return res.status(400).json({ error: "You already have a pending membership request for this club" });
+        }
+      }
+
+      // Create membership request
       const membership = await storage.createClubMembership({
-        studentName: membershipData.name,
-        studentEmail: membershipData.email,
-        enrollmentNumber: membershipData.enrollmentNumber,
-        department: membershipData.department,
-        reason: membershipData.reason,
+        studentName: student.name,
+        studentEmail: student.email,
+        enrollmentNumber: student.enrollment,
+        department: student.branch,
+        reason: reason.trim(),
         clubId,
         clubName: club.name,
+        status: 'pending'
       });
 
       console.log("Membership created:", membership);
@@ -1491,5 +1550,11 @@ export async function registerRoutes(app: Express): Promise<void> {
       console.error("Failed to fetch global points leaderboard:", error);
       res.status(500).json({ error: "Failed to fetch global points leaderboard" });
     }
+  });
+
+  // Catch-all route for debugging
+  app.use("/api/clubs/:clubId/join", (req: Request, res: Response, next: NextFunction) => {
+    console.log("Catch-all hit for join route:", req.method, req.path, req.params);
+    next();
   });
 }

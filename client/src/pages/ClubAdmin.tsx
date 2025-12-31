@@ -218,8 +218,48 @@ export default function ClubAdmin() {
     queryKey: ["/api/admin/club-memberships", admin?.clubId],
     queryFn: async () => {
       if (!admin?.clubId) return [];
-      const res = await apiRequest("GET", `/api/admin/club-memberships/${admin.clubId}`);
-      return res.json();
+      try {
+        const res = await apiRequest("GET", `/api/admin/club-memberships/${admin.clubId}`);
+        const apiMemberships = await res.json();
+        
+        // Merge with locally stored pending requests
+        const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+        const localRequests = pendingRequests
+          .filter((req: any) => req.clubId === admin.clubId && req.isFallback)
+          .map((req: any) => ({
+            id: req.id,
+            studentName: req.studentName,
+            studentEmail: req.studentEmail,
+            enrollmentNumber: req.enrollmentNumber,
+            department: req.department,
+            reason: req.reason,
+            clubId: req.clubId,
+            clubName: req.clubName,
+            status: req.status,
+            joinedAt: req.createdAt,
+            isFallback: true
+          }));
+        
+        return [...apiMemberships, ...localRequests];
+      } catch (error) {
+        // Fallback: return locally stored pending requests
+        const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+        return pendingRequests
+          .filter((req: any) => req.clubId === admin?.clubId && req.isFallback)
+          .map((req: any) => ({
+            id: req.id,
+            studentName: req.studentName,
+            studentEmail: req.studentEmail,
+            enrollmentNumber: req.enrollmentNumber,
+            department: req.department,
+            reason: req.reason,
+            clubId: req.clubId,
+            clubName: req.clubName,
+            status: req.status,
+            joinedAt: req.createdAt,
+            isFallback: true
+          }));
+      }
     },
     enabled: !!admin?.clubId && isAuthenticated,
   });
@@ -380,8 +420,20 @@ export default function ClubAdmin() {
 
   const updateMembershipStatusMutation = useMutation({
     mutationFn: async ({ membershipId, status }: { membershipId: string; status: string }) => {
-      const res = await apiRequest("PATCH", `/api/admin/club-memberships/${membershipId}`, { status });
-      return res.json();
+      // Check if this is a locally stored request
+      if (membershipId.startsWith('pending-')) {
+        // Update localStorage
+        const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+        const updatedRequests = pendingRequests.map((req: any) => 
+          req.id === membershipId ? { ...req, status } : req
+        );
+        localStorage.setItem("pendingJoinRequests", JSON.stringify(updatedRequests));
+        return { success: true, membership: { id: membershipId, status } };
+      } else {
+        // Regular API call
+        const res = await apiRequest("PATCH", `/api/admin/club-memberships/${membershipId}`, { status });
+        return res.json();
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/club-memberships", admin?.clubId] });
@@ -446,7 +498,17 @@ export default function ClubAdmin() {
 
   const deleteMembershipMutation = useMutation({
     mutationFn: async (membershipId: string) => {
-      await apiRequest("DELETE", `/api/admin/club-memberships/${membershipId}`);
+      // Check if this is a locally stored request
+      if (membershipId.startsWith('pending-')) {
+        // Remove from localStorage
+        const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+        const updatedRequests = pendingRequests.filter((req: any) => req.id !== membershipId);
+        localStorage.setItem("pendingJoinRequests", JSON.stringify(updatedRequests));
+        return { success: true };
+      } else {
+        // Regular API call
+        await apiRequest("DELETE", `/api/admin/club-memberships/${membershipId}`);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/club-memberships", admin?.clubId] });
@@ -612,17 +674,12 @@ export default function ClubAdmin() {
   });
 
   useEffect(() => {
-    // Add a small delay to allow authentication state to settle
-    const timer = setTimeout(() => {
-      if (!authLoading && !isAuthenticated) {
-        setLocation("/club-admin/login");
-      } else if (!authLoading && isAuthenticated && !admin?.clubId) {
-        // If admin doesn't have a club, redirect to general dashboard or show message
-        setLocation("/dashboard");
-      }
-    }, 200);
-
-    return () => clearTimeout(timer);
+    if (!authLoading && !isAuthenticated) {
+      setLocation("/club-admin/login");
+    } else if (!authLoading && isAuthenticated && !admin?.clubId) {
+      // If admin doesn't have a club, redirect to general dashboard or show message
+      setLocation("/dashboard");
+    }
   }, [authLoading, isAuthenticated, admin, setLocation]);
 
   const deleteMutation = useMutation({
@@ -1814,15 +1871,22 @@ export default function ClubAdmin() {
                               <p className="text-sm text-muted-foreground">{membership.enrollmentNumber}</p>
                             </div>
                           </div>
-                          <Badge variant={
-                            membership.status === 'approved' ? 'default' :
-                            membership.status === 'rejected' ? 'destructive' : 'secondary'
-                          } className="flex items-center gap-1">
-                            {membership.status === 'approved' && <CheckCircle className="w-3 h-3" />}
-                            {membership.status === 'pending' && <Clock className="w-3 h-3" />}
-                            {membership.status === 'rejected' && <AlertCircle className="w-3 h-3" />}
-                            {membership.status.charAt(0).toUpperCase() + membership.status.slice(1)}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={
+                              membership.status === 'approved' ? 'default' :
+                              membership.status === 'rejected' ? 'destructive' : 'secondary'
+                            } className="flex items-center gap-1">
+                              {membership.status === 'approved' && <CheckCircle className="w-3 h-3" />}
+                              {membership.status === 'pending' && <Clock className="w-3 h-3" />}
+                              {membership.status === 'rejected' && <AlertCircle className="w-3 h-3" />}
+                              {membership.status.charAt(0).toUpperCase() + membership.status.slice(1)}
+                            </Badge>
+                            {membership.isFallback && (
+                              <Badge variant="outline" className="text-xs">
+                                Offline
+                              </Badge>
+                            )}
+                          </div>
                         </div>
 
                         {/* Member Details Grid */}
