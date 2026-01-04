@@ -61,7 +61,7 @@ export default function StudentSignup() {
       // Store the "created" account in localStorage for demo purposes
       const offlineStudents = JSON.parse(localStorage.getItem("offlineStudents") || "{}");
       offlineStudents[formData.enrollment] = { ...staticStudent, password: formData.password };
-      localStorage.setItem("offlineStudents", JSON.stringify(offlineStudents));
+     // localStorage.setItem("offlineStudents", JSON.stringify(offlineStudents));
 
       toast({
         title: "Account created (Offline mode)",

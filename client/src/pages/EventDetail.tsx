@@ -15,36 +15,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event } from "@shared/schema";
 
-// Static event data for when API is not available
-const staticEvents: Record<string, Event> = {
-  "737b3d2b-78e9-4929-a70b-41444884d697": {
-    id: "737b3d2b-78e9-4929-a70b-41444884d697",
-    title: "Winter Tech Fest",
-    description: "Two-day technology festival featuring workshops, hackathons, and networking opportunities with industry experts. Join us for an immersive experience in cutting-edge technology and innovation.",
-    date: "December 20, 2025",
-    time: "10:00 AM - 6:00 PM",
-    location: "Main Auditorium",
-    category: "Festival",
-    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
-    clubName: "IEEE",
-    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSI9p1_QlWws8d3TwlotQjB_Itnxyb_BYoRBQ&s",
-    createdAt: new Date("2025-11-18T15:02:01.343Z")
-  },
-  "b46225da-8989-4dab-84ba-0441426b12d6": {
-    id: "b46225da-8989-4dab-84ba-0441426b12d6",
-    title: "Web Development Bootcamp",
-    description: "Learn modern web development technologies including React, Node.js, and database design. Perfect for beginners and intermediate developers looking to enhance their skills.",
-    date: "November 15, 2025",
-    time: "9:00 AM - 5:00 PM",
-    location: "Engineering Building",
-    category: "Bootcamp",
-    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
-    clubName: "IEEE",
-    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUzgijNqFpoWRSWhPKpXOqB-W2ccjhrFBeKw&s",
-    createdAt: new Date("2025-11-18T15:02:01.343Z")
-  }
-};
-
 export default function EventDetail() {
   const params = useParams<{ id: string }>();
   const eventId = params?.id;
@@ -114,18 +84,11 @@ export default function EventDetail() {
   const { data: event, isLoading, error } = useQuery<Event>({
     queryKey: [`/api/events/${eventId}`],
     queryFn: async () => {
-      // Try API first, fallback to static data
-      try {
-        const res = await fetch(`/api/events/${eventId}`);
-        if (res.ok) return res.json();
-      } catch (error) {
-        // Fallback to static data
-      }
-      return staticEvents[eventId || ""] || null;
+      if (!eventId) return null;
+      const res = await apiRequest("GET", `/api/events/${eventId}`);
+      return res.json();
     },
-    initialData: staticEvents[eventId || ""],
     enabled: !!eventId,
-    staleTime: Infinity,
   });
 
   if (!eventId) {
@@ -292,7 +255,7 @@ export default function EventDetail() {
                   };
                   
                   pendingRegistrations.push(registration);
-                  localStorage.setItem("pendingEventRegistrations", JSON.stringify(pendingRegistrations));
+                  //localStorage.setItem("pendingEventRegistrations", JSON.stringify(pendingRegistrations));
                   
                   // Also create a membership request locally
                   const pendingMemberships = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
@@ -311,7 +274,7 @@ export default function EventDetail() {
                   };
                   
                   pendingMemberships.push(membershipRequest);
-                  localStorage.setItem("pendingJoinRequests", JSON.stringify(pendingMemberships));
+                 // localStorage.setItem("pendingJoinRequests", JSON.stringify(pendingMemberships));
                   
                   toast({
                     title: "Registration Saved (Offline)",

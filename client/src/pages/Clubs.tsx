@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Search, Grid3X3, List, SortAsc, SortDesc } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import type { Club } from "@shared/schema";
 
 export default function Clubs() {
@@ -25,8 +26,7 @@ export default function Clubs() {
   const { data: clubs = [], isLoading } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
     queryFn: async () => {
-      const res = await fetch("/api/clubs");
-      if (!res.ok) throw new Error("Failed to fetch clubs");
+      const res = await apiRequest("GET", "/api/clubs");
       return res.json();
     },
   });

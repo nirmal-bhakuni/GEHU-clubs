@@ -21,94 +21,6 @@ import ClubMembership from "@/components/ClubMembership";
 import ClubContact from "@/components/ClubContact";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 
-// Static event data for when API is not available
-const staticEvents: Record<string, Event> = {
-  "737b3d2b-78e9-4929-a70b-41444884d697": {
-    id: "737b3d2b-78e9-4929-a70b-41444884d697",
-    title: "Winter Tech Fest",
-    description: "Two-day technology festival featuring workshops, hackathons, and networking opportunities with industry experts.",
-    date: "December 20, 2025",
-    time: "10:00 AM - 6:00 PM",
-    location: "Main Auditorium",
-    category: "Festival",
-    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
-    clubName: "IEEE",
-    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSI9p1_QlWws8d3TwlotQjB_Itnxyb_BYoRBQ&s",
-    createdAt: new Date("2025-11-18T15:02:01.343Z")
-  },
-  "b46225da-8989-4dab-84ba-0441426b12d6": {
-    id: "b46225da-8989-4dab-84ba-0441426b12d6",
-    title: "Web Development Bootcamp",
-    description: "Learn modern web development technologies including React, Node.js, and database design.",
-    date: "November 15, 2025",
-    time: "9:00 AM - 5:00 PM",
-    location: "Engineering Building",
-    category: "Bootcamp",
-    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
-    clubName: "IEEE",
-    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUzgijNqFpoWRSWhPKpXOqB-W2ccjhrFBeKw&s",
-    createdAt: new Date("2025-11-18T15:02:01.343Z")
-  }
-};
-
-// Static club data for when API is not available
-const staticClubs: Record<string, Club> = {
-  "484c2b24-6193-42c1-879b-185457a9598f": {
-    id: "484c2b24-6193-42c1-879b-185457a9598f",
-    name: "ARYAVRAT",
-    description: "Sharpen your argumentation skills and debate with passion. Join our vibrant community of thinkers and speakers who engage in intellectual discourse and public speaking competitions.",
-    category: "Academic",
-    memberCount: 86,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHSQ26pPoXAi8YKQZQPoLwPeETRdh9ywhCAQ&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  "ff82f1ca-01be-4bff-b0f5-8a1e44dcf951": {
-    id: "ff82f1ca-01be-4bff-b0f5-8a1e44dcf951",
-    name: "RANGMANCH",
-    description: "Make a difference in our community through social service and volunteer work. Join hands with us to create positive change and contribute to society.",
-    category: "Social",
-    memberCount: 175,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxB5o3X1zEYYTEL6XAalXWOiubGY_mrVJCvA&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  "f54a2526-787b-4de5-9582-0a42f4aaa61b": {
-    id: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
-    name: "IEEE",
-    description: "Building innovative solutions and exploring cutting-edge technology. Join the future of engineering and innovation with hands-on projects and workshops.",
-    category: "Technology",
-    memberCount: 125,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRGCvDLx2YLXsTqnLYhQPbyv6wDRXXhNkU7ww&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  "181d3e7d-d6cd-4f40-b712-7182fcd77154": {
-    id: "181d3e7d-d6cd-4f40-b712-7182fcd77154",
-    name: "PAPERTECH-GEHU",
-    description: "Express yourself through various art forms including painting, drawing, and digital art. Unleash your creativity and join our artistic community.",
-    category: "Arts",
-    memberCount: 96,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRN4okYreu0Yak1E5bjkWeSCRBUuagbLTanHg&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  "cc71501e-1525-4e3b-959c-f3874db96396": {
-    id: "cc71501e-1525-4e3b-959c-f3874db96396",
-    name: "Entrepreneurship Hub",
-    description: "Connect with fellow entrepreneurs and learn the skills needed to build successful businesses. Turn ideas into reality with our mentorship programs.",
-    category: "Business",
-    memberCount: 150,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRkdkjI3VT0FR0WkyDb_xIOPfPpoULRDPybNA&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  },
-  "485300f0-e4cc-4116-aa49-d60dd19070d8": {
-    id: "485300f0-e4cc-4116-aa49-d60dd19070d8",
-    name: "CODE_HUNTERS",
-    description: "Discover the wonders of science through hands-on experiments and research. Join our journey of scientific exploration and innovation.",
-    category: "Academic",
-    memberCount: 110,
-    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR-SeTgtHQSr0YhjNgYKbk3y_arKfREH0DdNA&s",
-    createdAt: new Date("2025-11-18T15:02:01.265Z")
-  }
-};
-
 export default function ClubDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -204,7 +116,7 @@ export default function ClubDetail() {
       };
       
       pendingRequests.push(request);
-      localStorage.setItem("pendingJoinRequests", JSON.stringify(pendingRequests));
+      //localStorage.setItem("pendingJoinRequests", JSON.stringify(pendingRequests));
       
       toast({
         title: "Join Request Submitted (Offline)",
@@ -254,35 +166,20 @@ export default function ClubDetail() {
   const { data: club, isLoading: clubLoading } = useQuery<Club | null>({
     queryKey: ["/api/clubs", id],
     queryFn: async () => {
-      // Try API first, fallback to static data
-      try {
-        const res = await fetch(`/api/clubs/${id}`);
-        if (res.ok) return res.json();
-      } catch (error) {
-        // Fallback to static data
-      }
-      return staticClubs[id] || null;
+      if (!id) return null;
+      const res = await apiRequest("GET", `/api/clubs/${id}`);
+      return res.json();
     },
-    initialData: staticClubs[id] || null,
-    staleTime: Infinity,
     enabled: !!id,
   });
 
   const { data: events = [], isLoading: eventsLoading } = useQuery<Event[]>({
     queryKey: ["/api/events", { clubId: id }],
     queryFn: async () => {
-      // Try API first, fallback to static data
-      try {
-        const res = await fetch(`/api/events?clubId=${id}`);
-        if (res.ok) return res.json();
-      } catch (error) {
-        // Fallback to static data
-      }
-      // Return events for this club (only IEEE has events in our static data)
-      return id === "f54a2526-787b-4de5-9582-0a42f4aaa61b" ? Object.values(staticEvents) : [];
+      if (!id) return [];
+      const res = await apiRequest("GET", `/api/events?clubId=${id}`);
+      return res.json();
     },
-    initialData: id === "f54a2526-787b-4de5-9582-0a42f4aaa61b" ? Object.values(staticEvents) : [],
-    staleTime: Infinity,
     enabled: !!id,
   });
 
@@ -290,9 +187,12 @@ export default function ClubDetail() {
     queryKey: ["/api/club-leadership", id],
     queryFn: async () => {
       if (!id) return [];
-      const res = await fetch(`/api/club-leadership/${id}`);
-      if (!res.ok) return [];
-      return res.json();
+      try {
+        const res = await apiRequest("GET", `/api/club-leadership/${id}`);
+        return res.json();
+      } catch (error) {
+        return [];
+      }
     },
     enabled: !!id,
   });
@@ -301,9 +201,12 @@ export default function ClubDetail() {
     queryKey: ["/api/achievements", id],
     queryFn: async () => {
       if (!id) return [];
-      const res = await fetch(`/api/achievements/${id}`);
-      if (!res.ok) return [];
-      return res.json();
+      try {
+        const res = await apiRequest("GET", `/api/achievements/${id}`);
+        return res.json();
+      } catch (error) {
+        return [];
+      }
     },
     enabled: !!id,
   });

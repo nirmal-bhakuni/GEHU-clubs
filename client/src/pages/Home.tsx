@@ -5,16 +5,25 @@ import ClubCard from "@/components/ClubCard";
 import StatsSection from "@/components/StatsSection";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Calendar, Users } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import type { Event, Club } from "@shared/schema";
 import eventPlaceholder from "@assets/stock_images/student_club_meeting_08b2a880.jpg";
 
 export default function Home() {
   const { data: events = [], isLoading: eventsLoading } = useQuery<Event[]>({
     queryKey: ["/api/events"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/events");
+      return res.json();
+    },
   });
 
   const { data: clubs = [], isLoading: clubsLoading } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/clubs");
+      return res.json();
+    },
   });
 
   const upcomingEvents = events.slice(0, 3);

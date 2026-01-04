@@ -38,7 +38,7 @@ export default function StudentLogin() {
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], data.student);
         // Store student session for offline functionality
-        localStorage.setItem("currentStudent", enrollment);
+       // localStorage.setItem("currentStudent", enrollment);
         toast({
           title: "Login successful",
           description: "Welcome back!",
@@ -72,7 +72,7 @@ export default function StudentLogin() {
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], studentData);
         // Store student session for offline functionality
-        localStorage.setItem("currentStudent", enrollment);
+       // localStorage.setItem("currentStudent", enrollment);
         toast({
           title: "Login successful",
           description: "Welcome back! (Offline mode)",
@@ -88,7 +88,7 @@ export default function StudentLogin() {
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], studentData);
         // Store student session for offline functionality
-        localStorage.setItem("currentStudent", enrollment);
+       // localStorage.setItem("currentStudent", enrollment);
         toast({
           title: "Login successful",
           description: "Welcome back! (Offline mode)",

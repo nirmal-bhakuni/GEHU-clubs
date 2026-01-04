@@ -55,10 +55,10 @@ export function useAuth() {
         if (res.ok) return res.json();
       } catch (error) {
         // Check if we have a stored admin session (simulate login state)
-        const storedAdmin = localStorage.getItem("currentAdmin");
-        if (storedAdmin && staticAdmins[storedAdmin]) {
-          return staticAdmins[storedAdmin];
-        }
+       // const storedAdmin = localStorage.getItem("currentAdmin");
+       // if (storedAdmin && staticAdmins[storedAdmin]) {
+         // return staticAdmins[storedAdmin];
+       // }
       }
       return null;
     },
