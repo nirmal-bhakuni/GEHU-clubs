@@ -106,7 +106,7 @@ export async function registerRoutes(app: Express): Promise<void> {
       let clubs = await storage.getAllClubs();
 
       // Fetch all club memberships once for efficiency
-      const { ClubMembership } = await import("./models/ClubMembership");
+      const { ClubMembership } = await import("./models/ClubMembership.js");
       const allMemberships = await ClubMembership.find({ status: { $ne: 'rejected' } });
       
       // Create a map of clubId -> member count
