@@ -32,11 +32,21 @@ export default function Navbar({ onToggleSidebar, sidebarOpen = false }: NavbarP
       <div className="max-w-7xl mx-auto px-4 md:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           <div className="flex items-center gap-3">
-            <Link href="/" data-testid="link-home" className="flex items-center gap-2 hover-elevate rounded-md px-2 py-1">
-              <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-lg">C</span>
+            <Link href="/" data-testid="link-home" className="group flex items-center gap-3 hover-elevate rounded-xl px-3 py-2 transition-all duration-300">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-md group-hover:shadow-xl transition-all duration-300 group-hover:scale-110 group-hover:rotate-6">
+                  <span className="text-primary-foreground font-bold text-xl group-hover:scale-110 transition-transform duration-300">C</span>
+                </div>
+                {/* Animated ring effect on hover */}
+                <div className="absolute inset-0 rounded-xl border-2 border-primary opacity-0 group-hover:opacity-100 scale-100 group-hover:scale-125 transition-all duration-500"></div>
+                <div className="absolute inset-0 rounded-xl border border-primary opacity-0 group-hover:opacity-50 scale-100 group-hover:scale-150 transition-all duration-700"></div>
               </div>
-              <span className="font-bold text-xl tracking-tight">GEHU Clubs</span>
+              <div className="flex flex-col">
+                <span className="font-bold text-xl tracking-tight group-hover:tracking-wide transition-all duration-300">
+                  GEHU Clubs
+                </span>
+                <div className="h-0.5 w-0 bg-primary group-hover:w-full transition-all duration-500 ease-out"></div>
+              </div>
             </Link>
           </div>
 
@@ -58,16 +68,14 @@ export default function Navbar({ onToggleSidebar, sidebarOpen = false }: NavbarP
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
-            {!isHomePage && (
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={onToggleSidebar}
-                data-testid="button-sidebar-toggle-desktop"
-              >
-                <Menu className="w-5 h-5" />
-              </Button>
-            )}
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={onToggleSidebar}
+              data-testid="button-sidebar-toggle-desktop"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
             <Button
               size="icon"
               variant="ghost"
