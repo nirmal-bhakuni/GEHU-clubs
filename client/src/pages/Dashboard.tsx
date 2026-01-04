@@ -604,14 +604,14 @@ export default function Dashboard() {
     {
       icon: UserCheck,
       label: "Active Users",
-      value: "1,247",
+      value: studentCount.count.toLocaleString(),
       trend: "+12% growth",
       color: "text-purple-500",
     },
     {
       icon: Activity,
       label: "Platform Activity",
-      value: "94%",
+      value: students.length > 0 ? `${Math.round((students.filter((s: any) => s.lastLogin).length / students.length) * 100)}%` : "0%",
       trend: "High engagement",
       color: "text-orange-500",
     },
