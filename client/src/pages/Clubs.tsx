@@ -72,11 +72,15 @@ export default function Clubs() {
   return (
     <div className="min-h-screen py-16 md:py-20">
       <div className="max-w-7xl mx-auto px-4 md:px-8">
-        <div className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">
+        <div className="mb-12 group">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4 relative inline-block group/heading">
             Explore Clubs
+            {/* Animated underline */}
+            <div className="absolute -bottom-2 left-0 h-1.5 w-0 bg-gradient-to-r from-primary via-primary to-transparent group-hover:w-full transition-all duration-700 ease-out rounded-full"></div>
+            {/* Glow effect on hover */}
+            <div className="absolute inset-0 opacity-0 group-hover/heading:opacity-100 transition-opacity duration-500 blur-lg bg-primary/10 rounded-lg -z-10 group-hover/heading:blur-xl"></div>
           </h1>
-          <p className="text-lg text-muted-foreground font-body">
+          <p className="text-lg text-muted-foreground font-body group-hover:text-foreground transition-colors duration-300">
             Find your community and pursue your passions
           </p>
         </div>
