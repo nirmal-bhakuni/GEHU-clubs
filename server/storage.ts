@@ -134,18 +134,18 @@ export const storage = {
   async createAnnouncement(data: any) {
     data.id = randomUUID();
     data.createdAt = new Date();
-    const { Announcement } = await import("./models/Announcement");
+    const { Announcement } = await import("./models/Announcement.js");
     const doc = new Announcement(data);
     return await doc.save();
   },
 
   async getAnnouncements(limit = 20) {
-    const { Announcement } = await import("./models/Announcement");
+    const { Announcement } = await import("./models/Announcement.js");
     return await Announcement.find().sort({ createdAt: -1 }).limit(limit);
   }
   ,
   async markAnnouncementRead(announcementId: string, enrollmentNumber: string) {
-    const { AnnouncementRead } = await import("./models/AnnouncementRead");
+    const { AnnouncementRead } = await import("./models/AnnouncementRead.js");
     // create record if not exists
     const exists = await AnnouncementRead.findOne({ announcementId, enrollmentNumber });
     if (exists) return exists;
@@ -154,8 +154,8 @@ export const storage = {
   },
 
   async getAnnouncementsForStudent(enrollmentNumber: string, limit = 50) {
-    const { Announcement } = await import("./models/Announcement");
-    const { AnnouncementRead } = await import("./models/AnnouncementRead");
+    const { Announcement } = await import("./models/Announcement.js");
+    const { AnnouncementRead } = await import("./models/AnnouncementRead.js");
     const announcements = await Announcement.find().sort({ createdAt: -1 }).limit(limit);
     const result = [] as any[];
     for (const a of announcements) {
@@ -166,18 +166,18 @@ export const storage = {
   },
 
   async pinAnnouncement(id: string, pinned: boolean) {
-    const { Announcement } = await import("./models/Announcement");
+    const { Announcement } = await import("./models/Announcement.js");
     return await Announcement.findOneAndUpdate({ id }, { pinned }, { new: true });
   },
 
   async deleteAnnouncement(id: string) {
-    const { Announcement } = await import("./models/Announcement");
+    const { Announcement } = await import("./models/Announcement.js");
     const deleted = await Announcement.findOneAndDelete({ id });
     return deleted ? true : false;
   }
   ,
   async updateAnnouncement(id: string, updates: any) {
-    const { Announcement } = await import("./models/Announcement");
+    const { Announcement } = await import("./models/Announcement.js");
     return await Announcement.findOneAndUpdate({ id }, updates, { new: true });
   },
 
