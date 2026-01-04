@@ -32,28 +32,6 @@ export default function Navbar({ onToggleSidebar, sidebarOpen = false }: NavbarP
       <div className="max-w-7xl mx-auto px-4 md:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           <div className="flex items-center gap-3">
-            {/* Enhanced Hamburger Menu Button */}
-            {!isHomePage && (
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={onToggleSidebar}
-                className={`
-                  hover:bg-muted/50 transition-all duration-200 hover:scale-105
-                  ${sidebarOpen ? 'bg-primary/10 text-primary' : ''}
-                `}
-                data-testid="button-sidebar-toggle"
-                aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-                aria-expanded={sidebarOpen}
-              >
-                {sidebarOpen ? (
-                  <X className="w-5 h-5 transition-transform duration-200" />
-                ) : (
-                  <Menu className="w-5 h-5 transition-transform duration-200" />
-                )}
-              </Button>
-            )}
-
             <Link href="/" data-testid="link-home" className="flex items-center gap-2 hover-elevate rounded-md px-2 py-1">
               <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
                 <span className="text-primary-foreground font-bold text-lg">C</span>
