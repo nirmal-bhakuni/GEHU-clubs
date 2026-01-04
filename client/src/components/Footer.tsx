@@ -106,7 +106,7 @@ export default function Footer() {
             <h3 className="font-semibold text-lg mb-4">Contact</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>Student Activities Office</li>
-              <li>support@campusclubs.edu</li>
+              <li>Gehuclubs@gmail.com</li>
               <li>(555) 123-4567</li>
             </ul>
           </div>

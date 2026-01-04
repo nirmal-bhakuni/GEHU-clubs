@@ -202,7 +202,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             {/* Footer */}
             <div className="mt-8 pt-6 border-t border-border/50">
               <p className="text-xs text-muted-foreground text-center">
-                Need help? Contact support
+                Need help?{" "}
+                <a
+                  href="mailto:Gehuclubs@gmail.com"
+                  className="text-primary hover:underline font-medium"
+                >
+                  Contact support
+                </a>
               </p>
             </div>
           </div>

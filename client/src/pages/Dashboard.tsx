@@ -24,7 +24,10 @@ import {
   Send,
   Edit,
   Eye,
-  KeyRound
+  KeyRound,
+  Image,
+  Upload,
+  X
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -160,6 +163,8 @@ export default function Dashboard() {
     description: "",
     category: "",
   });
+  const [clubLogoFile, setClubLogoFile] = useState<File | null>(null);
+  const [clubLogoPreview, setClubLogoPreview] = useState<string | null>(null);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [eventForm, setEventForm] = useState({
@@ -171,6 +176,8 @@ export default function Dashboard() {
     category: "",
     clubId: "",
   });
+  const [eventImageFile, setEventImageFile] = useState<File | null>(null);
+  const [eventImagePreview, setEventImagePreview] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [isStudentProfileOpen, setIsStudentProfileOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<any | null>(null);
@@ -922,6 +929,43 @@ export default function Dashboard() {
                       required
                     />
                   </div>
+                  <div>
+                    <Label htmlFor="clubLogo">Club Logo</Label>
+                    <div className="flex gap-4">
+                      <Input
+                        id="clubLogo"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setClubLogoFile(file);
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setClubLogoPreview(event.target?.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </div>
+                    {clubLogoPreview && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <img src={clubLogoPreview} alt="Club logo preview" className="h-20 w-20 object-cover rounded-lg" />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            setClubLogoFile(null);
+                            setClubLogoPreview(null);
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       type="submit"
@@ -936,6 +980,8 @@ export default function Dashboard() {
                         setShowCreateClub(false);
                         setEditingClub(null);
                         setClubForm({ name: "", description: "", category: "" });
+                        setClubLogoFile(null);
+                        setClubLogoPreview(null);
                       }}
                     >
                       Cancel
@@ -1126,6 +1172,44 @@ export default function Dashboard() {
                     </select>
                   </div>
 
+                  <div>
+                    <Label htmlFor="eventImage">Event Poster/Image</Label>
+                    <div className="flex gap-4">
+                      <Input
+                        id="eventImage"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setEventImageFile(file);
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setEventImagePreview(event.target?.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </div>
+                    {eventImagePreview && (
+                      <div className="mt-3 flex items-center gap-2">
+                        <img src={eventImagePreview} alt="Event poster preview" className="h-24 w-32 object-cover rounded-lg" />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            setEventImageFile(null);
+                            setEventImagePreview(null);
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex gap-2">
                     <Button
                       type="submit"
@@ -1140,6 +1224,8 @@ export default function Dashboard() {
                         setShowCreateEvent(false);
                         setEditingEvent(null);
                         setEventForm({ title: "", description: "", date: "", time: "", location: "", category: "", clubId: "" });
+                        setEventImageFile(null);
+                        setEventImagePreview(null);
                       }}
                     >
                       Cancel
