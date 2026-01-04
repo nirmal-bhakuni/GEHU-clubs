@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, Image, Users, Settings, Edit, Bell, MapPin, UserCheck, CheckCircle, Clock, TrendingUp, Activity, Award, AlertCircle, CheckSquare, Mail, Download, UserPlus, Filter, Eye, Trash2, Crown } from "lucide-react";
+import { Calendar, Image, Users, Settings, Edit, Bell, MapPin, UserCheck, CheckCircle, Clock, TrendingUp, Activity, Award, AlertCircle, CheckSquare, Mail, Download, UserPlus, Filter, Eye, Trash2, Crown, FileText, Upload } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
@@ -145,6 +145,10 @@ export default function ClubAdmin() {
   const [pointsReason, setPointsReason] = useState<string>("");
   const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [selectedStudentForCertificate, setSelectedStudentForCertificate] = useState<ClubMembership | null>(null);
+  const [certificateTitle, setCertificateTitle] = useState("");
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -672,6 +676,67 @@ export default function ClubAdmin() {
       });
     },
   });
+
+  const uploadCertificateMutation = useMutation({
+    mutationFn: async ({ studentId, title, file }: { studentId: string; title: string; file: File }) => {
+      console.log("Uploading certificate:", { studentId, title, fileName: file.name, fileSize: file.size });
+      
+      const formData = new FormData();
+      formData.append("certificate", file);
+      formData.append("title", title);
+      formData.append("studentId", studentId);
+      formData.append("clubId", admin?.clubId || "");
+      formData.append("clubName", club?.name || "");
+
+      const res = await apiRequest("POST", "/api/admin/upload-certificate", formData);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      console.log("Certificate upload success:", data);
+      toast({
+        title: "Success",
+        description: "Certificate uploaded successfully.",
+      });
+      setShowCertificateModal(false);
+      setCertificateTitle("");
+      setCertificateFile(null);
+      setSelectedStudentForCertificate(null);
+    },
+    onError: (error) => {
+      console.error("Certificate upload error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to upload certificate.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUploadCertificate = () => {
+    if (!selectedStudentForCertificate || !certificateTitle || !certificateFile) {
+      toast({
+        title: "Error",
+        description: "Please provide certificate title and file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!admin?.clubId) {
+      toast({
+        title: "Error",
+        description: "You must be logged in as a club admin to upload certificates.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    uploadCertificateMutation.mutate({
+      studentId: selectedStudentForCertificate.enrollmentNumber,
+      title: certificateTitle,
+      file: certificateFile,
+    });
+  };
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -1950,6 +2015,17 @@ export default function ClubAdmin() {
                             </Button>
                             <Button
                               size="sm"
+                              onClick={() => {
+                                setSelectedStudentForCertificate(membership);
+                                setShowCertificateModal(true);
+                              }}
+                              className="bg-green-600 hover:bg-green-700 flex items-center gap-2"
+                            >
+                              <FileText className="w-4 h-4" />
+                              Add Certificate
+                            </Button>
+                            <Button
+                              size="sm"
                               variant="destructive"
                               onClick={() => {
                                 if (confirm(`Are you sure you want to remove ${membership.studentName} from the club?`)) {
@@ -3099,6 +3175,91 @@ export default function ClubAdmin() {
                   disabled={pointsToAward <= 0 || awardPointsMutation.isPending}
                 >
                   {awardPointsMutation.isPending ? "Awarding..." : "Award Points"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Certificate Upload Modal */}
+        <Dialog open={showCertificateModal} onOpenChange={setShowCertificateModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Upload Certificate</DialogTitle>
+              <DialogDescription>
+                Upload a certificate for {selectedStudentForCertificate?.studentName}
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleUploadCertificate();
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <Label htmlFor="certificateTitle">Certificate Title</Label>
+                <Input
+                  id="certificateTitle"
+                  value={certificateTitle}
+                  onChange={(e) => setCertificateTitle(e.target.value)}
+                  placeholder="e.g., Best Performer Award 2025"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="certificateFile">Certificate File (PDF, Image, or Document)</Label>
+                <Input
+                  id="certificateFile"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 10 * 1024 * 1024) {
+                        toast({
+                          title: "Error",
+                          description: "File size must be less than 10MB",
+                          variant: "destructive",
+                        });
+                        e.target.value = "";
+                        return;
+                      }
+                      setCertificateFile(file);
+                    }
+                  }}
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Accepted: PDF, JPG, PNG, DOC (Max 10MB)
+                </p>
+              </div>
+              {certificateFile && (
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-green-600">{certificateFile.name}</span>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowCertificateModal(false);
+                    setCertificateTitle("");
+                    setCertificateFile(null);
+                    setSelectedStudentForCertificate(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!certificateTitle || !certificateFile || uploadCertificateMutation.isPending}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {uploadCertificateMutation.isPending ? "Uploading..." : "Upload Certificate"}
                 </Button>
               </div>
             </form>

@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,9 @@ import {
   TrendingUp,
   BookOpen,
   Zap,
+  Upload,
+  Download,
+  FileText,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -30,14 +33,25 @@ export default function StudentDashboard() {
   const [, setLocation] = useLocation();
   const { student, isAuthenticated, isLoading: authLoading } = useStudentAuth();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingProfile, setIsUploadingProfile] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
 
   const { data: events = [] } = useQuery<Event[]>({
     queryKey: ["/api/events"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/events");
+      return res.json();
+    },
     enabled: isAuthenticated,
   });
 
   const { data: clubs = [] } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/clubs");
+      return res.json();
+    },
     enabled: isAuthenticated,
   });
 
@@ -88,6 +102,10 @@ export default function StudentDashboard() {
 
   const { data: memberships = [] } = useQuery<ClubMembership[]>({
     queryKey: ["/api/student/club-memberships"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/student/club-memberships");
+      return res.json();
+    },
     enabled: isAuthenticated,
   });
 
@@ -107,6 +125,10 @@ export default function StudentDashboard() {
     }>;
   }>({
     queryKey: ["/api/student/points"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/student/points");
+      return res.json();
+    },
     enabled: isAuthenticated,
   });
 
@@ -126,6 +148,43 @@ export default function StudentDashboard() {
       return res.json();
     },
     enabled: isAuthenticated,
+  });
+
+  const { data: certificates = [] } = useQuery<any[]>({
+    queryKey: ["/api/student/certificates"],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", "/api/student/certificates");
+        return res.json();
+      } catch (error) {
+        return [];
+      }
+    },
+    enabled: isAuthenticated,
+  });
+
+  const uploadProfilePictureMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("profilePicture", file);
+      const res = await apiRequest("POST", "/api/student/profile-picture", formData);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setProfileImage(data.imageUrl);
+      queryClient.invalidateQueries({ queryKey: ["/api/student/me"] });
+      toast({
+        title: "Success",
+        description: "Profile picture uploaded successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload profile picture",
+        variant: "destructive",
+      });
+    },
   });
 
   useEffect(() => {
@@ -150,6 +209,40 @@ export default function StudentDashboard() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleProfilePictureClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleProfilePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file",
+        description: "Please upload an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload an image smaller than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingProfile(true);
+    uploadProfilePictureMutation.mutate(file, {
+      onSettled: () => setIsUploadingProfile(false),
+    });
   };
 
   if (authLoading) {
@@ -214,10 +307,22 @@ export default function StudentDashboard() {
                 </div>
               </div>
               <div className="hidden md:block">
-                <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center">
-                  <Users className="h-10 w-10 text-primary" />
+                <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-colors" onClick={handleProfilePictureClick}>
+                  {profileImage ? (
+                    <img src={profileImage} alt="Profile" className="w-20 h-20 rounded-full object-cover" />
+                  ) : (
+                    <Users className="h-10 w-10 text-primary" />
+                  )}
                 </div>
               </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleProfilePictureChange}
+                disabled={isUploadingProfile}
+              />
             </div>
           </Card>
 
@@ -257,6 +362,95 @@ export default function StudentDashboard() {
                   <p className="text-2xl font-bold">{studentPointsData?.totalPoints || 0}</p>
                   <p className="text-sm text-muted-foreground">Points</p>
                 </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Profile & Certificates Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Profile Picture Upload */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  Profile Picture
+                </h3>
+              </div>
+              <div className="flex flex-col items-center gap-4">
+                <div 
+                  className="w-32 h-32 bg-primary/10 rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/20 transition-colors border-2 border-dashed border-primary/30"
+                  onClick={handleProfilePictureClick}
+                >
+                  {profileImage ? (
+                    <img src={profileImage} alt="Profile" className="w-32 h-32 rounded-full object-cover" />
+                  ) : (
+                    <div className="text-center">
+                      <Upload className="h-8 w-8 text-primary mx-auto mb-2" />
+                      <p className="text-xs text-muted-foreground">Click to upload</p>
+                    </div>
+                  )}
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={handleProfilePictureClick}
+                  disabled={isUploadingProfile}
+                >
+                  {isUploadingProfile ? "Uploading..." : "Choose Image"}
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  PNG or JPG up to 5MB
+                </p>
+              </div>
+            </Card>
+
+            {/* Certificates Section */}
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Award className="h-5 w-5 text-primary" />
+                  Certificates
+                </h3>
+                <Badge variant="secondary">{certificates.length}</Badge>
+              </div>
+              <div className="space-y-3">
+                {certificates && certificates.length > 0 ? (
+                  <div className="space-y-2">
+                    {certificates.map((cert, index) => (
+                      <div key={index} className="p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-primary" />
+                          <div>
+                            <p className="text-sm font-medium">{cert.certificateName || cert.title}</p>
+                            <p className="text-xs text-muted-foreground">{cert.clubName}</p>
+                            {cert.issuedDate && (
+                              <p className="text-xs text-muted-foreground">
+                                Issued: {new Date(cert.issuedDate).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {cert.certificateUrl && (
+                          <a 
+                            href={cert.certificateUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="p-1 hover:bg-primary/10 rounded transition-colors"
+                            title="Download certificate"
+                          >
+                            <Download className="h-5 w-5 text-primary" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center p-6 bg-muted/50 rounded-lg">
+                    <Award className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      No certificates yet. Complete events to earn certificates!
+                    </p>
+                  </div>
+                )}
               </div>
             </Card>
           </div>

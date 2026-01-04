@@ -7,6 +7,7 @@ import multer from "multer";
 import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared/schema";
 import path from "path";
 import fs from "fs";
+import mongoose from "mongoose";
 import { Student } from "./models/Student";
 import { Admin } from "./models/Admin";
 import { EventRegistration } from "./models/EventRegistration";
@@ -492,8 +493,52 @@ export async function registerRoutes(app: Express): Promise<void> {
       name: student.name,
       email: student.email,
       enrollment: student.enrollment,
-      branch: student.branch
+      branch: student.branch,
+      profilePicture: student.profilePicture || null
     });
+  });
+
+  // Student: Upload profile picture
+  app.post("/api/student/profile-picture", upload.single("profilePicture"), async (req: Request, res: Response) => {
+    try {
+      if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+      const imageUrl = `/uploads/${req.file.filename}`;
+      
+      // Update student profile with image URL
+      await Student.findByIdAndUpdate(req.session.studentId, {
+        profilePicture: imageUrl
+      });
+
+      res.json({ 
+        success: true, 
+        imageUrl,
+        message: "Profile picture uploaded successfully" 
+      });
+    } catch (error) {
+      console.error("Profile picture upload error:", error);
+      res.status(500).json({ error: "Failed to upload profile picture" });
+    }
+  });
+
+  // Student: Get certificates
+  app.get("/api/student/certificates", async (req: Request, res: Response) => {
+    try {
+      if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      // Get certificates for this student
+      // For now, return an empty array - this will be populated when admin uploads certificates
+      const certificates = student.certificates || [];
+
+      res.json(certificates);
+    } catch (error) {
+      console.error("Failed to fetch certificates:", error);
+      res.status(500).json({ error: "Failed to fetch certificates" });
+    }
   });
 
   app.get("/api/students/count", requireAuth, async (req: Request, res: Response) => {
@@ -502,6 +547,82 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.json({ count });
     } catch (error) {
       res.status(500).json({ error: "Failed to get student count" });
+    }
+  });
+
+  // Admin: Upload certificate for student
+  app.post("/api/admin/upload-certificate", upload.single("certificate"), async (req: Request, res: Response) => {
+    try {
+      // Check if user is authenticated as admin
+      if (!req.session.adminId) {
+        console.error("Unauthorized: No admin session");
+        return res.status(401).json({ error: "Unauthorized: Admin login required" });
+      }
+
+      console.log("Certificate upload request:", {
+        file: req.file ? { filename: req.file.filename, size: req.file.size } : "no file",
+        body: req.body,
+        adminId: req.session.adminId
+      });
+
+      if (!req.file) {
+        console.error("No file uploaded");
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      
+      const { title, studentId, clubId, clubName } = req.body;
+      
+      if (!title || !studentId) {
+        console.error("Missing required fields:", { title, studentId });
+        return res.status(400).json({ error: "Missing required fields: title and studentId" });
+      }
+
+      const certificateUrl = `/uploads/${req.file.filename}`;
+      
+      console.log("Searching for student:", studentId);
+      
+      // Find student by ID or enrollment number
+      // Check if studentId is a valid ObjectId format first
+      let student;
+      if (mongoose.Types.ObjectId.isValid(studentId) && studentId.length === 24) {
+        // Try to find by ObjectId
+        student = await Student.findById(studentId);
+      }
+      
+      // If not found by ID, try by enrollment number
+      if (!student) {
+        student = await Student.findOne({ enrollment: studentId });
+      }
+      
+      if (!student) {
+        console.error("Student not found:", studentId);
+        return res.status(404).json({ error: `Student not found with ID or enrollment: ${studentId}` });
+      }
+
+      console.log("Student found:", { id: student._id, name: student.name, enrollment: student.enrollment });
+
+      // Add certificate to student's certificates array
+      const certificate = {
+        title,
+        issuedBy: clubName || "Club",
+        issuedDate: new Date(),
+        certificateUrl
+      };
+
+      await Student.findByIdAndUpdate(student._id, {
+        $push: { certificates: certificate }
+      });
+
+      console.log("Certificate added successfully");
+
+      res.json({ 
+        success: true, 
+        certificate,
+        message: "Certificate uploaded successfully" 
+      });
+    } catch (error) {
+      console.error("Certificate upload error:", error);
+      res.status(500).json({ error: "Failed to upload certificate: " + (error instanceof Error ? error.message : "Unknown error") });
     }
   });
 
