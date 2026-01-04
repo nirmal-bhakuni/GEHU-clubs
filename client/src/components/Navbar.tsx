@@ -181,19 +181,48 @@ export default function Navbar({ onToggleSidebar, sidebarOpen = false }: NavbarP
               variant="ghost"
               onClick={onToggleSidebar}
               data-testid="button-sidebar-toggle-desktop"
+              className={`
+                relative overflow-hidden group transition-all duration-300
+                hover:bg-primary/10 hover:scale-110 hover:rotate-3
+                ${sidebarOpen ? 'bg-primary/20 rotate-90' : ''}
+              `}
             >
-              <Menu className="w-5 h-5" />
+              {/* Animated background glow */}
+              <span className="absolute inset-0 bg-gradient-to-br from-primary/0 via-primary/20 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl"></span>
+              
+              {/* Hamburger icon with animation */}
+              <div className="relative z-10 w-5 h-5 flex flex-col items-center justify-center gap-[2.5px]">
+                <span className={`
+                  w-4 h-[1.5px] bg-current rounded-full transition-all duration-300 origin-center
+                  ${sidebarOpen ? 'rotate-45 translate-y-[4px]' : 'group-hover:w-3.5'}
+                `}></span>
+                <span className={`
+                  w-4 h-[1.5px] bg-current rounded-full transition-all duration-300
+                  ${sidebarOpen ? 'opacity-0 scale-0' : 'group-hover:w-3'}
+                `}></span>
+                <span className={`
+                  w-4 h-[1.5px] bg-current rounded-full transition-all duration-300 origin-center
+                  ${sidebarOpen ? '-rotate-45 -translate-y-[4px]' : 'group-hover:w-3.5'}
+                `}></span>
+              </div>
+              
+              {/* Ripple effect on click */}
+              <span className="absolute inset-0 rounded-full bg-primary/30 scale-0 group-active:scale-150 opacity-0 group-active:opacity-100 transition-all duration-500"></span>
             </Button>
             <Button
               size="icon"
               variant="ghost"
               onClick={toggleTheme}
               data-testid="button-theme-toggle"
+              className="hover:bg-primary/10 hover:scale-110 hover:rotate-12 transition-all duration-300 group"
             >
+              {/* Glow effect */}
+              <span className="absolute inset-0 bg-gradient-to-br from-primary/0 via-primary/20 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl"></span>
+              
               {theme === "light" ? (
-                <Moon className="w-5 h-5" />
+                <Moon className="w-5 h-5 relative z-10 transition-transform duration-300 group-hover:rotate-12" />
               ) : (
-                <Sun className="w-5 h-5" />
+                <Sun className="w-5 h-5 relative z-10 transition-transform duration-300 group-hover:rotate-180" />
               )}
             </Button>
           </div>
@@ -204,11 +233,15 @@ export default function Navbar({ onToggleSidebar, sidebarOpen = false }: NavbarP
               variant="ghost"
               onClick={toggleTheme}
               data-testid="button-theme-toggle-mobile"
+              className="hover:bg-primary/10 hover:scale-110 hover:rotate-12 transition-all duration-300 group"
             >
+              {/* Glow effect */}
+              <span className="absolute inset-0 bg-gradient-to-br from-primary/0 via-primary/20 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl"></span>
+              
               {theme === "light" ? (
-                <Moon className="w-5 h-5" />
+                <Moon className="w-5 h-5 relative z-10 transition-transform duration-300 group-hover:rotate-12" />
               ) : (
-                <Sun className="w-5 h-5" />
+                <Sun className="w-5 h-5 relative z-10 transition-transform duration-300 group-hover:rotate-180" />
               )}
             </Button>
             <Button
@@ -216,33 +249,114 @@ export default function Navbar({ onToggleSidebar, sidebarOpen = false }: NavbarP
               variant="ghost"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               data-testid="button-mobile-menu"
+              className={`
+                relative overflow-hidden group transition-all duration-300
+                hover:bg-primary/10 hover:scale-110 hover:rotate-3
+                ${mobileMenuOpen ? 'bg-primary/20 rotate-90' : ''}
+              `}
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {/* Animated background glow */}
+              <span className="absolute inset-0 bg-gradient-to-br from-primary/0 via-primary/20 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl"></span>
+              
+              {/* Animated hamburger/close icon */}
+              <div className="relative z-10 w-5 h-5 flex flex-col items-center justify-center gap-[2.5px]">
+                <span className={`
+                  w-4 h-[1.5px] bg-current rounded-full transition-all duration-300 origin-center
+                  ${mobileMenuOpen ? 'rotate-45 translate-y-[4px]' : 'group-hover:w-3.5'}
+                `}></span>
+                <span className={`
+                  w-4 h-[1.5px] bg-current rounded-full transition-all duration-300
+                  ${mobileMenuOpen ? 'opacity-0 scale-0' : 'group-hover:w-3'}
+                `}></span>
+                <span className={`
+                  w-4 h-[1.5px] bg-current rounded-full transition-all duration-300 origin-center
+                  ${mobileMenuOpen ? '-rotate-45 -translate-y-[4px]' : 'group-hover:w-3.5'}
+                `}></span>
+              </div>
+              
+              {/* Ripple effect on click */}
+              <span className="absolute inset-0 rounded-full bg-primary/30 scale-0 group-active:scale-150 opacity-0 group-active:opacity-100 transition-all duration-500"></span>
             </Button>
           </div>
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-border">
-            <nav className="flex flex-col gap-2">
-              {navItems.map((item) => (
+          <div 
+            className="md:hidden py-4 border-t border-border bg-card/95 backdrop-blur-lg"
+            style={{
+              animation: 'slideDown 0.3s ease-out'
+            }}
+          >
+            <nav className="flex flex-col gap-2 px-4">
+              {navItems.map((item, index) => (
                 <Link 
                   key={item.path} 
                   href={item.path}
-                  className={`px-4 py-3 rounded-md font-medium transition-colors hover-elevate ${
-                    location === item.path
-                      ? "bg-secondary text-secondary-foreground"
-                      : "text-foreground"
-                  }`}
+                  className={`
+                    group relative overflow-hidden px-4 py-3 rounded-lg font-medium 
+                    transition-all duration-300 hover:scale-[1.02] hover:-translate-y-0.5
+                    ${location === item.path
+                      ? "bg-gradient-to-r from-primary/20 to-primary/10 text-primary shadow-lg shadow-primary/20"
+                      : "text-foreground hover:bg-gradient-to-r hover:from-primary/10 hover:to-primary/5"
+                    }
+                  `}
                   onClick={() => setMobileMenuOpen(false)}
                   data-testid={`link-mobile-${item.label.toLowerCase()}`}
+                  style={{
+                    animation: `slideInLeft 0.3s ease-out ${index * 0.1}s both`
+                  }}
                 >
-                  {item.label}
+                  {/* Hover glow effect */}
+                  <span className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/10 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></span>
+                  
+                  {/* Active indicator */}
+                  {location === item.path && (
+                    <span className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full animate-pulse"></span>
+                  )}
+                  
+                  <span className="relative z-10 flex items-center justify-between">
+                    {item.label}
+                    <svg 
+                      className={`
+                        w-4 h-4 transition-all duration-300
+                        ${location === item.path ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'}
+                      `} 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
                 </Link>
               ))}
               <div className="mt-4 flex flex-col gap-2" onClick={() => setMobileMenuOpen(false)}>
               </div>
             </nav>
+            
+            {/* Mobile menu animations */}
+            <style>{`
+              @keyframes slideDown {
+                from {
+                  opacity: 0;
+                  transform: translateY(-10px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateY(0);
+                }
+              }
+              @keyframes slideInLeft {
+                from {
+                  opacity: 0;
+                  transform: translateX(-20px);
+                }
+                to {
+                  opacity: 1;
+                  transform: translateX(0);
+                }
+              }
+            `}</style>
           </div>
         )}
       </div>
