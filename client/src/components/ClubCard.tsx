@@ -91,7 +91,14 @@ export default function ClubCard({
     <TooltipProvider>
       <Link href={`/clubs/${id}`} className="block group" aria-label={`Open ${name} details`}>
         <Card
-          className="p-6 hover-elevate transition-all duration-300 hover:-translate-y-2 hover:shadow-xl h-full relative overflow-hidden"
+          className={`
+            p-6 transition-all duration-500 h-full relative overflow-hidden
+            hover:-translate-y-2 hover:shadow-2xl hover:border-primary/40
+            border-2 border-border hover:border-primary/40
+            before:absolute before:inset-0 before:bg-gradient-to-br before:from-primary/0 before:via-primary/5 before:to-primary/0 
+            before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-500
+            ${isHovered ? 'shadow-2xl shadow-primary/20' : 'shadow-lg'}
+          `}
           data-testid={`card-club-${id}`}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
@@ -146,16 +153,25 @@ export default function ClubCard({
 
           <div className="flex flex-col items-center text-center relative z-10">
             {/* Club Logo */}
-            <div className="relative mb-4">
-              <Avatar className="w-20 h-20 ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all duration-300" data-testid={`avatar-club-${id}`}>
+            <div className="relative mb-4 group/logo">
+              <Avatar className={`
+                w-20 h-20 ring-2 ring-primary/20 transition-all duration-500
+                group-hover:ring-primary/40 group-hover:scale-110 group/logo:hover:scale-110
+                group-hover:drop-shadow-lg
+              `} data-testid={`avatar-club-${id}`}>
                 <AvatarImage src={logoUrl} alt={name} />
-                <AvatarFallback className="bg-primary text-primary-foreground text-xl font-semibold">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-xl font-semibold">
                   {initials}
                 </AvatarFallback>
               </Avatar>
 
-              {/* Activity indicator */}
-              <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-sm`}>
+              {/* Activity indicator with pulse */}
+              <div className={`
+                absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white 
+                flex items-center justify-center shadow-sm 
+                group-hover:shadow-lg group-hover:scale-125 transition-all duration-300
+                border-2 border-primary/30
+              `}>
                 <ActivityIcon className={`w-3 h-3 ${activity.color}`} />
               </div>
             </div>
@@ -163,14 +179,22 @@ export default function ClubCard({
             {/* Category Badge */}
             <Badge
               variant="secondary"
-              className="mb-3 group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-300"
+              className={`
+                mb-3 transition-all duration-300 cursor-pointer
+                group-hover:bg-primary group-hover:text-primary-foreground
+                group-hover:scale-110 group-hover:shadow-lg
+                hover:scale-125 active:scale-95
+              `}
               data-testid={`badge-category-${id}`}
             >
               {category}
             </Badge>
 
             {/* Club Name */}
-            <h3 className="text-xl font-semibold mb-2 group-hover:text-primary transition-colors duration-300" data-testid={`text-name-${id}`}>
+            <h3 className={`
+              text-xl font-semibold mb-2 transition-all duration-300
+              group-hover:text-primary group-hover:scale-110
+            `} data-testid={`text-name-${id}`}>
               {name}
             </h3>
 
@@ -182,10 +206,17 @@ export default function ClubCard({
             {/* Member Count with Tooltip */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-auto group-hover:text-primary transition-colors duration-300 cursor-help" data-testid={`text-members-${id}`}>
-                  <Users className="w-4 h-4" />
-                  <span className="font-medium">{(memberCount || 0).toLocaleString()} members</span>
-                  <ActivityIcon className={`w-3 h-3 ${activity.color}`} />
+                <div className={`
+                  flex items-center justify-center gap-2 text-sm text-muted-foreground mt-auto 
+                  group-hover:text-primary transition-all duration-300 
+                  cursor-help group-hover:scale-105 w-full
+                  bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg py-2.5 px-3
+                  group-hover:bg-gradient-to-r group-hover:from-primary/15 group-hover:to-primary/20
+                  border border-primary/10 group-hover:border-primary/30
+                `} data-testid={`text-members-${id}`}>
+                  <Users className="w-4 h-4 group-hover:scale-125 transition-transform duration-300 flex-shrink-0" />
+                  <span className="font-semibold text-foreground">{(memberCount || 0).toLocaleString()} members</span>
+                  <ActivityIcon className={`w-3.5 h-3.5 ${activity.color} group-hover:scale-125 transition-transform duration-300 flex-shrink-0`} />
                 </div>
               </TooltipTrigger>
               <TooltipContent>

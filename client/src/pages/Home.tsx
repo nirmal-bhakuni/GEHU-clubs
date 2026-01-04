@@ -50,7 +50,10 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 md:px-8">
           <div className="flex items-center justify-between mb-8 group">
             <div className="flex-1">
-              <h2 className="text-3xl md:text-4xl font-semibold mb-2 relative inline-block group/heading">
+              <h2 className={`
+                text-3xl md:text-4xl font-semibold mb-2 relative inline-block group/heading
+                group-hover:text-primary transition-colors duration-300
+              `}>
                 Upcoming Events
                 {/* Animated underline */}
                 <div className="absolute -bottom-1 left-0 h-1.5 w-0 bg-gradient-to-r from-primary via-primary to-transparent group-hover:w-full transition-all duration-700 ease-out rounded-full"></div>
@@ -62,7 +65,7 @@ export default function Home() {
               </p>
             </div>
             <Link href="/events">
-              <Button variant="ghost" className="hidden md:flex group/btn relative overflow-hidden" data-testid="button-view-all-events">
+              <Button variant="ghost" className="hidden md:flex group/btn relative overflow-hidden hover:bg-primary/10 hover:scale-105 transition-all duration-300" data-testid="button-view-all-events">
                 <span className="relative z-10 flex items-center">
                   View All Events
                   <ArrowRight className="w-4 h-4 ml-2 group-hover/btn:translate-x-2 transition-transform duration-300" />
@@ -90,14 +93,23 @@ export default function Home() {
               upcomingEvents.map((event, idx) => (
                 <div
                   key={event.id}
+                  className="group/card"
                   style={{
                     animation: visibleEvents ? `fade-in-up 0.6s ease-out ${idx * 0.1}s both` : 'none'
                   }}
                 >
-                  <EventCard
-                    {...event}
-                    imageUrl={event.imageUrl || eventPlaceholder}
-                  />
+                  <div className="relative">
+                    <EventCard
+                      {...event}
+                      imageUrl={event.imageUrl || eventPlaceholder}
+                    />
+                    {/* Additional hover info card */}
+                    <div className="absolute inset-0 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl">
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 rounded-b-xl">
+                        <p className="text-white text-sm font-medium">Click to register →</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ))
             ) : (
@@ -113,7 +125,7 @@ export default function Home() {
 
           <div className="mt-8 flex justify-center md:hidden">
             <Link href="/events">
-              <Button variant="ghost" data-testid="button-view-all-events-mobile">
+              <Button variant="ghost" className="hover:bg-primary/10 hover:scale-105 transition-all duration-300" data-testid="button-view-all-events-mobile">
                 View All Events
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>

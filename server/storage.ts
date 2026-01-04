@@ -120,8 +120,17 @@ export const storage = {
 
   async incrementClubMemberCount(clubId: string) {
     return await Club.findOneAndUpdate({ id: clubId }, { $inc: { memberCount: 1 } }, { new: true });
-  }
-  ,
+  },
+
+  async getClubMemberCount(clubId: string) {
+    try {
+      // Count memberships that are approved (accepted by student/admin)
+      const memberships = await ClubMembership.find({ clubId, status: { $ne: 'rejected' } });
+      return memberships.length;
+    } catch {
+      return 0;
+    }
+  },
   async createAnnouncement(data: any) {
     data.id = randomUUID();
     data.createdAt = new Date();

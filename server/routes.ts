@@ -105,17 +105,40 @@ export async function registerRoutes(app: Express): Promise<void> {
       const { search, category } = req.query;
       let clubs = await storage.getAllClubs();
 
+      // Fetch all club memberships once for efficiency
+      const { ClubMembership } = await import("./models/ClubMembership");
+      const allMemberships = await ClubMembership.find({ status: { $ne: 'rejected' } });
+      
+      // Create a map of clubId -> member count
+      const memberCountMap = new Map<string, number>();
+      allMemberships.forEach(membership => {
+        const current = memberCountMap.get(membership.clubId) || 0;
+        memberCountMap.set(membership.clubId, current + 1);
+      });
+
+      // Add actual member counts to clubs
+      const clubsWithMemberCounts = clubs.map((club) => {
+        const clubObj = club.toObject ? club.toObject() : club;
+        return {
+          ...clubObj,
+          memberCount: memberCountMap.get(club.id) || 0
+        };
+      });
+
+      let filteredClubs = clubsWithMemberCounts;
+
       if (search && typeof search === "string") {
         const s = search.toLowerCase();
-        clubs = clubs.filter(c => c.name?.toLowerCase().includes(s) || c.description?.toLowerCase().includes(s));
+        filteredClubs = filteredClubs.filter(c => c.name?.toLowerCase().includes(s) || c.description?.toLowerCase().includes(s));
       }
 
       if (category && typeof category === "string" && category !== "all") {
-        clubs = clubs.filter(c => c.category === category);
+        filteredClubs = filteredClubs.filter(c => c.category === category);
       }
 
-      res.json(clubs);
-    } catch {
+      res.json(filteredClubs);
+    } catch (error) {
+      console.error("Error fetching clubs:", error);
       res.status(500).json({ error: "Failed to fetch clubs" });
     }
   });
@@ -124,8 +147,17 @@ export async function registerRoutes(app: Express): Promise<void> {
     try {
       const club = await storage.getClub(req.params.id);
       if (!club) return res.status(404).json({ error: "Club not found" });
-      res.json(club);
-    } catch {
+      
+      // Get actual member count from club memberships
+      const actualMemberCount = await storage.getClubMemberCount(club.id);
+      const clubObj = club.toObject ? club.toObject() : club;
+      
+      res.json({
+        ...clubObj,
+        memberCount: actualMemberCount
+      });
+    } catch (error) {
+      console.error("Error fetching club:", error);
       res.status(500).json({ error: "Failed to fetch club" });
     }
   });

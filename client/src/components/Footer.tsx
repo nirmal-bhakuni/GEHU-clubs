@@ -73,7 +73,11 @@ export default function Footer() {
               <li>
                 <Link
                   href="/clubs"
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1"
+                  className={`
+                    text-sm text-muted-foreground hover:text-primary 
+                    transition-all duration-300 rounded px-2 py-1 -ml-2
+                    hover:bg-primary/5 hover:scale-105 hover:translate-x-1 block
+                  `}
                   data-testid="link-footer-clubs"
                 >
                   Browse Clubs
@@ -83,7 +87,11 @@ export default function Footer() {
               <li>
                 <Link
                   href="/events"
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1"
+                  className={`
+                    text-sm text-muted-foreground hover:text-primary 
+                    transition-all duration-300 rounded px-2 py-1 -ml-2
+                    hover:bg-primary/5 hover:scale-105 hover:translate-x-1 block
+                  `}
                   data-testid="link-footer-events"
                 >
                   Upcoming Events
@@ -93,7 +101,11 @@ export default function Footer() {
               <li>
                 <Link
                   href="/dashboard"
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors hover-elevate rounded px-1 py-0.5 -ml-1"
+                  className={`
+                    text-sm text-muted-foreground hover:text-primary 
+                    transition-all duration-300 rounded px-2 py-1 -ml-2
+                    hover:bg-primary/5 hover:scale-105 hover:translate-x-1 block
+                  `}
                   data-testid="link-footer-dashboard"
                 >
                   Admin Dashboard
@@ -155,17 +167,37 @@ export default function Footer() {
             © 2024 GEHU Clubs. All rights reserved.
           </p>
           <div className="flex gap-2">
-            <Button size="icon" variant="ghost" data-testid="button-social-facebook">
-              <Facebook className="w-4 h-4" />
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              data-testid="button-social-facebook"
+              className="hover:bg-primary/10 hover:scale-110 hover:text-primary transition-all duration-300 group"
+            >
+              <Facebook className="w-4 h-4 group-hover:rotate-12 transition-transform duration-300" />
             </Button>
-            <Button size="icon" variant="ghost" data-testid="button-social-twitter">
-              <Twitter className="w-4 h-4" />
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              data-testid="button-social-twitter"
+              className="hover:bg-primary/10 hover:scale-110 hover:text-primary transition-all duration-300 group"
+            >
+              <Twitter className="w-4 h-4 group-hover:rotate-12 transition-transform duration-300" />
             </Button>
-            <Button size="icon" variant="ghost" data-testid="button-social-instagram">
-              <Instagram className="w-4 h-4" />
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              data-testid="button-social-instagram"
+              className="hover:bg-primary/10 hover:scale-110 hover:text-primary transition-all duration-300 group"
+            >
+              <Instagram className="w-4 h-4 group-hover:rotate-12 transition-transform duration-300" />
             </Button>
-            <Button size="icon" variant="ghost" data-testid="button-social-linkedin">
-              <Linkedin className="w-4 h-4" />
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              data-testid="button-social-linkedin"
+              className="hover:bg-primary/10 hover:scale-110 hover:text-primary transition-all duration-300 group"
+            >
+              <Linkedin className="w-4 h-4 group-hover:rotate-12 transition-transform duration-300" />
             </Button>
           </div>
         </div>

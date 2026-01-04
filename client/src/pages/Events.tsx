@@ -50,18 +50,18 @@ export default function Events() {
         </div>
 
         <div className="mb-8 flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <div className="relative flex-1 group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors duration-300" />
             <Input
               placeholder="Search events..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 group-hover:border-primary/50 transition-all duration-300"
               data-testid="input-search-events"
             />
           </div>
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full md:w-48" data-testid="select-category-filter">
+            <SelectTrigger className="w-full md:w-48 hover:border-primary/50 transition-all duration-300" data-testid="select-category-filter">
               <SelectValue placeholder="All Categories" />
             </SelectTrigger>
             <SelectContent>
@@ -82,12 +82,27 @@ export default function Events() {
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredEvents.map((event) => (
-                <EventCard 
-                  key={event.id} 
-                  {...event} 
-                  imageUrl={event.imageUrl || '/api/placeholder/event.jpg'}
-                />
+              {filteredEvents.map((event, idx) => (
+                <div
+                  key={event.id}
+                  className="group/card"
+                  style={{
+                    animation: `fade-in-up 0.6s ease-out ${idx * 0.1}s both`
+                  }}
+                >
+                  <div className="relative">
+                    <EventCard 
+                      {...event} 
+                      imageUrl={event.imageUrl || '/api/placeholder/event.jpg'}
+                    />
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 opacity-0 group-hover/card:opacity-100 transition-opacity duration-300 pointer-events-none rounded-xl">
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 rounded-b-xl">
+                        <p className="text-white text-sm font-medium">Explore this event →</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
 
@@ -96,7 +111,7 @@ export default function Events() {
                 <p className="text-muted-foreground font-body">No events found matching your criteria.</p>
                 <Button
                   variant="ghost"
-                  className="mt-4"
+                  className="mt-4 hover:bg-primary/10 hover:scale-105 transition-all duration-300"
                   onClick={() => {
                     setSearchQuery("");
                     setSelectedCategory("all");
