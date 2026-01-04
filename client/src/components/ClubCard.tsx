@@ -78,8 +78,9 @@ export default function ClubCard({
   };
 
   const getActivityLevel = () => {
-    if (memberCount >= 100) return { level: "High", color: "text-green-600", icon: TrendingUp };
-    if (memberCount >= 50) return { level: "Medium", color: "text-yellow-600", icon: Star };
+    const count = memberCount || 0;
+    if (count >= 100) return { level: "High", color: "text-green-600", icon: TrendingUp };
+    if (count >= 50) return { level: "Medium", color: "text-yellow-600", icon: Star };
     return { level: "Growing", color: "text-blue-600", icon: Calendar };
   };
 
@@ -183,7 +184,7 @@ export default function ClubCard({
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mt-auto group-hover:text-primary transition-colors duration-300 cursor-help" data-testid={`text-members-${id}`}>
                   <Users className="w-4 h-4" />
-                  <span className="font-medium">{memberCount.toLocaleString()} members</span>
+                  <span className="font-medium">{(memberCount || 0).toLocaleString()} members</span>
                   <ActivityIcon className={`w-3 h-3 ${activity.color}`} />
                 </div>
               </TooltipTrigger>

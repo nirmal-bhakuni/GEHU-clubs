@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import Hero from "@/components/Hero";
 import EventCard from "@/components/EventCard";
 import ClubCard from "@/components/ClubCard";
@@ -46,10 +47,12 @@ export default function Home() {
                 Don't miss out on these amazing opportunities
               </p>
             </div>
-            <Button variant="ghost" className="hidden md:flex" data-testid="button-view-all-events">
-              View All Events
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            <Link href="/events">
+              <Button variant="ghost" className="hidden md:flex" data-testid="button-view-all-events">
+                View All Events
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -85,10 +88,12 @@ export default function Home() {
           </div>
 
           <div className="mt-8 flex justify-center md:hidden">
-            <Button variant="ghost" data-testid="button-view-all-events-mobile">
-              View All Events
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            <Link href="/events">
+              <Button variant="ghost" data-testid="button-view-all-events-mobile">
+                View All Events
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -104,10 +109,12 @@ export default function Home() {
                 Join a community that shares your interests
               </p>
             </div>
-            <Button variant="ghost" className="hidden md:flex" data-testid="button-view-all-clubs">
-              View All Clubs
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            <Link href="/clubs">
+              <Button variant="ghost" className="hidden md:flex" data-testid="button-view-all-clubs">
+                View All Clubs
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -143,10 +150,12 @@ export default function Home() {
           </div>
 
           <div className="mt-8 flex justify-center md:hidden">
-            <Button variant="ghost" data-testid="button-view-all-clubs-mobile">
-              View All Clubs
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
+            <Link href="/clubs">
+              <Button variant="ghost" data-testid="button-view-all-clubs-mobile">
+                View All Clubs
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

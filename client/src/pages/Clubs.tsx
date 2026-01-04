@@ -23,13 +23,18 @@ export default function Clubs() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // Fetch clubs from API
-  const { data: clubs = [], isLoading } = useQuery<Club[]>({
+  const { data: clubs = [], isLoading, error } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/clubs");
       return res.json();
     },
   });
+
+  // Log for debugging
+  console.log("Clubs data:", clubs);
+  console.log("Is loading:", isLoading);
+  console.log("Error:", error);
 
   const filteredClubs = clubs.filter((club) => {
     const matchesSearch = club.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -168,6 +173,15 @@ export default function Clubs() {
           <div className="text-center py-16">
             <p className="text-muted-foreground font-body">Loading clubs...</p>
           </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <p className="text-destructive font-body">Failed to load clubs. Please try again.</p>
+            <p className="text-sm text-muted-foreground mt-2">{String(error)}</p>
+          </div>
+        ) : clubs.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-muted-foreground font-body">No clubs available yet.</p>
+          </div>
         ) : (
           <>
             <div className={
@@ -183,7 +197,7 @@ export default function Clubs() {
               ))}
             </div>
 
-            {filteredClubs.length === 0 && (
+            {filteredClubs.length === 0 && clubs.length > 0 && (
               <div className="text-center py-16">
                 <p className="text-muted-foreground font-body">No clubs found matching your criteria.</p>
                 <Button
