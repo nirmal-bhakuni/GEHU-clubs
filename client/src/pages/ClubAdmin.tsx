@@ -885,8 +885,8 @@ export default function ClubAdmin() {
     {
       icon: Users,
       label: "Active Members",
-      value: club.memberCount?.toString() || "0",
-      trend: `${memberships.filter(m => m.status === 'approved').length} approved`,
+      value: memberships.filter(m => m.status === 'approved').length.toString(),
+      trend: `${memberships.filter(m => m.status === 'pending').length} pending`,
       color: "text-green-600",
     },
     {
