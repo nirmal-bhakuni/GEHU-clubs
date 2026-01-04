@@ -458,7 +458,11 @@ export default function ClubAdmin() {
 
   const updateAttendanceMutation = useMutation({
     mutationFn: async ({ registrationId, attended, studentData }: { registrationId: string; attended: boolean; studentData?: any }) => {
-      const res = await apiRequest("PATCH", `/api/admin/event-registrations/${registrationId}/attendance`, { attended });
+      const attendanceStatus = attended ? 'present' : 'absent';
+      const res = await apiRequest("PATCH", `/api/admin/event-registrations/${registrationId}/attendance`, { 
+        attended,
+        attendanceStatus 
+      });
       const registration = await res.json();
 
       // If marking as attended, award points
@@ -484,6 +488,7 @@ export default function ClubAdmin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/student-points", admin?.clubId] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/global-points-leaderboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/student/registrations"] });
       toast({
         title: "Attendance updated",
         description: variables.attended

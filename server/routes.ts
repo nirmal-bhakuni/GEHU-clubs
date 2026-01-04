@@ -1320,11 +1320,20 @@ export async function registerRoutes(app: Express): Promise<void> {
   app.patch("/api/admin/event-registrations/:registrationId/attendance", requireAuth, async (req: Request, res: Response) => {
     try {
       const { registrationId } = req.params;
-      const { attended } = req.body;
+      const { attended, attendanceStatus } = req.body;
+      const adminId = req.session.adminId;
+
+      // Determine status: if attendanceStatus is provided use it, otherwise derive from attended boolean
+      const status = attendanceStatus || (attended ? 'present' : 'absent');
 
       const registration = await EventRegistration.findOneAndUpdate(
         { id: registrationId },
-        { attended: attended },
+        { 
+          attended: attended || status === 'present',
+          attendanceStatus: status,
+          attendanceMarkedAt: new Date(),
+          attendanceMarkedBy: adminId
+        },
         { new: true }
       );
 

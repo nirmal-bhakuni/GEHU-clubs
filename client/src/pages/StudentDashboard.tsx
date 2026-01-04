@@ -262,6 +262,16 @@ export default function StudentDashboard() {
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 3);
 
+  // Filter and sort registrations - only show student's own registrations
+  const studentRegistrations = registrations
+    .filter(reg => reg.studentEmail === student?.email || reg.enrollmentNumber === student?.enrollment)
+    .sort((a, b) => {
+      // Sort by event date descending (most recent first)
+      const dateA = new Date(a.eventDate).getTime();
+      const dateB = new Date(b.eventDate).getTime();
+      return dateB - dateA;
+    });
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -454,6 +464,155 @@ export default function StudentDashboard() {
               </div>
             </Card>
           </div>
+
+          {/* Attendance Section */}
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  Event Attendance Record
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Showing attendance for your registered events only
+                </p>
+              </div>
+              <div className="text-right">
+                <Badge variant="outline" className="text-sm mb-1">
+                  {studentRegistrations.filter(r => r.attendanceStatus === 'present').length} / {studentRegistrations.length} Present
+                </Badge>
+                <p className="text-xs text-muted-foreground">Enrollment: {student?.enrollment}</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Event</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Date</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Club</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Status</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-foreground">Marked At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentRegistrations.length > 0 ? (
+                    studentRegistrations.map((registration) => (
+                      <tr key={registration.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                        <td className="py-4 px-4">
+                          <div className="font-medium text-foreground">{registration.eventTitle}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{registration.eventTime}</div>
+                        </td>
+                        <td className="py-4 px-4 text-sm text-muted-foreground whitespace-nowrap">
+                          {(() => {
+                            try {
+                              const date = new Date(registration.eventDate);
+                              return date.toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'short', 
+                                day: 'numeric' 
+                              });
+                            } catch {
+                              return registration.eventDate;
+                            }
+                          })()}
+                        </td>
+                        <td className="py-4 px-4">
+                          <Badge variant="secondary" className="text-xs">{registration.clubName}</Badge>
+                        </td>
+                        <td className="py-4 px-4">
+                          <Badge 
+                            variant={
+                              registration.attendanceStatus === 'present' ? 'default' : 
+                              registration.attendanceStatus === 'absent' ? 'destructive' : 
+                              'outline'
+                            }
+                            className="capitalize font-medium"
+                          >
+                            {registration.attendanceStatus === 'present' && '✓ '}
+                            {registration.attendanceStatus === 'absent' && '✗ '}
+                            {registration.attendanceStatus || 'Pending'}
+                          </Badge>
+                        </td>
+                        <td className="py-4 px-4 text-sm text-muted-foreground whitespace-nowrap">
+                          {registration.attendanceMarkedAt ? (
+                            (() => {
+                              try {
+                                const date = new Date(registration.attendanceMarkedAt);
+                                return date.toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'short', 
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                });
+                              } catch {
+                                return 'Invalid date';
+                              }
+                            })()
+                          ) : (
+                            <span className="text-muted-foreground/50 italic">Not marked yet</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-16 text-center">
+                        <Calendar className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-30" />
+                        <p className="text-muted-foreground font-medium mb-1">
+                          No event registrations yet
+                        </p>
+                        <p className="text-sm text-muted-foreground/60">
+                          Register for events to track your attendance!
+                        </p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {studentRegistrations.length > 0 && (
+              <div className="mt-6 pt-4 border-t border-border">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                  <div className="text-center p-3 bg-muted/30 rounded-lg">
+                    <div className="text-2xl font-bold text-foreground">{studentRegistrations.length}</div>
+                    <div className="text-xs text-muted-foreground mt-1">Total Events</div>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-900">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {studentRegistrations.filter(r => r.attendanceStatus === 'present').length}
+                    </div>
+                    <div className="text-xs text-green-600 dark:text-green-400 mt-1 font-medium">Present</div>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-900">
+                    <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                      {studentRegistrations.filter(r => r.attendanceStatus === 'absent').length}
+                    </div>
+                    <div className="text-xs text-red-600 dark:text-red-400 mt-1 font-medium">Absent</div>
+                  </div>
+                  <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-900">
+                    <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                      {studentRegistrations.filter(r => r.attendanceStatus === 'pending' || !r.attendanceStatus).length}
+                    </div>
+                    <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1 font-medium">Pending</div>
+                  </div>
+                  <div className="text-center p-3 bg-primary/10 rounded-lg border border-primary/20">
+                    <div className="text-2xl font-bold text-primary">
+                      {(() => {
+                        const markedEvents = studentRegistrations.filter(r => r.attendanceStatus === 'present' || r.attendanceStatus === 'absent');
+                        const presentEvents = studentRegistrations.filter(r => r.attendanceStatus === 'present');
+                        return markedEvents.length > 0 
+                          ? Math.round((presentEvents.length / markedEvents.length) * 100)
+                          : 0;
+                      })()}%
+                    </div>
+                    <div className="text-xs text-primary mt-1 font-medium">Attendance Rate</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
 
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
