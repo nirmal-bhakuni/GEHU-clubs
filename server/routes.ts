@@ -1,7 +1,7 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import express from "express";
+import express, { type Express } from "express";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared/schema";
