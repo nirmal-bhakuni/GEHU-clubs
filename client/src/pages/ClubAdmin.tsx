@@ -230,18 +230,19 @@ export default function ClubAdmin() {
   });
 
   const { data: events = [] } = useQuery<Event[]>({
-    queryKey: ["/api/events"],
+    queryKey: ["/api/events", admin?.clubId],
     queryFn: async () => {
+      if (!admin?.clubId) return [];
       // Try API first, fallback to static data
       try {
-        const res = await apiRequest("GET", "/api/events");
+        const res = await apiRequest("GET", `/api/events?clubId=${admin.clubId}`);
         return res.json();
       } catch (error) {
-        return staticEvents;
+        return staticEvents.filter(e => e.clubId === admin?.clubId);
       }
     },
-    enabled: isAuthenticated,
-    initialData: staticEvents,
+    enabled: isAuthenticated && !!admin?.clubId,
+    initialData: staticEvents.filter(e => e.clubId === admin?.clubId) || [],
     staleTime: 30000, // 30 seconds
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -786,7 +787,7 @@ export default function ClubAdmin() {
       await apiRequest("DELETE", `/api/events/${eventId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/events", admin?.clubId] });
       toast({
         title: "Event deleted",
         description: "The event has been successfully deleted.",
@@ -1004,7 +1005,7 @@ export default function ClubAdmin() {
                 try {
                   // Set all queries to stale so they refetch
                   queryClient.invalidateQueries({ queryKey: ["/api/clubs"] });
-                  queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/events", admin?.clubId] });
                   queryClient.invalidateQueries({ queryKey: ["/api/admin"] });
                   
                   // Wait a bit for refetch to complete

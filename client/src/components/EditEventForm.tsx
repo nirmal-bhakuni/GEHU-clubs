@@ -60,7 +60,7 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/events", clubId] });
       toast({
         title: `Event ${event ? "updated" : "created"}`,
         description: `Your event has been successfully ${event ? "updated" : "created"}.`,
