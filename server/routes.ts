@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import multer from "multer";
+import type { Multer } from "multer";
 import path from "path";
 import fs from "fs";
 import mongoose from "mongoose";
@@ -32,8 +33,8 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 const storage_multer = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
-  filename: (_req, file, cb) =>
+  destination: (_req: Request, _file: any, cb: any) => cb(null, uploadsDir),
+  filename: (_req: Request, file: any, cb: any) =>
     cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}-${file.originalname}`)
 });
 
@@ -108,7 +109,7 @@ export async function registerRoutes(
     try {
       const { username, password } = req.body;
       const admin = await storage.getAdminByUsername(username);
-      if (!admin || !admin.clubId) {
+      if (!admin || admin.clubId) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
 
@@ -125,12 +126,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/auth/logout", (req: Request, res: Response) => {
-    req.session.destroy((err) => {
-      if (err) {
-        return res.status(500).json({ error: "Logout failed" });
-      }
-      res.json({ success: true });
-    });
+    req.session.destroy(() => res.json({ success: true }));
   });
 
   /* -------------------- CLUB JOIN -------------------- */
