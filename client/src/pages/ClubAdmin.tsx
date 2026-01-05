@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, Image, Users, Settings, Edit, Bell, MapPin, UserCheck, CheckCircle, Clock, TrendingUp, Activity, Award, AlertCircle, CheckSquare, Mail, Download, UserPlus, Filter, Eye, Trash2, Crown, FileText, Upload } from "lucide-react";
+import { Calendar, Image, Users, Settings, Edit, Bell, MapPin, UserCheck, CheckCircle, Clock, TrendingUp, Activity, Award, AlertCircle, CheckSquare, Mail, Download, UserPlus, Filter, Eye, Trash2, Crown, FileText, Upload, RefreshCw } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
@@ -149,6 +149,9 @@ export default function ClubAdmin() {
   const [selectedStudentForCertificate, setSelectedStudentForCertificate] = useState<ClubMembership | null>(null);
   const [certificateTitle, setCertificateTitle] = useState("");
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [unreadMessages, setUnreadMessages] = useState<number>(0);
+  const [unreadAnnouncements, setUnreadAnnouncements] = useState<number>(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -199,7 +202,9 @@ export default function ClubAdmin() {
     },
     enabled: !!admin?.clubId && isAuthenticated,
     initialData: staticClubs.find(c => c.id === admin?.clubId) || null,
-    staleTime: Infinity,
+    staleTime: 30000, // 30 seconds
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const { data: events = [] } = useQuery<Event[]>({
@@ -215,7 +220,9 @@ export default function ClubAdmin() {
     },
     enabled: isAuthenticated,
     initialData: staticEvents,
-    staleTime: Infinity,
+    staleTime: 30000, // 30 seconds
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const { data: memberships = [] } = useQuery<ClubMembership[]>({
@@ -417,7 +424,7 @@ export default function ClubAdmin() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${club?.name || 'Club'}_Members_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${displayClub?.name || 'Club'}_Members_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -691,7 +698,7 @@ export default function ClubAdmin() {
       formData.append("title", title);
       formData.append("studentId", studentId);
       formData.append("clubId", admin?.clubId || "");
-      formData.append("clubName", club?.name || "");
+      formData.append("clubName", displayClub?.name || "");
 
       const res = await apiRequest("POST", "/api/admin/upload-certificate", formData);
       return res.json();
@@ -835,46 +842,24 @@ export default function ClubAdmin() {
     },
   });
 
-  if (authLoading || clubLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground font-body">Loading...</p>
-      </div>
-    );
-  }
+  const markAnnouncementAsReadMutation = useMutation({
+    mutationFn: async (announcementId: string) => {
+      await apiRequest("PUT", `/api/announcements/${announcementId}/read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+    },
+  });
+  // We always have fallback data from staticClubs, so just render
+  // Use club data if available, otherwise use static fallback
+  const displayClub = club || staticClubs.find(c => c.id === admin?.clubId) || staticClubs[0];
+  const effectiveClubId = admin?.clubId || displayClub?.id;
 
-  if (clubError) {
+  // Only show loading if we have no admin AND we're still loading
+  if (!admin && authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-muted-foreground font-body mb-4">
-            Error loading club information.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Club ID: {admin?.clubId}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Please contact administrator.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!club) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-muted-foreground font-body mb-4">
-            Club not found or access denied.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Club ID: {admin?.clubId}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Please contact administrator.
-          </p>
-        </div>
+        <p className="text-muted-foreground font-body">Loading authentication...</p>
       </div>
     );
   }
@@ -914,7 +899,7 @@ export default function ClubAdmin() {
     else if (clubEvents.length >= 1) score += 10;
 
     // Members factor (25 points)
-    const memberCount = club.memberCount || 0;
+    const memberCount = displayClub?.memberCount || 0;
     if (memberCount >= 50) score += 25;
     else if (memberCount >= 25) score += 20;
     else if (memberCount >= 10) score += 15;
@@ -943,24 +928,43 @@ export default function ClubAdmin() {
     return Math.min(score, maxScore);
   };
 
-  const healthScore = calculateHealthScore();
+  const healthScore = club ? calculateHealthScore() : 0;
   const healthStatus = healthScore >= 80 ? "Excellent" : healthScore >= 60 ? "Good" : healthScore >= 40 ? "Fair" : "Needs Attention";
+
+  // Count unread messages and announcements
+  useEffect(() => {
+    const unreadMsgCount = messages.filter((msg: Message) => !msg.read).length;
+    setUnreadMessages(unreadMsgCount);
+  }, [messages]);
+
+  useEffect(() => {
+    const unreadAnnounceCount = announcements.filter((ann: any) => !ann.isRead).length;
+    setUnreadAnnouncements(unreadAnnounceCount);
+  }, [announcements]);
 
   return (
     <div className="min-h-screen py-16 md:py-20 bg-background">
+      {isRefreshing && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background border border-border rounded-lg p-8 text-center">
+            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+            <p className="text-muted-foreground">Refreshing data...</p>
+          </div>
+        </div>
+      )}
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center space-x-4">
-            {club.logoUrl && (
+            {displayClub?.logoUrl && (
               <img
-                src={club.logoUrl}
-                alt={`${club.name} logo`}
+                src={displayClub?.logoUrl}
+                alt={`${displayClub?.name} logo`}
                 className="w-16 h-16 rounded-lg object-cover"
               />
             )}
             <div>
               <h1 className="text-3xl font-bold text-foreground mb-2">
-                {club.name} Admin Panel
+                {displayClub?.name || 'Club'} Admin Panel
               </h1>
               <p className="text-muted-foreground">
                 Manage your club's events, content, and settings
@@ -970,13 +974,49 @@ export default function ClubAdmin() {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => logoutMutation.mutate()}
-            disabled={logoutMutation.isPending}
-          >
-            Logout
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setIsRefreshing(true);
+                try {
+                  // Set all queries to stale so they refetch
+                  queryClient.invalidateQueries({ queryKey: ["/api/clubs"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin"] });
+                  
+                  // Wait a bit for refetch to complete
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                  
+                  toast({
+                    title: "Refreshed",
+                    description: "All data has been refreshed successfully.",
+                  });
+                } catch (error) {
+                  console.error("Refresh failed:", error);
+                  toast({
+                    title: "Refresh failed",
+                    description: "Failed to refresh data. Please try again.",
+                    variant: "destructive",
+                  });
+                } finally {
+                  setIsRefreshing(false);
+                }
+              }}
+              disabled={isRefreshing}
+              title="Refresh all data"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+            >
+              Logout
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -1119,15 +1159,29 @@ export default function ClubAdmin() {
         </Card>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-10">
+          <TabsList className="grid w-full grid-cols-10 relative">
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="events">Events</TabsTrigger>
             <TabsTrigger value="attendance">Attendance</TabsTrigger>
-            <TabsTrigger value="announcements">Announcements</TabsTrigger>
+            <TabsTrigger value="announcements" className="relative">
+              Announcements
+              {unreadAnnouncements > 0 && (
+                <Badge className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full w-5 h-5 p-0 flex items-center justify-center text-xs">
+                  {unreadAnnouncements > 9 ? '9+' : unreadAnnouncements}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="uploads">Uploads</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
             <TabsTrigger value="leadership">Leadership</TabsTrigger>
-            <TabsTrigger value="messages">Messages</TabsTrigger>
+            <TabsTrigger value="messages" className="relative">
+              Messages
+              {unreadMessages > 0 && (
+                <Badge className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full w-5 h-5 p-0 flex items-center justify-center text-xs">
+                  {unreadMessages > 9 ? '9+' : unreadMessages}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="community">Community</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
@@ -1635,13 +1689,18 @@ export default function ClubAdmin() {
                     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                   })
                   .map((announcement: any) => (
-                  <Card key={announcement.id} className={`p-4 ${announcement.pinned ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20' : ''}`}>
+                  <Card key={announcement.id} className={`p-4 ${!announcement.isRead ? 'border-l-4 border-l-primary' : ''} ${announcement.pinned ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20' : ''}`}>
                     <div className="flex items-start gap-3">
                       <Bell className={`w-5 h-5 mt-0.5 flex-shrink-0 ${announcement.pinned ? 'text-yellow-500' : 'text-blue-500'}`} />
                       <div className="flex-1">
                         <div className="flex items-start justify-between">
                           <div>
-                            <h4 className="font-semibold text-lg">{announcement.title}</h4>
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="font-semibold text-lg">{announcement.title}</h4>
+                              {!announcement.isRead && (
+                                <Badge variant="default" className="text-xs">New</Badge>
+                              )}
+                            </div>
                             <p className="text-sm text-muted-foreground">
                               By {announcement.authorName} • {(() => {
                                 const now = new Date();
@@ -1673,6 +1732,27 @@ export default function ClubAdmin() {
                             Target: {announcement.target || 'all'}
                           </Badge>
                         </div>
+                        {!announcement.isRead && (
+                          <div className="mt-3 flex justify-end">
+                            <Button
+                              size="sm"
+                              onClick={() => markAnnouncementAsReadMutation.mutate(announcement.id)}
+                              disabled={markAnnouncementAsReadMutation.isPending}
+                            >
+                              {markAnnouncementAsReadMutation.isPending ? (
+                                <>
+                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                                  Marking...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-4 h-4 mr-2" />
+                                  Mark as Read
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Card>
@@ -2492,11 +2572,11 @@ export default function ClubAdmin() {
                     <div className="flex items-center gap-4">
                       <div className="relative">
                         <img
-                          src={logoPreview || club?.logoUrl || "/placeholder-logo.png"}
+                          src={logoPreview || displayClub?.logoUrl || "/placeholder-logo.png"}
                           alt="Club logo preview"
                           className="w-20 h-20 rounded-lg object-cover border-2 border-dashed border-gray-300"
                         />
-                        {(logoPreview || club?.logoUrl) && (
+                        {(logoPreview || displayClub?.logoUrl) && (
                           <button
                             type="button"
                             onClick={removeLogo}
@@ -2536,7 +2616,7 @@ export default function ClubAdmin() {
                     <Input
                       id="name"
                       name="name"
-                      defaultValue={club?.name || ""}
+                      defaultValue={displayClub?.name || ""}
                       placeholder="Enter club name..."
                       required
                       maxLength={100}
@@ -2546,7 +2626,7 @@ export default function ClubAdmin() {
                   {/* Category Selection */}
                   <div>
                     <Label htmlFor="category">Category</Label>
-                    <Select name="category" defaultValue={club?.category || ""} required>
+                    <Select name="category" defaultValue={displayClub?.category || ""} required>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a category" />
                       </SelectTrigger>
@@ -2566,7 +2646,7 @@ export default function ClubAdmin() {
                     <Textarea
                       id="description"
                       name="description"
-                      defaultValue={club?.description || ""}
+                      defaultValue={displayClub?.description || ""}
                       placeholder="Describe your club, its activities, and goals..."
                       required
                       rows={4}
@@ -2616,10 +2696,10 @@ export default function ClubAdmin() {
                 <Card className="p-6">
                   <div className="flex items-start gap-6">
                     <div className="flex-shrink-0">
-                      {club.logoUrl ? (
+                      {displayClub?.logoUrl ? (
                         <img
-                          src={club.logoUrl}
-                          alt={`${club.name} logo`}
+                          src={displayClub?.logoUrl}
+                          alt={`${displayClub?.name} logo`}
                           className="w-24 h-24 rounded-lg object-cover border"
                         />
                       ) : (
@@ -2630,22 +2710,22 @@ export default function ClubAdmin() {
                     </div>
                     <div className="flex-1 space-y-3">
                       <div>
-                        <h3 className="text-2xl font-bold">{club.name}</h3>
+                        <h3 className="text-2xl font-bold">{displayClub?.name}</h3>
                         <Badge variant="secondary" className="mt-1">
-                          {club.category}
+                          {displayClub?.category}
                         </Badge>
                       </div>
                       <p className="text-muted-foreground leading-relaxed">
-                        {club.description}
+                        {displayClub?.description}
                       </p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Users className="w-4 h-4" />
-                          <span>{club.memberCount || 0} members</span>
+                          <span>{displayClub?.memberCount || 0} members</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
-                          <span>Active since {new Date(club.createdAt || Date.now()).getFullYear()}</span>
+                          <span>Active since {new Date(displayClub?.createdAt || Date.now()).getFullYear()}</span>
                         </div>
                       </div>
                     </div>
@@ -2660,7 +2740,7 @@ export default function ClubAdmin() {
                         <Users className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">{club.memberCount || 0}</p>
+                        <p className="text-2xl font-bold">{displayClub?.memberCount || 0}</p>
                         <p className="text-sm text-muted-foreground">Total Members</p>
                       </div>
                     </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,15 +9,28 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import CaptchaComponent from "@/components/CaptchaComponent";
 
 export default function StudentLogin() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [enrollment, setEnrollment] = useState("");
   const [password, setPassword] = useState("");
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  // Get redirect URL from query params
+  const searchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const redirectUrl = searchParams?.get("redirect") ? decodeURIComponent(searchParams.get("redirect")!) : null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!enrollment || !password) {
+      toast({
+        title: "Please fill all fields",
+        description: "Enrollment number and password are required",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (!captchaVerified) {
       toast({
@@ -35,15 +48,30 @@ export default function StudentLogin() {
       const data = await response.json();
 
       if (data.success) {
-        // Set the student data in the query cache
-        queryClient.setQueryData(["/api/student/me"], data.student);
+        // Invalidate the query cache to fetch fresh student data
+        queryClient.invalidateQueries({ queryKey: ["/api/student/me"] });
+        // Also set initial data from login response
+        queryClient.setQueryData(["/api/student/me"], {
+          id: data.student.id,
+          name: data.student.name,
+          enrollment: data.student.enrollment,
+          email: data.student.email || "",
+          branch: data.student.branch || "",
+        });
         // Store student session for offline functionality
        // localStorage.setItem("currentStudent", enrollment);
         toast({
           title: "Login successful",
           description: "Welcome back!",
         });
-        setLocation("/student/dashboard");
+        // Redirect to original page or dashboard
+        setTimeout(() => {
+          if (redirectUrl) {
+            setLocation(redirectUrl);
+          } else {
+            setLocation("/student/dashboard");
+          }
+        }, 500);
       }
     } catch (error: any) {
       // Fallback to static authentication when API is unavailable
@@ -77,7 +105,18 @@ export default function StudentLogin() {
           title: "Login successful",
           description: "Welcome back! (Offline mode)",
         });
-        setLocation("/student/dashboard");
+        // Reset form fields
+        setEnrollment("");
+        setPassword("");
+        setCaptchaVerified(false);
+        // Redirect to original page or dashboard
+        setTimeout(() => {
+          if (redirectUrl) {
+            setLocation(redirectUrl);
+          } else {
+            setLocation("/student/dashboard");
+          }
+        }, 500);
         setIsLoading(false);
         return;
       }
@@ -93,7 +132,18 @@ export default function StudentLogin() {
           title: "Login successful",
           description: "Welcome back! (Offline mode)",
         });
-        setLocation("/student/dashboard");
+        // Reset form fields
+        setEnrollment("");
+        setPassword("");
+        setCaptchaVerified(false);
+        // Redirect to original page or dashboard
+        setTimeout(() => {
+          if (redirectUrl) {
+            setLocation(redirectUrl);
+          } else {
+            setLocation("/student/dashboard");
+          }
+        }, 500);
         setIsLoading(false);
         return;
       }
@@ -126,8 +176,10 @@ export default function StudentLogin() {
               type="text"
               value={enrollment}
               onChange={(e) => setEnrollment(e.target.value)}
+              disabled={isLoading}
               required
               placeholder="GEHU/2024/001"
+              className="border-2"
             />
           </div>
 
@@ -138,6 +190,7 @@ export default function StudentLogin() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={isLoading}
               required
             />
           </div>

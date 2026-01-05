@@ -1,5 +1,5 @@
-import React, { ReactNode, useState, useRef } from "react";
-import { useParams, Link } from "wouter";
+import React, { ReactNode, useState, useRef, useEffect } from "react";
+import { useParams, Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,17 +13,63 @@ import StudentReviews from "@/components/StudentReviews";
 import ClubContact from "@/components/ClubContact";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useStudentAuth } from "@/hooks/useStudentAuth";
 import type { Event } from "@shared/schema";
 
 export default function EventDetail() {
   const params = useParams<{ id: string }>();
   const eventId = params?.id;
+  const [location, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("overview");
   const tabsRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
+  const { student, isAuthenticated, isLoading: authLoading } = useStudentAuth();
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [hasAlreadyRegistered, setHasAlreadyRegistered] = useState(false);
+
+  // Check if student has already registered for this event
+  useEffect(() => {
+    if (isAuthenticated && student && eventId) {
+      const checkRegistration = async () => {
+        try {
+          const response = await apiRequest("GET", "/api/student/registrations");
+          const registrations = await response.json();
+          const alreadyRegistered = registrations.some((reg: any) => reg.eventId === eventId);
+          setHasAlreadyRegistered(alreadyRegistered);
+        } catch (error) {
+          console.error("Failed to check registration status:", error);
+        }
+      };
+      checkRegistration();
+    }
+  }, [isAuthenticated, student, eventId]);
+
+  const handleRegisterClick = () => {
+    if (!isAuthenticated && !authLoading) {
+      setShowLoginPrompt(true);
+      return;
+    }
+    setActiveTab("register");
+    tabsRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const handleTabChange = (value: string) => {
+    // If trying to access register tab, check authentication
+    if (value === "register" && !isAuthenticated && !authLoading) {
+      setShowLoginPrompt(true);
+      return;
+    }
+    setActiveTab(value);
+  };
+
+  const handleLoginRedirect = () => {
+    const redirectPath = `/events/${eventId}`;
+    const encodedRedirect = encodeURIComponent(redirectPath);
+    setLocation(`/student-login?redirect=${encodedRedirect}`);
+  };
 
   const handleShare = async () => {
     const shareData = {
@@ -184,12 +230,10 @@ export default function EventDetail() {
               <Button 
                 size="lg" 
                 className="flex-1 md:flex-none"
-                onClick={() => {
-                  setActiveTab("register");
-                  tabsRef.current?.scrollIntoView({ behavior: "smooth" });
-                }}
+                onClick={handleRegisterClick}
+                disabled={hasAlreadyRegistered}
               >
-                Register for this Event
+                {hasAlreadyRegistered ? "Already Registered" : "Register for this Event"}
               </Button>
               <Link href={`/clubs/${event.clubId}`}>
                 <Button variant="outline" size="lg" className="flex items-center gap-2">
@@ -206,10 +250,12 @@ export default function EventDetail() {
         </div>
 
         {/* Tabbed Content */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} ref={tabsRef} className="space-y-8">
+        <Tabs value={activeTab} onValueChange={handleTabChange} ref={tabsRef} className="space-y-8">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="register">Register</TabsTrigger>
+            <TabsTrigger value="register" disabled={hasAlreadyRegistered}>
+              {hasAlreadyRegistered ? "Registered" : "Register"}
+            </TabsTrigger>
             <TabsTrigger value="feedback">Feedback</TabsTrigger>
           </TabsList>
 
@@ -227,6 +273,14 @@ export default function EventDetail() {
               eventTitle={event.title}
               eventDate={event.date}
               clubName={event.clubName}
+              isAuthenticated={isAuthenticated}
+              onLoginRequired={() => setShowLoginPrompt(true)}
+              studentData={student ? {
+                fullName: student.name,
+                email: student.email,
+                enrollmentNumber: student.enrollment,
+                branch: student.branch,
+              } : undefined}
               onSubmit={async (data) => {
                 try {
                   await apiRequest("POST", `/api/events/${eventId}/register`, {
@@ -366,6 +420,33 @@ export default function EventDetail() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Login Prompt Modal */}
+        {showLoginPrompt && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-background border border-border rounded-lg p-8 max-w-md mx-4">
+              <h3 className="text-2xl font-bold mb-4">Login Required</h3>
+              <p className="text-muted-foreground mb-6">
+                You need to be logged in as a student to register for events. Please log in first.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowLoginPrompt(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleLoginRedirect}
+                  className="flex-1"
+                >
+                  Go to Login
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

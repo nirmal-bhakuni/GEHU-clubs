@@ -8,7 +8,8 @@ const announcementSchema = new mongoose.Schema({
   authorName: String,
   target: { type: String, default: "all" }, // 'all' or clubId
   createdAt: Date,
-  pinned: { type: Boolean, default: false }
+  pinned: { type: Boolean, default: false },
+  isRead: { type: Boolean, default: false }
 });
 
 export const Announcement = mongoose.model("Announcement", announcementSchema);

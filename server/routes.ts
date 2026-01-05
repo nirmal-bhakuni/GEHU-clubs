@@ -17,6 +17,7 @@ import { ClubLeadership } from "./models/ClubLeadership";
 import StudentPoints from "./models/StudentPoints";
 import { Club } from "./models/Club";
 import { Message } from "./models/Message";
+import { Announcement } from "./models/Announcement";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -499,7 +500,9 @@ export async function registerRoutes(app: Express): Promise<void> {
         student: {
           id: student._id,
           name: student.name,
+          email: student.email,
           enrollment: student.enrollment,
+          branch: student.branch,
           lastLogin: student.lastLogin
         }
       });
@@ -769,6 +772,16 @@ export async function registerRoutes(app: Express): Promise<void> {
       // Get event details
       const event = await storage.getEvent(eventId);
       if (!event) return res.status(404).json({ error: "Event not found" });
+
+      // Check if student has already registered for this event
+      const existingRegistration = await EventRegistration.findOne({
+        enrollmentNumber: registrationData.enrollmentNumber,
+        eventId: eventId
+      });
+
+      if (existingRegistration) {
+        return res.status(400).json({ error: "You have already registered for this event" });
+      }
 
       // Create registration with event details
       const registration = await storage.createEventRegistration({
@@ -1389,6 +1402,30 @@ export async function registerRoutes(app: Express): Promise<void> {
     } catch (error) {
       console.error("Failed to fetch admin announcements:", error);
       res.status(500).json({ error: "Failed to fetch announcements" });
+    }
+  });
+
+  // Club Admin: mark announcement as read
+  app.put("/api/announcements/:id/read", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const admin = await Admin.findOne({ id: req.session.adminId });
+      if (!admin) return res.status(404).json({ error: "Admin not found" });
+
+      const announcement = await Announcement.findOneAndUpdate(
+        { id },
+        { $set: { isRead: true } },
+        { new: true }
+      );
+
+      if (!announcement) {
+        return res.status(404).json({ error: "Announcement not found" });
+      }
+
+      res.json({ success: true, announcement });
+    } catch (error) {
+      console.error("Failed to mark announcement as read:", error);
+      res.status(500).json({ error: "Failed to mark announcement as read" });
     }
   });
 

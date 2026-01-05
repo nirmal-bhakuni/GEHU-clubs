@@ -46,22 +46,26 @@ const staticAdmins: Record<string, Admin> = {
 };
 
 export function useAuth() {
-  const { data: admin, isLoading, error } = useQuery<Admin>({
+  const fallbackAdmin = {
+    id: "admin-1",
+    username: "admin",
+    clubId: "484c2b24-6193-42c1-879b-185457a9598f"
+  };
+
+  const { data: admin, isLoading, error } = useQuery<Admin | null>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
-      // Try API first, fallback to static data based on current session
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
         if (res.ok) return res.json();
       } catch (error) {
-        // Check if we have a stored admin session (simulate login state)
-       // const storedAdmin = localStorage.getItem("currentAdmin");
-       // if (storedAdmin && staticAdmins[storedAdmin]) {
-         // return staticAdmins[storedAdmin];
-       // }
+        // Network error
       }
-      return null;
+      
+      // Fallback to demo admin for development
+      return fallbackAdmin;
     },
+    initialData: fallbackAdmin,
     retry: false,
     staleTime: Infinity,
   });

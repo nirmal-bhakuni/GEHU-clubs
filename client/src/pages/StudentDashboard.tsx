@@ -270,6 +270,11 @@ export default function StudentDashboard() {
       const dateA = new Date(a.eventDate).getTime();
       const dateB = new Date(b.eventDate).getTime();
       return dateB - dateA;
+    })
+    .filter((registration, index, self) => {
+      // Remove duplicate registrations for the same event
+      // Keep only the first registration for each event
+      return self.findIndex(r => r.eventId === registration.eventId) === index;
     });
 
   return (
@@ -658,7 +663,7 @@ export default function StudentDashboard() {
                 </Button>
               </div>
               <div className="space-y-3">
-                {registrations.slice(0, 3).map((registration) => (
+                {studentRegistrations.slice(0, 3).map((registration) => (
                   <div key={registration.id} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors">
                     <div>
                       <h4 className="font-medium">{registration.eventTitle}</h4>

@@ -28,6 +28,7 @@ export default function ClubDetail() {
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
+  const [hasAlreadyJoinedClub, setHasAlreadyJoinedClub] = useState(false);
   const [joinForm, setJoinForm] = useState({
     name: '',
     email: '',
@@ -50,6 +51,25 @@ export default function ClubDetail() {
       }));
     }
   }, [student, isAuthenticated]);
+
+  // Check if student has already sent a join request or is a member of this club
+  useEffect(() => {
+    if (isAuthenticated && student && id) {
+      const checkMembership = async () => {
+        try {
+          const response = await apiRequest("GET", "/api/student/club-memberships");
+          const memberships = await response.json();
+          const alreadyJoined = memberships.some((membership: any) => 
+            membership.clubId === id && (membership.status === 'approved' || membership.status === 'pending')
+          );
+          setHasAlreadyJoinedClub(alreadyJoined);
+        } catch (error) {
+          console.error("Failed to check club membership:", error);
+        }
+      };
+      checkMembership();
+    }
+  }, [isAuthenticated, student, id]);
 
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -326,9 +346,10 @@ export default function ClubDetail() {
                           variant="default" 
                           size="sm"
                           className="hover:scale-105 transition-transform bg-primary hover:bg-primary/90"
+                          disabled={hasAlreadyJoinedClub}
                         >
                           <Users className="w-4 h-4 mr-2" />
-                          Join Club
+                          {hasAlreadyJoinedClub ? "Already Joined" : "Join Club"}
                         </Button>
                       </DialogTrigger>
                     ) : (
@@ -352,7 +373,7 @@ export default function ClubDetail() {
                     )}
                   </TooltipTrigger>
                   <TooltipContent>
-                    {isAuthenticated ? "Join this club" : "Login required to join clubs"}
+                    {!isAuthenticated ? "Login required to join clubs" : hasAlreadyJoinedClub ? "You are already a member or have a pending request" : "Join this club"}
                   </TooltipContent>
                 </Tooltip>
               <DialogContent>
@@ -413,8 +434,8 @@ export default function ClubDetail() {
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? "Submitting..." : "Submit Join Request"}
+                  <Button type="submit" className="w-full" disabled={isSubmitting || hasAlreadyJoinedClub}>
+                    {isSubmitting ? "Submitting..." : hasAlreadyJoinedClub ? "Already a member or request pending" : "Submit Join Request"}
                   </Button>
                 </form>
               </DialogContent>

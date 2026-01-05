@@ -1,15 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface StudentData {
+  fullName?: string;
+  email?: string;
+  enrollmentNumber?: string;
+  branch?: string;
+}
 
 interface RegistrationFormProps {
   eventTitle: string;
   eventDate: string;
   clubName: string;
+  studentData?: StudentData;
+  isAuthenticated?: boolean;
+  onLoginRequired?: () => void;
   onSubmit?: (data: StudentRegistration) => void;
 }
 
@@ -30,21 +41,43 @@ export default function RegistrationForm({
   eventTitle,
   eventDate,
   clubName,
+  studentData,
+  isAuthenticated = true,
+  onLoginRequired,
   onSubmit,
 }: RegistrationFormProps) {
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
   const [formData, setFormData] = useState<StudentRegistration>({
-    fullName: "",
-    email: "",
+    fullName: studentData?.fullName || "",
+    email: studentData?.email || "",
     phone: "",
     rollNumber: "",
-    department: "",
+    department: studentData?.branch || "",
     year: "First Year",
-    enrollmentNumber: "",
+    enrollmentNumber: studentData?.enrollmentNumber || "",
     interests: [],
     experience: "",
   });
+
+  // Update form data when studentData changes
+  useEffect(() => {
+    if (studentData) {
+      console.log("Auto-filling form with student data:", studentData);
+      setFormData((prev) => {
+        const updated = {
+          ...prev,
+          fullName: studentData.fullName || prev.fullName || "",
+          email: studentData.email || prev.email || "",
+          enrollmentNumber: studentData.enrollmentNumber || prev.enrollmentNumber || "",
+          department: studentData.branch || prev.department || "",
+        };
+        console.log("Updated form data:", updated);
+        return updated;
+      });
+    }
+  }, [studentData]);
 
   const departments = [
     "Computer Science",
@@ -87,6 +120,17 @@ export default function RegistrationForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Check authentication before submission
+    if (!isAuthenticated) {
+      toast({
+        title: "Login Required",
+        description: "Please log in to complete your registration.",
+        variant: "destructive",
+      });
+      onLoginRequired?.();
+      return;
+    }
     
     if (
       !formData.fullName ||

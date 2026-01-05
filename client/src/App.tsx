@@ -29,8 +29,11 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/student" component={StudentProfile} />
+      <Route path="/student-login" component={StudentLogin} />
       <Route path="/student/login" component={StudentLogin} />
+      <Route path="/student-signup" component={StudentSignup} />
       <Route path="/student/signup" component={StudentSignup} />
+      <Route path="/student-dashboard" component={StudentDashboard} />
       <Route path="/student/dashboard" component={StudentDashboard} />
       <Route path="/admin/login" component={Login} />
       <Route path="/club-admin/login" component={ClubAdminLogin} />
