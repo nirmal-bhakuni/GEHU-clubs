@@ -155,6 +155,28 @@ export default function ClubAdmin() {
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
+  // Authorization check: Only club admins can access this page
+  useEffect(() => {
+    if (!authLoading) {
+      // If not authenticated at all, redirect to club admin login
+      if (!isAuthenticated) {
+        setLocation("/club-admin/login");
+        return;
+      }
+      
+      // If authenticated but is university admin (no clubId), redirect to dashboard
+      if (isAuthenticated && !admin?.clubId) {
+        toast({
+          title: "Access Denied",
+          description: "University admins cannot access club admin panel. Please use the admin dashboard.",
+          variant: "destructive",
+        });
+        setLocation("/dashboard");
+        return;
+      }
+    }
+  }, [isAuthenticated, admin?.clubId, authLoading, setLocation, toast]);
+
   // Predefined club categories
   const clubCategories = [
     "Academic",

@@ -23,7 +23,7 @@ export default function ClubAdminLogin() {
   const loginMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       try {
-        const res = await apiRequest("POST", "/api/auth/login", data);
+        const res = await apiRequest("POST", "/api/auth/club-login", data);
         return res.json();
       } catch (error) {
         // Fallback to static authentication when API is unavailable
@@ -33,8 +33,7 @@ export default function ClubAdminLogin() {
           "ieee_admin": { id: "admin-4", username: "ieee_admin", clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b" },
           "papertech_admin": { id: "admin-5", username: "papertech_admin", clubId: "181d3e7d-d6cd-4f40-b712-7182fcd77154" },
           "entrepreneurship_admin": { id: "admin-6", username: "entrepreneurship_admin", clubId: "cc71501e-1525-4e3b-959c-f3874db96396" },
-          "codehunters_admin": { id: "admin-7", username: "codehunters_admin", clubId: "485300f0-e4cc-4116-aa49-d60dd19070d8" },
-          "admin": { id: "admin-1", username: "admin", clubId: null }
+          "codehunters_admin": { id: "admin-7", username: "codehunters_admin", clubId: "485300f0-e4cc-4116-aa49-d60dd19070d8" }
         };
 
         if (data.password === "admin123" && staticAdmins[data.username as keyof typeof staticAdmins]) {
@@ -56,15 +55,11 @@ export default function ClubAdminLogin() {
           description: "Welcome to your club admin panel.",
         });
       } else {
-        // Store admin session for offline functionality
-        localStorage.setItem("currentAdmin", formData.username);
-        // Set the admin data directly in the query cache
-        queryClient.setQueryData(["/api/auth/me"], data.admin);
-        // University admin, redirect to dashboard
-        setLocation("/dashboard");
+        // This should not happen if the backend is working correctly
         toast({
-          title: "Login successful",
-          description: "Welcome to the admin dashboard.",
+          title: "Login failed",
+          description: "You must be a club admin to use this login.",
+          variant: "destructive",
         });
       }
     },

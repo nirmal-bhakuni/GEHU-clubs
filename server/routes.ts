@@ -43,6 +43,35 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Middleware to check if admin owns the club they're trying to access
+async function requireClubOwnership(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.adminId) return res.status(401).json({ error: "Unauthorized" });
+  
+  try {
+    const admin = await storage.getAdmin(req.session.adminId);
+    if (!admin) return res.status(401).json({ error: "Admin not found" });
+    
+    // University admins cannot access club-specific admin endpoints
+    if (!admin.clubId) {
+      return res.status(403).json({ error: "University admins cannot access club admin endpoints" });
+    }
+    
+    // Get the clubId from the route params
+    const clubId = req.params.clubId || req.body?.clubId;
+    
+    if (clubId && admin.clubId !== clubId) {
+      return res.status(403).json({ error: "You do not have permission to access this club's data" });
+    }
+    
+    // Attach admin to request for use in handlers
+    (req as any).admin = admin;
+    next();
+  } catch (error) {
+    console.error("Club ownership check error:", error);
+    res.status(500).json({ error: "Authorization check failed" });
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<void> {
   app.use("/uploads", express.static(uploadsDir));
 
@@ -58,11 +87,47 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
+  // University admin login - clubId must be null
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body;
       const admin = await storage.getAdminByUsername(username);
       if (!admin) return res.status(401).json({ error: "Invalid credentials" });
+
+      // Ensure this is a university admin (no clubId)
+      if (admin.clubId) {
+        return res.status(403).json({ error: "Club admins must use the club admin login" });
+      }
+
+      const valid = await bcrypt.compare(password, admin.password);
+      if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+
+      // Update last login
+      await Admin.findOneAndUpdate({ id: admin.id }, { lastLogin: new Date() });
+
+      req.session.adminId = admin.id;
+
+      res.json({
+        success: true,
+        admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Club admin login - clubId must not be null
+  app.post("/api/auth/club-login", async (req: Request, res: Response) => {
+    try {
+      const { username, password } = req.body;
+      const admin = await storage.getAdminByUsername(username);
+      if (!admin) return res.status(401).json({ error: "Invalid credentials" });
+
+      // Ensure this is a club admin (has clubId)
+      if (!admin.clubId) {
+        return res.status(403).json({ error: "University admins must use the university admin login" });
+      }
 
       const valid = await bcrypt.compare(password, admin.password);
       if (!valid) return res.status(401).json({ error: "Invalid credentials" });
@@ -240,9 +305,9 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.post("/api/events", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
+  app.post("/api/events", requireClubOwnership, upload.single("image"), async (req: Request, res: Response) => {
     try {
-      const admin = await storage.getAdmin(req.session.adminId!);
+      const admin = (req as any).admin;
       if (!admin) return res.status(401).json({ error: "Admin not found" });
 
       const club = await storage.getClub(admin.clubId!);
@@ -264,12 +329,12 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.patch("/api/events/:id", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
+  app.patch("/api/events/:id", requireClubOwnership, upload.single("image"), async (req: Request, res: Response) => {
     try {
       const oldEvent = await storage.getEvent(req.params.id);
       if (!oldEvent) return res.status(404).json({ error: "Event not found" });
 
-      const admin = await storage.getAdmin(req.session.adminId!);
+      const admin = (req as any).admin;
       if (!admin) return res.status(401).json({ error: "Admin not found" });
       if (oldEvent.clubId !== admin.clubId) {
         return res.status(403).json({ error: "Not authorized" });
@@ -1053,9 +1118,9 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Achievement Routes
-  app.post("/api/admin/achievements", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
+  app.post("/api/admin/achievements", requireClubOwnership, upload.single("image"), async (req: Request, res: Response) => {
     try {
-      const admin = await storage.getAdmin(req.session.adminId!);
+      const admin = (req as any).admin;
       if (!admin) return res.status(401).json({ error: "Admin not found" });
 
       const club = await storage.getClub(admin.clubId!);
@@ -1075,7 +1140,7 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.get("/api/admin/achievements/:clubId", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/admin/achievements/:clubId", requireClubOwnership, async (req: Request, res: Response) => {
     try {
       const { clubId } = req.params;
       const achievements = await storage.getAchievementsByClub(clubId);
@@ -1108,9 +1173,9 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Club Leadership Routes
-  app.post("/api/admin/club-leadership", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/admin/club-leadership", requireClubOwnership, async (req: Request, res: Response) => {
     try {
-      const admin = await storage.getAdmin(req.session.adminId!);
+      const admin = (req as any).admin;
       if (!admin) return res.status(401).json({ error: "Admin not found" });
 
       const leadershipData = {
@@ -1159,10 +1224,10 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Student Points and Badges Management
-  app.get("/api/admin/student-points/:clubId", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/admin/student-points/:clubId", requireClubOwnership, async (req: Request, res: Response) => {
     try {
       const { clubId } = req.params;
-      const admin = await storage.getAdmin(req.session.adminId!);
+      const admin = (req as any).admin;
       if (!admin || admin.clubId !== clubId) {
         return res.status(403).json({ error: "Not authorized" });
       }
@@ -1175,11 +1240,11 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.post("/api/admin/student-points", requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/admin/student-points", requireClubOwnership, async (req: Request, res: Response) => {
     try {
       const { clubId, studentId, studentName, studentEmail, enrollmentNumber, points, badges, skills, reason } = req.body;
 
-      const admin = await storage.getAdmin(req.session.adminId!);
+      const admin = (req as any).admin;
       if (!admin || admin.clubId !== clubId) {
         return res.status(403).json({ error: "Not authorized" });
       }
@@ -1210,7 +1275,7 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.patch("/api/admin/student-points/:studentPointsId", requireAuth, async (req: Request, res: Response) => {
+  app.patch("/api/admin/student-points/:studentPointsId", requireClubOwnership, async (req: Request, res: Response) => {
     try {
       const { studentPointsId } = req.params;
       const { points, badges } = req.body;
@@ -1218,7 +1283,7 @@ export async function registerRoutes(app: Express): Promise<void> {
       const studentPoints = await StudentPoints.findOne({ id: studentPointsId });
       if (!studentPoints) return res.status(404).json({ error: "Student points not found" });
 
-      const admin = await storage.getAdmin(req.session.adminId!);
+      const admin = (req as any).admin;
       if (!admin || studentPoints.clubId.toString() !== admin.clubId) {
         return res.status(403).json({ error: "Not authorized" });
       }
@@ -1284,7 +1349,7 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Club Admin Routes for Membership Management
-  app.get("/api/admin/club-memberships/:clubId", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/admin/club-memberships/:clubId", requireClubOwnership, async (req: Request, res: Response) => {
     try {
       const { clubId } = req.params;
       const memberships = await storage.getClubMembershipsByClub(clubId);
@@ -1294,10 +1359,11 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.patch("/api/admin/club-memberships/:membershipId", requireAuth, async (req: Request, res: Response) => {
+  app.patch("/api/admin/club-memberships/:membershipId", requireClubOwnership, async (req: Request, res: Response) => {
     try {
       const { membershipId } = req.params;
       const { status } = req.body;
+      const admin = (req as any).admin;
 
       if (!['approved', 'rejected'].includes(status)) {
         return res.status(400).json({ error: "Invalid status" });
@@ -1305,6 +1371,11 @@ export async function registerRoutes(app: Express): Promise<void> {
 
       const membership = await storage.updateClubMembershipStatus(membershipId, status);
       if (!membership) return res.status(404).json({ error: "Membership not found" });
+
+      // Verify admin owns this club
+      if (admin.clubId !== membership.clubId) {
+        return res.status(403).json({ error: "Not authorized to modify this membership" });
+      }
 
       // Update club member count if membership is approved
       if (status === 'approved') {
@@ -1344,9 +1415,14 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.get("/api/admin/event-registrations/:clubId", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/admin/event-registrations/:clubId", requireClubOwnership, async (req: Request, res: Response) => {
     try {
       const { clubId } = req.params;
+      const admin = (req as any).admin;
+      if (!admin || admin.clubId !== clubId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+
       const registrations = await EventRegistration.find({ clubName: { $exists: true } }).populate('eventId');
 
       // Filter registrations for events of this club

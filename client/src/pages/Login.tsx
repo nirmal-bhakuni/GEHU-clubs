@@ -38,11 +38,13 @@ export default function Login() {
       try {
         const response = await apiRequest("POST", "/api/auth/login", { username, password });
         const data = await response.json();
-        if (data.success) {
+        if (data.success && !data.admin.clubId) {
           loginSuccess = true;
           loginData = data;
+        } else if (data.admin && data.admin.clubId) {
+          throw new Error("Club admins must use the club admin login");
         }
-      } catch (apiError) {
+      } catch (apiError: any) {
         // Fallback to static authentication
         if (username === "admin" && password === "admin123") {
           loginSuccess = true;
@@ -54,10 +56,12 @@ export default function Login() {
               clubId: null 
             } 
           };
+        } else {
+          throw apiError;
         }
       }
 
-      if (loginSuccess) {
+      if (loginSuccess && loginData.admin && !loginData.admin.clubId) {
         // Store admin session for offline functionality
         localStorage.setItem("currentAdmin", username);
         // Set the admin data directly in the query cache
@@ -68,7 +72,7 @@ export default function Login() {
         });
         setLocation("/dashboard");
       } else {
-        throw new Error("Invalid credentials");
+        throw new Error("Invalid credentials or wrong login type");
       }
     } catch (error: any) {
       toast({
