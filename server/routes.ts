@@ -727,17 +727,18 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Admin: list all students for user management
-  // Admin: list students who have logged in (lastLogin present)
+  // Return all students (not only those who have logged in) so university admins can manage users
   app.get("/api/admin/students", requireAuth, async (req: Request, res: Response) => {
     try {
-      const students = await Student.find({ lastLogin: { $exists: true, $ne: null } }).sort({ lastLogin: -1 });
+      // Return all students, sorted by creation date (newest first)
+      const students = await Student.find({}).sort({ createdAt: -1 });
       const payload = students.map(s => ({
         id: s._id.toString(),
         name: s.name,
         email: s.email,
         enrollment: s.enrollment,
         branch: s.branch,
-        lastLogin: s.lastLogin,
+        lastLogin: s.lastLogin || null,
         isDisabled: s.isDisabled,
         createdAt: s.createdAt
       }));

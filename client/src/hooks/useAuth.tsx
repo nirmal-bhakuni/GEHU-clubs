@@ -46,12 +46,6 @@ const staticAdmins: Record<string, Admin> = {
 };
 
 export function useAuth() {
-  const fallbackAdmin = {
-    id: "admin-1",
-    username: "admin",
-    clubId: "484c2b24-6193-42c1-879b-185457a9598f"
-  };
-
   const { data: admin, isLoading, error } = useQuery<Admin | null>({
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
@@ -62,10 +56,9 @@ export function useAuth() {
         // Network error
       }
       
-      // Fallback to demo admin for development
-      return fallbackAdmin;
+      // Return null if not authenticated
+      return null;
     },
-    initialData: fallbackAdmin,
     retry: false,
     staleTime: Infinity,
   });

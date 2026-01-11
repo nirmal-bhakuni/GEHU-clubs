@@ -32,11 +32,11 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:12346',
+        target:'http://127.0.0.1:12346',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:12346',
+        target: 'http://127.0.0.1:12346',
         changeOrigin: true,
       },
     },
