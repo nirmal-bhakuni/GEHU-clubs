@@ -51,12 +51,30 @@ export function useAuth() {
     queryFn: async () => {
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (res.ok) return res.json();
+        if (res.ok) {
+          const data = await res.json();
+          // Cache in localStorage for offline support
+          if (data && data.id) {
+            localStorage.setItem("adminCache", JSON.stringify(data));
+          }
+          return data;
+        }
       } catch (error) {
-        // Network error
+        console.error("Auth error:", error);
       }
       
-      // Return null if not authenticated
+      // Try to restore from localStorage cache if available
+      try {
+        const cached = localStorage.getItem("adminCache");
+        if (cached) {
+          const adminData = JSON.parse(cached);
+          console.log("Using cached admin data:", adminData);
+          return adminData;
+        }
+      } catch (e) {
+        // Cache is invalid
+      }
+      
       return null;
     },
     retry: false,

@@ -220,13 +220,19 @@ export default function Dashboard() {
     staleTime: Infinity,
   });
 
-  const { data: students = [] } = useQuery<any[]>({
+  const { data: students = [], error: studentsError, isLoading: studentsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/students"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/admin/students");
-      return res.json();
+      try {
+        const res = await apiRequest("GET", "/api/admin/students");
+        return res.json();
+      } catch (error) {
+        console.error("Error fetching students:", error);
+        return [];
+      }
     },
     enabled: isAuthenticated,
+    retry: false,
   });
 
   const { data: studentCount = { count: 0 } } = useQuery<{ count: number }>({
@@ -407,8 +413,9 @@ export default function Dashboard() {
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {
-      // Clear stored admin session
+      // Clear stored admin session and cache
       localStorage.removeItem("currentAdmin");
+      localStorage.removeItem("adminCache");
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       setLocation("/admin/login");
     },

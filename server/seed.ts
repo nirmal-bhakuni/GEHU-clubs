@@ -269,24 +269,113 @@ export async function seedDatabase() {
     }
   }
 
-  // Create demo student (only if doesn't exist)
-  const existingStudent = await Student.findOne({ email: "student@example.com" });
-  if (!existingStudent) {
-    await Student.insertMany([
-      {
-        id: randomUUID(),
-        name: "Demo Student",
-        email: "student@example.com",
-        enrollment: "EN123456789",
-        branch: "Computer Science",
-        password: studentPassword,
-        clubId: techClubId,
-        createdAt: new Date()
-      }
-    ]);
-    console.log("✅ Created demo student");
+  // Create demo students (only if they don't exist)
+  const demoStudents = [
+    {
+      name: "Aarav Kumar",
+      email: "aarav.kumar@gehu.edu",
+      enrollment: "EN001",
+      branch: "Computer Science",
+      password: studentPassword,
+      lastLogin: new Date(),
+      createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Priya Sharma",
+      email: "priya.sharma@gehu.edu",
+      enrollment: "EN002",
+      branch: "Electronics Engineering",
+      password: studentPassword,
+      lastLogin: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Rohan Patel",
+      email: "rohan.patel@gehu.edu",
+      enrollment: "EN003",
+      branch: "Computer Science",
+      password: studentPassword,
+      lastLogin: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Ananya Verma",
+      email: "ananya.verma@gehu.edu",
+      enrollment: "EN004",
+      branch: "Mechanical Engineering",
+      password: studentPassword,
+      lastLogin: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Vikram Singh",
+      email: "vikram.singh@gehu.edu",
+      enrollment: "EN005",
+      branch: "Civil Engineering",
+      password: studentPassword,
+      lastLogin: new Date(),
+      createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Neha Gupta",
+      email: "neha.gupta@gehu.edu",
+      enrollment: "EN006",
+      branch: "Computer Science",
+      password: studentPassword,
+      lastLogin: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Arjun Reddy",
+      email: "arjun.reddy@gehu.edu",
+      enrollment: "EN007",
+      branch: "Electronics Engineering",
+      password: studentPassword,
+      lastLogin: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Divya Nair",
+      email: "divya.nair@gehu.edu",
+      enrollment: "EN008",
+      branch: "Information Technology",
+      password: studentPassword,
+      lastLogin: null,
+      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Karan Malhotra",
+      email: "karan.malhotra@gehu.edu",
+      enrollment: "EN009",
+      branch: "Computer Science",
+      password: studentPassword,
+      lastLogin: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 120 * 24 * 60 * 60 * 1000)
+    },
+    {
+      name: "Sneha Joshi",
+      email: "sneha.joshi@gehu.edu",
+      enrollment: "EN010",
+      branch: "Mechanical Engineering",
+      password: studentPassword,
+      lastLogin: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+      createdAt: new Date(Date.now() - 150 * 24 * 60 * 60 * 1000)
+    }
+  ];
+
+  let studentsCreated = 0;
+  for (const studentData of demoStudents) {
+    const existingStudent = await Student.findOne({ email: studentData.email });
+    if (!existingStudent) {
+      await Student.create(studentData);
+      studentsCreated++;
+    }
+  }
+  
+  if (studentsCreated > 0) {
+    console.log(`✅ Created ${studentsCreated} demo students`);
   } else {
-    console.log("⏭️ Demo student already exists");
+    console.log("⏭️ Demo students already exist");
   }
 
   // Create achievements (only if they don't exist)
