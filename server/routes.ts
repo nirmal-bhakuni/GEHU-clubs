@@ -289,7 +289,16 @@ export async function registerRoutes(app: Express): Promise<void> {
         events = events.filter(e => e.category === category);
       }
 
-      res.json(events);
+      // Ensure all events have an id field
+      const eventsWithId = events.map(e => {
+        const eventObj = e.toObject ? e.toObject() : e;
+        return {
+          ...eventObj,
+          id: eventObj.id || eventObj._id?.toString() // Use id if present, fallback to _id
+        };
+      });
+
+      res.json(eventsWithId);
     } catch {
       res.status(500).json({ error: "Failed to fetch events" });
     }

@@ -52,7 +52,13 @@ export const storage = {
   },
 
   async getEvent(id: string) {
-    return await Event.findOne({ id });
+    // Try finding by custom id field first, then by MongoDB _id
+    let event = await Event.findOne({ id });
+    if (!event) {
+      // Try finding by MongoDB _id if custom id doesn't match
+      event = await Event.findById(id);
+    }
+    return event;
   },
 
   async getEventsByClub(clubId: string) {

@@ -460,5 +460,49 @@ export async function seedDatabase() {
     }
   }
 
+  // Create event registrations for analytics (only if they don't exist)
+  const { EventRegistration } = await import("./models/EventRegistration.js");
+  
+  const allEvents = await Event.find({});
+  const allStudents = await Student.find({}).limit(10);
+  
+  if (allEvents.length > 0 && allStudents.length > 0) {
+    const existingRegistrations = await EventRegistration.countDocuments();
+    
+    if (existingRegistrations === 0) {
+      const registrationsToCreate = [];
+      
+      // For each event, create random registrations from students
+      for (const event of allEvents) {
+        // Randomly register 5-15 students per event
+        const numRegistrations = Math.floor(Math.random() * 11) + 5;
+        const shuffledStudents = [...allStudents].sort(() => Math.random() - 0.5);
+        
+        for (let i = 0; i < Math.min(numRegistrations, allStudents.length); i++) {
+          const student = shuffledStudents[i];
+          // 70% chance of attending
+          const attended = Math.random() > 0.3;
+          
+          registrationsToCreate.push({
+            eventId: event.id,
+            studentEnrollment: student.enrollment,
+            studentName: student.name,
+            studentEmail: student.email,
+            status: "confirmed",
+            attended: attended,
+            registeredAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+          });
+        }
+      }
+      
+      if (registrationsToCreate.length > 0) {
+        await EventRegistration.insertMany(registrationsToCreate);
+        console.log(`✅ Created ${registrationsToCreate.length} event registrations for analytics`);
+      }
+    } else {
+      console.log("⏭️ Event registrations already exist");
+    }
+  }
+
   console.log("✅ Database seeding completed successfully!");
 }
