@@ -308,23 +308,38 @@ export async function registerRoutes(app: Express): Promise<void> {
     try {
       const event = await storage.getEvent(req.params.id);
       if (!event) return res.status(404).json({ error: "Event not found" });
-      res.json(event);
-    } catch {
+      
+      // Ensure the event object includes an id field
+      const eventObj = event.toObject ? event.toObject() : event;
+      const responseEvent = {
+        ...eventObj,
+        id: eventObj.id || eventObj._id?.toString()
+      };
+      
+      res.json(responseEvent);
+    } catch (error) {
+      console.error("Error fetching event:", error);
       res.status(500).json({ error: "Failed to fetch event" });
     }
   });
 
-  app.post("/api/events", requireClubOwnership, upload.single("image"), async (req: Request, res: Response) => {
+  app.post("/api/events", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
     try {
-      const admin = (req as any).admin;
+      if (!req.session.adminId) return res.status(401).json({ error: "Unauthorized" });
+      
+      const admin = await storage.getAdmin(req.session.adminId);
       if (!admin) return res.status(401).json({ error: "Admin not found" });
 
-      const club = await storage.getClub(admin.clubId!);
+      // If club admin, use their clubId. If university admin, use the provided clubId from request
+      const clubId = admin.clubId || req.body.clubId;
+      if (!clubId) return res.status(400).json({ error: "Club ID is required" });
+
+      const club = await storage.getClub(clubId);
       if (!club) return res.status(400).json({ error: "Club not found" });
 
       const eventData = {
         ...req.body,
-        clubId: admin.clubId,
+        clubId: clubId,
         clubName: club.name,
         imageUrl: req.file ? `/uploads/${req.file.filename}` : null
       };
@@ -333,7 +348,8 @@ export async function registerRoutes(app: Express): Promise<void> {
       const event = await storage.createEvent(validated);
 
       res.status(201).json(event);
-    } catch {
+    } catch (error) {
+      console.error("Error creating event:", error);
       res.status(400).json({ error: "Invalid event data" });
     }
   });
