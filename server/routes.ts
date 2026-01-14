@@ -1,7 +1,7 @@
+/// <reference types="express" />
+
 import type { Request, Response, NextFunction } from "express";
 import express from "express";
-// Import to make Express namespace available (needed for Express.Multer.File)
-import {} from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
