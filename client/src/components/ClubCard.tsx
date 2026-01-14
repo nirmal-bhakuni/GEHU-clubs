@@ -159,7 +159,13 @@ export default function ClubCard({
                 group-hover:ring-primary/40 group-hover:scale-110 group/logo:hover:scale-110
                 group-hover:drop-shadow-lg
               `} data-testid={`avatar-club-${id}`}>
-                <AvatarImage src={logoUrl} alt={name} />
+                <AvatarImage 
+                  src={logoUrl || "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&h=200&fit=crop"} 
+                  alt={name}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
                 <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground text-xl font-semibold">
                   {initials}
                 </AvatarFallback>

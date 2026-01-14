@@ -186,9 +186,12 @@ export default function EventDetail() {
         <div className="bg-card border border-card-border rounded-lg overflow-hidden mb-8 mt-6">
           <div className="relative aspect-[16/9] overflow-hidden">
             <img
-              src={event.imageUrl || "/api/placeholder/event.jpg"}
+              src={event.imageUrl || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1200&h=675&fit=crop"}
               alt={event.title}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=1200&h=675&fit=crop";
+              }}
             />
             <Badge variant="default" className="absolute top-4 left-4">
               {event.category}

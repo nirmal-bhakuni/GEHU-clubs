@@ -37,9 +37,12 @@ export default function EventCard({
     `} data-testid={`card-event-${id}`}>
       <div className="relative aspect-[16/10] overflow-hidden">
         <img
-          src={imageUrl}
+          src={imageUrl || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=500&fit=crop"}
           alt={title}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=800&h=500&fit=crop";
+          }}
         />
         {/* Overlay gradient on hover */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300"></div>
