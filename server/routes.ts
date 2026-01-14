@@ -96,6 +96,10 @@ async function requireClubOwnership(req: Request, res: Response, next: NextFunct
 export async function registerRoutes(app: ReturnType<typeof express>): Promise<void> {
   app.use("/uploads", express.static(uploadsDir));
 
+  // Serve static files from the client build
+  const distPath = path.join(process.cwd(), "dist");
+  app.use(express.static(distPath));
+
   // General file upload endpoint
   app.post("/api/upload", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
     try {
@@ -1910,5 +1914,16 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   app.use("/api/clubs/:clubId/join", (req: Request, res: Response, next: NextFunction) => {
     console.log("Catch-all hit for join route:", req.method, req.path, req.params);
     next();
+  });
+
+  // Fallback route for SPA - serve index.html for all non-API routes
+  app.get("*", (_req: Request, res: Response) => {
+    const indexPath = path.join(process.cwd(), "dist", "index.html");
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error("Error sending index.html:", err);
+        res.status(404).json({ error: "Not found" });
+      }
+    });
   });
 }
