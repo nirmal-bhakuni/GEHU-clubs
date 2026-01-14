@@ -67,7 +67,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     app.get("/test", (req: Request, res: Response) => res.json({ message: "Server is working", timestamp: new Date().toISOString() }));
 
     const port = parseInt(process.env.PORT || "12346", 10);
-    const host = "127.0.0.1";
+    const host = process.env.HOST || "0.0.0.0";
 
     try {
       const server = app.listen(port, host, () => {
