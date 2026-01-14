@@ -425,8 +425,30 @@ export default function Dashboard() {
   });
 
   const createClubMutation = useMutation({
-    mutationFn: async (clubData: { name: string; description: string; category: string }) => {
-      const res = await apiRequest("POST", "/api/clubs", clubData);
+    mutationFn: async ({
+      clubData,
+      logoFile,
+    }: {
+      clubData: { name: string; description: string; category: string };
+      logoFile?: File | null;
+    }) => {
+      let logoUrl: string | undefined;
+
+      if (logoFile) {
+        const formData = new FormData();
+        formData.append("file", logoFile);
+        formData.append("type", "club-logo");
+
+        const uploadRes = await apiRequest("POST", "/api/upload", formData);
+        const uploadJson = await uploadRes.json();
+        logoUrl = uploadJson.url;
+      }
+
+      const res = await apiRequest("POST", "/api/clubs", {
+        ...clubData,
+        ...(logoUrl ? { logoUrl } : {}),
+      });
+
       return res.json();
     },
     onSuccess: () => {
@@ -437,6 +459,8 @@ export default function Dashboard() {
       });
       setShowCreateClub(false);
       setClubForm({ name: "", description: "", category: "" });
+      setClubLogoFile(null);
+      setClubLogoPreview(null);
     },
     onError: () => {
       toast({
@@ -448,8 +472,28 @@ export default function Dashboard() {
   });
 
   const updateClubMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Club> }) => {
-      const res = await apiRequest("PATCH", `/api/clubs/${id}`, data);
+    mutationFn: async ({
+      id,
+      data,
+      logoFile,
+    }: {
+      id: string;
+      data: Partial<Club>;
+      logoFile?: File | null;
+    }) => {
+      let nextData = { ...data };
+
+      if (logoFile) {
+        const formData = new FormData();
+        formData.append("file", logoFile);
+        formData.append("type", "club-logo");
+
+        const uploadRes = await apiRequest("POST", "/api/upload", formData);
+        const uploadJson = await uploadRes.json();
+        nextData = { ...nextData, logoUrl: uploadJson.url };
+      }
+
+      const res = await apiRequest("PATCH", `/api/clubs/${id}`, nextData);
       return res.json();
     },
     onSuccess: () => {
@@ -460,6 +504,8 @@ export default function Dashboard() {
       });
       setEditingClub(null);
       setClubForm({ name: "", description: "", category: "" });
+      setClubLogoFile(null);
+      setClubLogoPreview(null);
     },
     onError: () => {
       toast({
@@ -883,9 +929,13 @@ export default function Dashboard() {
                       updateClubMutation.mutate({
                         id: editingClub.id,
                         data: clubForm,
+                        logoFile: clubLogoFile,
                       });
                     } else {
-                      createClubMutation.mutate(clubForm);
+                      createClubMutation.mutate({
+                        clubData: clubForm,
+                        logoFile: clubLogoFile,
+                      });
                     }
                   }}
                   className="space-y-4"
