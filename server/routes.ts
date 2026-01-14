@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
-import express, { type Express } from "express";
+import express from "express";
+// Import to make Express namespace available (needed for Express.Multer.File)
+import {} from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
@@ -72,7 +74,7 @@ async function requireClubOwnership(req: Request, res: Response, next: NextFunct
   }
 }
 
-export async function registerRoutes(app: Express): Promise<void> {
+export async function registerRoutes(app: ReturnType<typeof express>): Promise<void> {
   app.use("/uploads", express.static(uploadsDir));
 
   // General file upload endpoint
