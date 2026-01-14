@@ -7,6 +7,7 @@ import multer from "multer";
 import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared/schema";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 import { Student } from "./models/Student";
 import { Admin } from "./models/Admin";
@@ -19,7 +20,10 @@ import { Club } from "./models/Club";
 import { Message } from "./models/Message";
 import { Announcement } from "./models/Announcement";
 
-const uploadsDir = path.join(process.cwd(), "uploads");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const uploadsDir = path.join(__dirname, "..", "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -97,7 +101,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   app.use("/uploads", express.static(uploadsDir));
 
   // Serve static files from the client build
-  const distPath = path.join(process.cwd(), "dist");
+  const distPath = path.join(__dirname, "..", "dist");
   app.use(express.static(distPath));
 
   // General file upload endpoint
@@ -1918,7 +1922,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   // Fallback route for SPA - serve index.html for all non-API routes
   app.get("*", (_req: Request, res: Response) => {
-    const indexPath = path.join(process.cwd(), "dist", "index.html");
+    const indexPath = path.join(__dirname, "..", "dist", "index.html");
     res.sendFile(indexPath, (err) => {
       if (err) {
         console.error("Error sending index.html:", err);
