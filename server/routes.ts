@@ -19,7 +19,7 @@ import { Club } from "./models/Club";
 import { Message } from "./models/Message";
 import { Announcement } from "./models/Announcement";
 
-const uploadsDir = path.join(process.cwd(), "uploads");
+const uploadsDir = path.join(process.cwd(), "..", "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -97,7 +97,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   app.use("/uploads", express.static(uploadsDir));
 
   // Serve static files from the client build
-  const distPath = path.join(process.cwd(), "dist");
+  const distPath = path.join(process.cwd(), "..", "dist");
   app.use(express.static(distPath));
 
   // General file upload endpoint
@@ -1918,7 +1918,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   // Fallback route for SPA - serve index.html for all non-API routes
   app.get("*", (_req: Request, res: Response) => {
-    const indexPath = path.join(process.cwd(), "dist", "index.html");
+    const indexPath = path.join(process.cwd(), "..", "dist", "index.html");
     res.sendFile(indexPath, (err) => {
       if (err) {
         console.error("Error sending index.html:", err);
