@@ -33,8 +33,8 @@ export function useStudentAuth() {
           // Store in localStorage for offline functionality
           localStorage.setItem("currentStudent", studentData.enrollment);
           return studentData;
-        } else if (res.status === 401) {
-          // Not authenticated - clear localStorage
+        } else if (res.status === 401 || res.status === 403) {
+          // Not authenticated or account disabled - clear localStorage
           localStorage.removeItem("currentStudent");
           return null;
         }

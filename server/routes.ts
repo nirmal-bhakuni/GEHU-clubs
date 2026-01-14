@@ -43,6 +43,27 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Middleware to check if student is authenticated and account is not disabled
+async function requireStudentAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+  
+  try {
+    const student = await Student.findById(req.session.studentId);
+    if (!student) return res.status(401).json({ error: "Student not found" });
+    
+    if (student.isDisabled) {
+      // Clear the session for disabled accounts
+      req.session.destroy(() => {});
+      return res.status(403).json({ error: "Account is disabled. Please contact administrator." });
+    }
+    
+    next();
+  } catch (error) {
+    console.error("Student auth check error:", error);
+    res.status(500).json({ error: "Authorization check failed" });
+  }
+}
+
 // Middleware to check if admin owns the club they're trying to access
 async function requireClubOwnership(req: Request, res: Response, next: NextFunction) {
   if (!req.session.adminId) return res.status(401).json({ error: "Unauthorized" });
@@ -543,8 +564,7 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Student: get announcements with read flag
-  app.get("/api/student/announcements", async (req: Request, res: Response) => {
-    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+  app.get("/api/student/announcements", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });
@@ -557,8 +577,7 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Student: mark announcement as read
-  app.post("/api/student/announcements/:id/read", async (req: Request, res: Response) => {
-    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
+  app.post("/api/student/announcements/:id/read", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });
@@ -615,9 +634,7 @@ export async function registerRoutes(app: Express): Promise<void> {
     });
   });
 
-  app.get("/api/student/me", async (req: Request, res: Response) => {
-    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
-
+  app.get("/api/student/me", requireStudentAuth, async (req: Request, res: Response) => {
     const student = await Student.findById(req.session.studentId);
     if (!student) return res.status(404).json({ error: "Student not found" });
 
@@ -632,9 +649,8 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Student: Upload profile picture
-  app.post("/api/student/profile-picture", upload.single("profilePicture"), async (req: Request, res: Response) => {
+  app.post("/api/student/profile-picture", requireStudentAuth, upload.single("profilePicture"), async (req: Request, res: Response) => {
     try {
-      if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
       const imageUrl = `/uploads/${req.file.filename}`;
@@ -656,9 +672,8 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Student: Get certificates
-  app.get("/api/student/certificates", async (req: Request, res: Response) => {
+  app.get("/api/student/certificates", requireStudentAuth, async (req: Request, res: Response) => {
     try {
-      if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
 
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });
@@ -951,9 +966,7 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.get("/api/student/registrations", async (req: Request, res: Response) => {
-    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
-
+  app.get("/api/student/registrations", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });
@@ -1103,16 +1116,11 @@ export async function registerRoutes(app: Express): Promise<void> {
 
   // Club Membership Routes
   console.log("Registering club join route: /api/clubs/:clubId/join");
-  app.post("/api/clubs/:clubId/join", async (req: Request, res: Response) => {
+  app.post("/api/clubs/:clubId/join", requireStudentAuth, async (req: Request, res: Response) => {
     console.log("Join route hit:", req.path, req.params, req.body, req.method, req.headers['content-type']);
     console.log("ClubId from params:", req.params.clubId);
 
     try {
-      // Check if student is authenticated
-      if (!req.session.studentId) {
-        return res.status(401).json({ error: "Not authenticated" });
-      }
-
       const clubId = req.params.clubId;
       const { reason } = req.body;
 
@@ -1168,9 +1176,7 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.get("/api/student/club-memberships", async (req: Request, res: Response) => {
-    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
-
+  app.get("/api/student/club-memberships", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });
@@ -1757,9 +1763,7 @@ export async function registerRoutes(app: Express): Promise<void> {
   });
 
   // Student Points and Rank
-  app.get("/api/student/points", async (req: Request, res: Response) => {
-    if (!req.session.studentId) return res.status(401).json({ error: "Not authenticated" });
-
+  app.get("/api/student/points", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });

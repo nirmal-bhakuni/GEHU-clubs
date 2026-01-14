@@ -74,7 +74,31 @@ export default function StudentLogin() {
         }, 500);
       }
     } catch (error: any) {
-      // Fallback to static authentication when API is unavailable
+      const message = error?.message || "";
+      const statusCode = parseInt(message.split(":")[0], 10);
+
+      // If the server says disabled or unauthorized, do not fall back to offline login
+      if (statusCode === 403) {
+        toast({
+          title: "Account disabled",
+          description: "Please contact the administrator to re-enable your account.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      if (statusCode === 401) {
+        toast({
+          title: "Login failed",
+          description: "Invalid enrollment or password.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Fallback to static authentication only when the network/API is unavailable
       const staticStudents = {
         "EN123456789": {
           id: "demo-student-1",
@@ -99,8 +123,6 @@ export default function StudentLogin() {
         };
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], studentData);
-        // Store student session for offline functionality
-       // localStorage.setItem("currentStudent", enrollment);
         toast({
           title: "Login successful",
           description: "Welcome back! (Offline mode)",
@@ -126,8 +148,6 @@ export default function StudentLogin() {
         const studentData = staticStudents[enrollment as keyof typeof staticStudents];
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], studentData);
-        // Store student session for offline functionality
-       // localStorage.setItem("currentStudent", enrollment);
         toast({
           title: "Login successful",
           description: "Welcome back! (Offline mode)",
@@ -150,7 +170,7 @@ export default function StudentLogin() {
 
       toast({
         title: "Login failed",
-        description: error.message || "Invalid credentials",
+        description: message || "Invalid credentials",
         variant: "destructive",
       });
     } finally {
