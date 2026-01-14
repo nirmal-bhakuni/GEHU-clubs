@@ -336,7 +336,7 @@ export default function Dashboard() {
     },
     onSuccess: (data) => {
       // Update the students list with the new status
-      queryClient.setQueryData(["/api/admin/students"], (oldData: any[]) => {
+      queryClient.setQueryData(["api", "admin", "students"], (oldData: any[]) => {
         return oldData?.map(student =>
           student.id === data.student.id ? { ...student, isDisabled: data.student.isDisabled } : student
         );
@@ -506,10 +506,11 @@ export default function Dashboard() {
       setEventImageFile(null);
       setEventImagePreview(null);
     },
-    onError: () => {
+    onError: (error: any) => {
+      const errorMessage = error?.message || "Failed to create event.";
       toast({
         title: "Error",
-        description: "Failed to create event.",
+        description: errorMessage,
         variant: "destructive",
       });
     },

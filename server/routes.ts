@@ -323,7 +323,7 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.post("/api/events", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
+  app.post("/api/events", requireAuth, upload.single("imageFile"), async (req: Request, res: Response) => {
     try {
       if (!req.session.adminId) return res.status(401).json({ error: "Unauthorized" });
       
@@ -350,7 +350,11 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.status(201).json(event);
     } catch (error) {
       console.error("Error creating event:", error);
-      res.status(400).json({ error: "Invalid event data" });
+      if (error instanceof Error) {
+        res.status(400).json({ error: error.message });
+      } else {
+        res.status(400).json({ error: "Invalid event data" });
+      }
     }
   });
 
@@ -777,6 +781,37 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.status(500).json({ error: "Failed to fetch students" });
     }
   });
+
+  // Admin: toggle student account status (enable/disable)
+  app.patch("/api/admin/students/:id/toggle-status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const student = await Student.findById(id);
+      
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      // Toggle the isDisabled status
+      student.isDisabled = !student.isDisabled;
+      await student.save();
+
+      res.json({
+        success: true,
+        student: {
+          id: student._id.toString(),
+          name: student.name,
+          email: student.email,
+          enrollment: student.enrollment,
+          isDisabled: student.isDisabled
+        }
+      });
+    } catch (error) {
+      console.error("Failed to toggle student status:", error);
+      res.status(500).json({ error: "Failed to toggle student status" });
+    }
+  });
+
   // Admin: get student memberships by enrollment
   app.get("/api/admin/student-memberships/:enrollment", requireAuth, async (req: Request, res: Response) => {
     try {
