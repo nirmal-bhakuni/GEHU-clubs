@@ -354,14 +354,16 @@ export async function registerRoutes(app: Express): Promise<void> {
     }
   });
 
-  app.patch("/api/events/:id", requireClubOwnership, upload.single("image"), async (req: Request, res: Response) => {
+  app.patch("/api/events/:id", requireAuth, upload.single("imageFile"), async (req: Request, res: Response) => {
     try {
       const oldEvent = await storage.getEvent(req.params.id);
       if (!oldEvent) return res.status(404).json({ error: "Event not found" });
 
-      const admin = (req as any).admin;
+      const admin = await storage.getAdmin(req.session.adminId!);
       if (!admin) return res.status(401).json({ error: "Admin not found" });
-      if (oldEvent.clubId !== admin.clubId) {
+      
+      // Allow university admins (clubId: null) to edit any event, or club admins to edit their own
+      if (admin.clubId && oldEvent.clubId !== admin.clubId) {
         return res.status(403).json({ error: "Not authorized" });
       }
 
@@ -386,7 +388,9 @@ export async function registerRoutes(app: Express): Promise<void> {
 
       const admin = await storage.getAdmin(req.session.adminId!);
       if (!admin) return res.status(401).json({ error: "Admin not found" });
-      if (oldEvent.clubId !== admin.clubId) {
+      
+      // Allow university admins (clubId: null) to delete any event, or club admins to delete their own
+      if (admin.clubId && oldEvent.clubId !== admin.clubId) {
         return res.status(403).json({ error: "Not authorized" });
       }
 

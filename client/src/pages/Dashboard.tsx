@@ -189,50 +189,30 @@ export default function Dashboard() {
   const [targetForAnnouncement, setTargetForAnnouncement] = useState<string>("all");
 
   const { data: events = [] } = useQuery<Event[]>({
-    queryKey: ["/api/events"],
+    queryKey: ["api", "events"],
     queryFn: async () => {
-      // Try API first, fallback to static data
-      try {
-        const res = await apiRequest("GET", "/api/events");
-        return res.json();
-      } catch (error) {
-        return staticEvents;
-      }
+      const res = await apiRequest("GET", "/api/events");
+      return res.json();
     },
     enabled: isAuthenticated,
-    initialData: staticEvents,
-    staleTime: Infinity,
   });
 
   const { data: clubs = [] } = useQuery<Club[]>({
-    queryKey: ["/api/clubs"],
+    queryKey: ["api", "clubs"],
     queryFn: async () => {
-      // Try API first, fallback to static data
-      try {
-        const res = await apiRequest("GET", "/api/clubs");
-        return res.json();
-      } catch (error) {
-        return staticClubs;
-      }
+      const res = await apiRequest("GET", "/api/clubs");
+      return res.json();
     },
     enabled: isAuthenticated,
-    initialData: staticClubs,
-    staleTime: Infinity,
   });
 
   const { data: students = [], error: studentsError, isLoading: studentsLoading } = useQuery<any[]>({
-    queryKey: ["/api/admin/students"],
+    queryKey: ["api", "admin", "students"],
     queryFn: async () => {
-      try {
-        const res = await apiRequest("GET", "/api/admin/students");
-        return res.json();
-      } catch (error) {
-        console.error("Error fetching students:", error);
-        return [];
-      }
+      const res = await apiRequest("GET", "/api/admin/students");
+      return res.json();
     },
     enabled: isAuthenticated,
-    retry: false,
   });
 
   const { data: studentCount = { count: 0 } } = useQuery<{ count: number }>({
@@ -516,13 +496,15 @@ export default function Dashboard() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["api", "events"] });
       toast({
         title: "Event created",
         description: "The event has been created successfully.",
       });
       setShowCreateEvent(false);
       setEventForm({ title: "", description: "", date: "", time: "", location: "", category: "", clubId: "" });
+      setEventImageFile(null);
+      setEventImagePreview(null);
     },
     onError: () => {
       toast({
@@ -534,18 +516,20 @@ export default function Dashboard() {
   });
 
   const updateEventMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Event> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const res = await apiRequest("PATCH", `/api/events/${id}`, data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["api", "events"] });
       toast({
         title: "Event updated",
         description: "The event has been updated successfully.",
       });
       setEditingEvent(null);
       setEventForm({ title: "", description: "", date: "", time: "", location: "", category: "", clubId: "" });
+      setEventImageFile(null);
+      setEventImagePreview(null);
     },
     onError: () => {
       toast({
@@ -561,7 +545,7 @@ export default function Dashboard() {
       await apiRequest("DELETE", `/api/events/${eventId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/events"] });
+      queryClient.invalidateQueries({ queryKey: ["api", "events"] });
       toast({
         title: "Event deleted",
         description: "The event has been deleted successfully.",
@@ -1077,17 +1061,34 @@ export default function Dashboard() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    const formData = new FormData();
-                    Object.entries(eventForm).forEach(([key, value]) => {
-                      if (value) formData.append(key, value);
-                    });
 
                     if (editingEvent) {
-                      updateEventMutation.mutate({
-                        id: editingEvent.id,
-                        data: eventForm,
-                      });
+                      // For edit: use FormData if new image, otherwise JSON
+                      if (eventImageFile) {
+                        const formData = new FormData();
+                        Object.entries(eventForm).forEach(([key, value]) => {
+                          if (value) formData.append(key, value);
+                        });
+                        formData.append("imageFile", eventImageFile);
+                        updateEventMutation.mutate({
+                          id: editingEvent.id,
+                          data: formData,
+                        });
+                      } else {
+                        updateEventMutation.mutate({
+                          id: editingEvent.id,
+                          data: eventForm,
+                        });
+                      }
                     } else {
+                      // For create: always use FormData
+                      const formData = new FormData();
+                      Object.entries(eventForm).forEach(([key, value]) => {
+                        if (value) formData.append(key, value);
+                      });
+                      if (eventImageFile) {
+                        formData.append("imageFile", eventImageFile);
+                      }
                       createEventMutation.mutate(formData);
                     }
                   }}
