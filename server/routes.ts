@@ -1,4 +1,5 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Request, Response } from "express";
+import type { Express, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import express from "express";
@@ -106,10 +107,15 @@ export async function registerRoutes(app: Express): Promise<void> {
       await Admin.findOneAndUpdate({ id: admin.id }, { lastLogin: new Date() });
 
       req.session.adminId = admin.id;
-
-      res.json({
-        success: true,
-        admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Login failed" });
+        }
+        res.json({
+          success: true,
+          admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+        });
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -136,10 +142,15 @@ export async function registerRoutes(app: Express): Promise<void> {
       await Admin.findOneAndUpdate({ id: admin.id }, { lastLogin: new Date() });
 
       req.session.adminId = admin.id;
-
-      res.json({
-        success: true,
-        admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Login failed" });
+        }
+        res.json({
+          success: true,
+          admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+        });
       });
     } catch (error) {
       console.error("Login error:", error);
