@@ -58,6 +58,10 @@ export function useAuth() {
             localStorage.setItem("adminCache", JSON.stringify(data));
           }
           return data;
+        } else if (res.status === 401) {
+          // Clear invalid cache when we get 401
+          localStorage.removeItem("adminCache");
+          return null;
         }
       } catch (error) {
         console.error("Auth error:", error);

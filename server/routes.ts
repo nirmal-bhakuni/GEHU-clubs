@@ -1,7 +1,7 @@
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import express from "express";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared/schema";
@@ -25,10 +25,10 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 const storage_multer = multer.diskStorage({
-  destination: function (_req: Request, _file: Express.Multer.File, cb: any) {
+  destination: function (_req: Request, _file: any, cb: any) {
     cb(null, uploadsDir);
   },
-  filename: function (_req: Request, file: Express.Multer.File, cb: any) {
+  filename: function (_req: Request, file: any, cb: any) {
     cb(null, Date.now() + "-" + Math.round(Math.random() * 1e9) + "-" + file.originalname);
   }
 });
@@ -93,7 +93,7 @@ async function requireClubOwnership(req: Request, res: Response, next: NextFunct
   }
 }
 
-export async function registerRoutes(app: Express): Promise<void> {
+export async function registerRoutes(app: ReturnType<typeof express>): Promise<void> {
   app.use("/uploads", express.static(uploadsDir));
 
   // General file upload endpoint
@@ -127,10 +127,15 @@ export async function registerRoutes(app: Express): Promise<void> {
       await Admin.findOneAndUpdate({ id: admin.id }, { lastLogin: new Date() });
 
       req.session.adminId = admin.id;
-
-      res.json({
-        success: true,
-        admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Login failed" });
+        }
+        res.json({
+          success: true,
+          admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+        });
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -157,10 +162,15 @@ export async function registerRoutes(app: Express): Promise<void> {
       await Admin.findOneAndUpdate({ id: admin.id }, { lastLogin: new Date() });
 
       req.session.adminId = admin.id;
-
-      res.json({
-        success: true,
-        admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Login failed" });
+        }
+        res.json({
+          success: true,
+          admin: { id: admin.id, username: admin.username, clubId: admin.clubId }
+        });
       });
     } catch (error) {
       console.error("Login error:", error);
