@@ -22,8 +22,8 @@ export default function Navbar({ onToggleSidebar, sidebarOpen = false }: NavbarP
     { path: "/clubs", label: "Clubs" },
     { path: "/events", label: "Events" },
     {
-      path: isAuthenticated && admin?.clubId ? "/club-admin" : "/dashboard",
-      label: isAuthenticated && admin?.clubId ? "Club Admin" : "Dashboard"
+      path: "/dashboard",
+      label: "Dashboard"
     },
   ];
 
