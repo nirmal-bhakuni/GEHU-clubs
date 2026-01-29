@@ -11,6 +11,7 @@ import { registerRoutes } from "./routes";
 import { connectDB } from "./config/db";
 import { seedDatabase } from "./seed";
 import { log } from "./vite";
+import { startUpcomingEventReminderScheduler } from "./services/emailService";
 
 const app = express();
 
@@ -65,6 +66,8 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     // Temporarily skip route registration to test
     await registerRoutes(app);
     app.get("/test", (req: Request, res: Response) => res.json({ message: "Server is working", timestamp: new Date().toISOString() }));
+
+    startUpcomingEventReminderScheduler();
 
     const port = parseInt(process.env.PORT || "12346", 10);
     const host = process.env.HOST || "0.0.0.0";

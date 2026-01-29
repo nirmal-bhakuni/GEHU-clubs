@@ -18,6 +18,8 @@ import StudentPoints from "./models/StudentPoints";
 import { Club } from "./models/Club";
 import { Message } from "./models/Message";
 import { Announcement } from "./models/Announcement";
+import { Event } from "./models/Event";
+import { notifyAnnouncement, notifyNewEvent } from "./services/emailService";
 
 const uploadsDir = path.join(process.cwd(), "..", "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -383,6 +385,14 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const event = await storage.createEvent(validated);
 
       res.status(201).json(event);
+
+      void notifyNewEvent(event)
+        .then(async () => {
+          await Event.findOneAndUpdate({ id: event.id }, { createdEmailSentAt: new Date() });
+        })
+        .catch((error) => {
+          console.error("Failed to send new event emails:", error);
+        });
     } catch (error) {
       console.error("Error creating event:", error);
       if (error instanceof Error) {
@@ -474,6 +484,9 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const exists = await Student.findOne({ email });
       if (exists) return res.status(400).json({ error: "Email already exists" });
 
+      const enrollmentExists = await Student.findOne({ enrollment });
+      if (enrollmentExists) return res.status(400).json({ error: "Student ID already registered. Please login instead or contact the administrator." });
+
       const hashed = await bcrypt.hash(password, 10);
 
       const student = await Student.create({
@@ -520,6 +533,12 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       });
 
       res.status(201).json({ success: true, announcement });
+
+      if (admin && !admin.clubId) {
+        void notifyAnnouncement(announcement).catch((error) => {
+          console.error("Failed to send announcement emails:", error);
+        });
+      }
     } catch (error) {
       console.error("Failed to create announcement:", error);
       res.status(500).json({ error: "Failed to create announcement" });
@@ -1909,6 +1928,43 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       res.status(500).json({ error: "Failed to fetch global points leaderboard" });
     }
   });
+
+  // Delete student endpoint
+  app.delete("/api/admin/students/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const student = await Student.findByIdAndDelete(id);
+      
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      
+      res.json({ success: true, message: `Student ${student.name} has been deleted`, studentId: id });
+    } catch (error: any) {
+      console.error("Error deleting student:", error);
+      res.status(500).json({ error: "Failed to delete student" });
+    }
+  });
+
+  // Test email endpoint (development only)
+  if (process.env.NODE_ENV !== "production") {
+    app.post("/api/test/send-email", requireAuth, async (req: Request, res: Response) => {
+      try {
+        const { sendEmail } = await import("./services/emailService");
+        const { to, subject, text, html } = req.body;
+
+        if (!to || !subject || !text) {
+          return res.status(400).json({ error: "Missing required fields: to, subject, text" });
+        }
+
+        await sendEmail({ to, subject, text, html });
+        res.json({ success: true, message: "Email sent! Check terminal for preview URL." });
+      } catch (error: any) {
+        console.error("Test email failed:", error);
+        res.status(500).json({ error: error.message || "Failed to send test email" });
+      }
+    });
+  }
 
   // Catch-all route for debugging
   app.use("/api/clubs/:clubId/join", (req: Request, res: Response, next: NextFunction) => {

@@ -11,6 +11,8 @@ const eventSchema = new mongoose.Schema({
   clubId: String,
   clubName: String,
   imageUrl: String,
+  createdEmailSentAt: Date,
+  upcomingEmailSentAt: Date,
   createdAt: Date
 });
 

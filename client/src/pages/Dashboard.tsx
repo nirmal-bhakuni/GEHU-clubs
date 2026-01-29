@@ -27,7 +27,8 @@ import {
   KeyRound,
   Image,
   Upload,
-  X
+  X,
+  Search
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -187,6 +188,7 @@ export default function Dashboard() {
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [targetForAnnouncement, setTargetForAnnouncement] = useState<string>("all");
+  const [studentSearch, setStudentSearch] = useState("");
 
   const { data: events = [] } = useQuery<Event[]>({
     queryKey: ["api", "events"],
@@ -244,6 +246,15 @@ export default function Dashboard() {
     },
     enabled: !!selectedStudent?.enrollment && isStudentProfileOpen,
   });
+
+  const normalizedStudentSearch = studentSearch.trim().toLowerCase();
+  const filteredStudents = normalizedStudentSearch
+    ? students.filter((s) => {
+        const name = (s?.name || "").toLowerCase();
+        const enrollment = (s?.enrollment || "").toLowerCase();
+        return name.includes(normalizedStudentSearch) || enrollment.includes(normalizedStudentSearch);
+      })
+    : students;
 
   // Analytics data queries
   const { data: analyticsData } = useQuery<any>({
@@ -354,6 +365,34 @@ export default function Dashboard() {
       toast({
         title: "Error",
         description: "Failed to update student account status.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete student mutation
+  const deleteStudentMutation = useMutation({
+    mutationFn: async (studentId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/students/${studentId}`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      // Remove from list
+      queryClient.setQueryData(["api", "admin", "students"], (oldData: any[]) => {
+        return oldData?.filter(student => student.id !== data.studentId);
+      });
+      // Clear selected student
+      setSelectedStudent(null);
+      setIsStudentProfileOpen(false);
+      toast({
+        title: "Student Deleted",
+        description: data.message || "Student has been successfully deleted.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete student.",
         variant: "destructive",
       });
     },
@@ -1388,14 +1427,25 @@ export default function Dashboard() {
 
             {/* Students Section */}
             <div>
-              <h3 className="text-xl font-semibold mb-4">Students</h3>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+                <h3 className="text-xl font-semibold">Students</h3>
+                <div className="relative w-full md:max-w-xs">
+                  <Input
+                    placeholder="Search by name or student ID..."
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
               <div className="grid gap-4">
-                {students.length === 0 ? (
+                {filteredStudents.length === 0 ? (
                   <Card className="p-6">
                     <p className="text-muted-foreground text-center">No students found.</p>
                   </Card>
                 ) : (
-                  students.map((s) => (
+                  filteredStudents.map((s) => (
                     <Card key={s.id || s._id} className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
@@ -1430,6 +1480,18 @@ export default function Dashboard() {
                             disabled={toggleStudentStatusMutation.isPending}
                           >
                             {s.isDisabled ? "Enable" : "Disable"}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to permanently delete ${s.name}? This action cannot be undone.`)) {
+                                deleteStudentMutation.mutate(s.id);
+                              }
+                            }}
+                            disabled={deleteStudentMutation.isPending}
+                          >
+                            Delete
                           </Button>
                         </div>
                       </div>

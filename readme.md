@@ -144,6 +144,43 @@ MONGO_URI=your_mongodb_connection_string
 SESSION_SECRET=your_secure_random_secret
 ```
 
+### Email Notifications (Events + Announcements)
+The backend automatically sends emails to all active students when:
+- a new event is created
+- an upcoming event is approaching
+- a university admin posts an announcement
+
+**Development Mode (No SMTP Config):**
+- Automatically uses Ethereal fake SMTP
+- Preview URLs logged to console (check terminal output)
+- View emails at https://ethereal.email/messages
+
+**Production Mode:**
+Set one of the following SMTP configurations:
+
+**Option A: SMTP URL**
+```env
+SMTP_URL=smtp://USER:PASS@HOST:PORT
+```
+
+**Option B: SMTP Host settings**
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
+SMTP_SECURE=false
+SMTP_FROM=GEHU Clubs <noreply@gehu.ac.in>
+```
+
+Optional tuning:
+```env
+EVENT_REMINDER_DAYS=3
+EVENT_REMINDER_INTERVAL_HOURS=6
+EMAIL_BATCH_SIZE=50
+DISABLE_EMAIL_NOTIFICATIONS=false
+```
+
 ### Server Requirements
 - Node.js 18+
 - MongoDB database
