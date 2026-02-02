@@ -3018,30 +3018,6 @@ export default function ClubAdmin() {
                             <p className="text-sm font-medium mt-1">{admin?.username || "N/A"}</p>
                           </div>
                           <div>
-                            <Label className="text-sm font-medium text-muted-foreground">Full Name</Label>
-                            <p className="text-sm font-medium mt-1">
-                              {(admin as any)?.fullName || (
-                                <span className="text-xs text-amber-600 dark:text-amber-400">Not provided</span>
-                              )}
-                            </p>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-muted-foreground">Email</Label>
-                            <p className="text-sm font-medium mt-1">
-                              {(admin as any)?.email || (
-                                <span className="text-xs text-amber-600 dark:text-amber-400">Not provided</span>
-                              )}
-                            </p>
-                          </div>
-                          <div>
-                            <Label className="text-sm font-medium text-muted-foreground">Phone</Label>
-                            <p className="text-sm font-medium mt-1">
-                              {(admin as any)?.phone || (
-                                <span className="text-xs text-amber-600 dark:text-amber-400">Not provided</span>
-                              )}
-                            </p>
-                          </div>
-                          <div>
                             <Label className="text-sm font-medium text-muted-foreground">Club</Label>
                             <p className="text-sm font-medium mt-1">{displayClub?.name || "N/A"}</p>
                           </div>

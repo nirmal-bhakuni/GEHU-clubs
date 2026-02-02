@@ -359,7 +359,12 @@ export default function Dashboard() {
       return res.json();
     },
     enabled: !!selectedAdmin?.id && isAdminProfileOpen,
+    refetchOnMount: true,
+    staleTime: 0,
   });
+
+  // Get the club details from the clubs array
+  const selectedClubDetails = selectedAdmin ? clubs.find(c => c.id === selectedAdmin.id) : null;
 
   // Toggle student account status mutation
   const toggleStudentStatusMutation = useMutation({
@@ -1183,7 +1188,7 @@ export default function Dashboard() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="clubEmail">Email</Label>
+                      <Label htmlFor="clubEmail">Club Email</Label>
                       <Input
                         id="clubEmail"
                         type="email"
@@ -2637,6 +2642,41 @@ export default function Dashboard() {
           </DialogHeader>
           {selectedAdmin && adminDetails && (
             <div className="space-y-6">
+              {/* Club Information */}
+              <Card className="p-6 bg-blue-50 dark:bg-blue-950">
+                <h3 className="text-lg font-semibold mb-4">Club Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Club Name</Label>
+                    <p className="text-foreground font-semibold">{selectedClubDetails?.name || selectedAdmin.name}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Category</Label>
+                    <p className="text-foreground">{selectedClubDetails?.category || "N/A"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Members</Label>
+                    <p className="text-foreground">{selectedClubDetails?.memberCount || 0}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Faculty Assigned</Label>
+                    <p className="text-foreground">{selectedClubDetails?.facultyAssigned || "Not assigned"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Club Email</Label>
+                    <p className="text-foreground">{selectedClubDetails?.email || "Not provided"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Club Phone</Label>
+                    <p className="text-foreground">{selectedClubDetails?.phone || "Not provided"}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label className="text-sm font-medium">Description</Label>
+                    <p className="text-foreground text-sm">{selectedClubDetails?.description || "No description"}</p>
+                  </div>
+                </div>
+              </Card>
+
               {/* Basic Information */}
               <Card className="p-6">
                 <h3 className="text-lg font-semibold mb-4">Administrator Information</h3>
@@ -2644,18 +2684,6 @@ export default function Dashboard() {
                   <div>
                     <Label className="text-sm font-medium">Username</Label>
                     <p className="text-foreground">{adminDetails.username}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Full Name</Label>
-                    <p className="text-foreground">{adminDetails.fullName || "Not provided"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Email</Label>
-                    <p className="text-foreground">{adminDetails.email || "Not provided"}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Phone</Label>
-                    <p className="text-foreground">{adminDetails.phone || "Not provided"}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Club</Label>
