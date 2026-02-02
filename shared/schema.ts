@@ -17,9 +17,17 @@ export interface Club {
   name: string;
   description: string;
   category: string;
+  facultyAssigned?: string;
+  phone?: string;
+  email?: string;
+  eligibility?: string;
+  eligibilityYears?: string[];
   memberCount: number;
   logoUrl?: string;
   coverImageUrl?: string;
+  isFrozen?: boolean;
+  frozenAt?: Date;
+  frozenBy?: string;
   createdAt?: Date;
 }
 

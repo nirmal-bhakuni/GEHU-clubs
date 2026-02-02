@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, Image, Users, Settings, Edit, Bell, MapPin, UserCheck, CheckCircle, Clock, TrendingUp, Activity, Award, AlertCircle, CheckSquare, Mail, Download, UserPlus, Filter, Eye, Trash2, Crown, FileText, Upload, RefreshCw } from "lucide-react";
+import { Calendar, Image, Users, Settings, Edit, Bell, MapPin, UserCheck, CheckCircle, Clock, TrendingUp, Activity, Award, AlertCircle, CheckSquare, Mail, Download, UserPlus, Filter, Eye, Trash2, Crown, FileText, Upload, RefreshCw, User } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
@@ -127,7 +127,9 @@ export default function ClubAdmin() {
   const [memberSearch, setMemberSearch] = useState('');
   const [eventSearch, setEventSearch] = useState('');
   const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('all');
+  const [eventSort, setEventSort] = useState<'date-asc' | 'date-desc' | 'title-asc' | 'title-desc' | 'registrations-desc'>('date-desc');
   const [editingClub, setEditingClub] = useState(false);
+  const [editingAdminProfile, setEditingAdminProfile] = useState(false);
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -225,7 +227,6 @@ export default function ClubAdmin() {
       }
     },
     enabled: !!admin?.clubId && isAuthenticated && !authLoading,
-    initialData: staticClubs.find(c => c.id === admin?.clubId) || null,
     staleTime: 30000, // 30 seconds
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
@@ -244,7 +245,6 @@ export default function ClubAdmin() {
       }
     },
     enabled: !!admin?.clubId && isAuthenticated && !authLoading,
-    initialData: staticEvents.filter(e => e.clubId === admin?.clubId) || [],
     staleTime: 30000, // 30 seconds
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -474,6 +474,11 @@ export default function ClubAdmin() {
 
   const updateMembershipStatusMutation = useMutation({
     mutationFn: async ({ membershipId, status }: { membershipId: string; status: string }) => {
+      // Check if club is frozen
+      if (club?.isFrozen) {
+        throw new Error("Cannot update membership status - club is frozen");
+      }
+      
       // Check if this is a locally stored request
       if (membershipId.startsWith('pending-')) {
         // Update localStorage
@@ -846,6 +851,7 @@ export default function ClubAdmin() {
   const updateClubMutation = useMutation({
     mutationFn: async (data: { clubData: Partial<Club>; logoFile?: File }) => {
       if (!club?.id) throw new Error("No club ID");
+      if (club?.isFrozen) throw new Error("Cannot update club settings - club is frozen");
 
       if (data.logoFile) {
         // Upload logo first
@@ -880,6 +886,28 @@ export default function ClubAdmin() {
       toast({
         title: "Error",
         description: "Failed to update club.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateAdminProfileMutation = useMutation({
+    mutationFn: async (data: { fullName: string; email: string; phone: string }) => {
+      if (club?.isFrozen) throw new Error("Cannot update profile - club is frozen");
+      return await apiRequest("PATCH", "/api/admin/profile", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setEditingAdminProfile(false);
+      toast({
+        title: "Profile updated",
+        description: "Your profile has been updated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update profile.",
         variant: "destructive",
       });
     },
@@ -1039,6 +1067,21 @@ export default function ClubAdmin() {
             </div>
           )}
           <div className="container mx-auto px-4">
+        {/* Frozen Club Alert */}
+        {club?.isFrozen && (
+          <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-800 rounded-lg">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              <div>
+                <h3 className="font-semibold text-red-800 dark:text-red-200">Club Frozen</h3>
+                <p className="text-sm text-red-700 dark:text-red-300">
+                  This club has been frozen by university administration. You cannot create or modify events, approve memberships, or perform other operations until the club is unfrozen.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center space-x-4">
             {displayClub?.logoUrl && (
@@ -1175,9 +1218,11 @@ export default function ClubAdmin() {
             <h3 className="font-semibold mb-4">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-3">
               <Button
-                onClick={() => setCreatingEvent(true)}
+                onClick={() => !club?.isFrozen && setCreatingEvent(true)}
                 className="h-auto p-4 flex flex-col items-center gap-2 hover:bg-blue-50 hover:border-blue-200 transition-colors"
                 variant="outline"
+                disabled={club?.isFrozen}
+                title={club?.isFrozen ? "Cannot create events - club is frozen" : "Create a new event"}
               >
                 <Calendar className="w-6 h-6 text-blue-600" />
                 <span className="text-sm font-medium">Create Event</span>
@@ -1244,12 +1289,12 @@ export default function ClubAdmin() {
           </div>
         </Card>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-10 relative">
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="events">Events</TabsTrigger>
-            <TabsTrigger value="attendance">Attendance</TabsTrigger>
-            <TabsTrigger value="announcements" className="relative">
+        <Tabs value={activeTab} onValueChange={club?.isFrozen ? undefined : setActiveTab} className="space-y-6">
+          <TabsList className={`grid w-full grid-cols-10 relative transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
+            <TabsTrigger value="dashboard" disabled={club?.isFrozen}>Dashboard</TabsTrigger>
+            <TabsTrigger value="events" disabled={club?.isFrozen}>Events</TabsTrigger>
+            <TabsTrigger value="attendance" disabled={club?.isFrozen}>Attendance</TabsTrigger>
+            <TabsTrigger value="announcements" disabled={club?.isFrozen} className="relative">
               Announcements
               {unreadAnnouncements > 0 && (
                 <Badge className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full w-5 h-5 p-0 flex items-center justify-center text-xs">
@@ -1257,10 +1302,10 @@ export default function ClubAdmin() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="uploads">Uploads</TabsTrigger>
-            <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="leadership">Leadership</TabsTrigger>
-            <TabsTrigger value="messages" className="relative">
+            <TabsTrigger value="uploads" disabled={club?.isFrozen}>Uploads</TabsTrigger>
+            <TabsTrigger value="members" disabled={club?.isFrozen}>Members</TabsTrigger>
+            <TabsTrigger value="leadership" disabled={club?.isFrozen}>Leadership</TabsTrigger>
+            <TabsTrigger value="messages" disabled={club?.isFrozen} className="relative">
               Messages
               {unreadMessages > 0 && (
                 <Badge className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 rounded-full w-5 h-5 p-0 flex items-center justify-center text-xs">
@@ -1268,11 +1313,11 @@ export default function ClubAdmin() {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="community">Community</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="community" disabled={club?.isFrozen}>Community</TabsTrigger>
+            <TabsTrigger value="settings" disabled={club?.isFrozen}>Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dashboard" className="space-y-6">
+          <TabsContent value="dashboard" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Upcoming Events */}
               <Card className="p-6">
@@ -1420,26 +1465,47 @@ export default function ClubAdmin() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="events" className="space-y-6">
+          <TabsContent value="events" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-semibold">Manage Events</h2>
-              <Button onClick={() => setCreatingEvent(true)}>
+              <Button 
+                onClick={() => !club?.isFrozen && setCreatingEvent(true)}
+                disabled={club?.isFrozen}
+                title={club?.isFrozen ? "Cannot create events - club is frozen" : "Create a new event"}
+              >
                 <Calendar className="mr-2 h-4 w-4" />
                 Create Event
               </Button>
             </div>
 
-            {/* Filters and Search */}
+            {/* Search, Filters and Sort */}
             <Card className="p-4">
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <Input
-                    placeholder="Search events..."
-                    value={eventSearch}
-                    onChange={(e) => setEventSearch(e.target.value)}
-                    className="w-full"
-                  />
+              <div className="flex flex-col gap-4">
+                {/* Search Bar */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <Input
+                      placeholder="Search events by title, description, or location..."
+                      value={eventSearch}
+                      onChange={(e) => setEventSearch(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  <Select value={eventSort} onValueChange={(value: any) => setEventSort(value)}>
+                    <SelectTrigger className="w-full sm:w-[200px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date-desc">Newest First</SelectItem>
+                      <SelectItem value="date-asc">Oldest First</SelectItem>
+                      <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                      <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                      <SelectItem value="registrations-desc">Most Registrations</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+                
+                {/* Filter Buttons */}
                 <div className="flex gap-2">
                   <Button
                     variant={eventFilter === 'all' ? 'default' : 'outline'}
@@ -1495,18 +1561,23 @@ export default function ClubAdmin() {
                   }
                 })
                 .sort((a, b) => {
-                  // Sort by date (upcoming first, then by date)
-                  const dateA = new Date(a.date || new Date());
-                  const dateB = new Date(b.date || new Date());
-                  const now = new Date();
-
-                  const aIsUpcoming = dateA > now;
-                  const bIsUpcoming = dateB > now;
-
-                  if (aIsUpcoming && !bIsUpcoming) return -1;
-                  if (!aIsUpcoming && bIsUpcoming) return 1;
-
-                  return dateA.getTime() - dateB.getTime();
+                  // Apply sorting
+                  switch (eventSort) {
+                    case 'date-asc':
+                      return new Date(a.date || new Date()).getTime() - new Date(b.date || new Date()).getTime();
+                    case 'date-desc':
+                      return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
+                    case 'title-asc':
+                      return a.title.localeCompare(b.title);
+                    case 'title-desc':
+                      return b.title.localeCompare(a.title);
+                    case 'registrations-desc':
+                      const aRegs = eventRegistrations.filter(r => r.eventId === a.id).length;
+                      const bRegs = eventRegistrations.filter(r => r.eventId === b.id).length;
+                      return bRegs - aRegs;
+                    default:
+                      return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
+                  }
                 })
                 .map((event) => {
                   const eventRegs = eventRegistrations.filter(r => r.eventId === event.id);
@@ -1651,7 +1722,7 @@ export default function ClubAdmin() {
             </div>
           </TabsContent>
 
-          <TabsContent value="attendance" className="space-y-6">
+          <TabsContent value="attendance" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Event Attendance Management</h2>
               <div className="flex items-center gap-4">
@@ -1812,7 +1883,7 @@ export default function ClubAdmin() {
             </div>
           </TabsContent>
 
-          <TabsContent value="announcements" className="space-y-6">
+          <TabsContent value="announcements" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">University Announcements</h2>
               <Badge variant="secondary">{announcements.length} announcements</Badge>
@@ -1909,7 +1980,7 @@ export default function ClubAdmin() {
             </div>
           </TabsContent>
 
-          <TabsContent value="uploads" className="space-y-6">
+          <TabsContent value="uploads" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Media Gallery</h2>
               <Button onClick={() => setCreatingEvent(true)}>
@@ -1947,7 +2018,7 @@ export default function ClubAdmin() {
             )}
           </TabsContent>
 
-          <TabsContent value="members" className="space-y-6">
+          <TabsContent value="members" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Header with Statistics and Actions */}
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
               <div>
@@ -2319,7 +2390,7 @@ export default function ClubAdmin() {
             </div>
           </TabsContent>
 
-          <TabsContent value="leadership" className="space-y-6">
+          <TabsContent value="leadership" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
               <div>
                 <h2 className="text-xl font-semibold">Club Leadership</h2>
@@ -2454,7 +2525,7 @@ export default function ClubAdmin() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="community" className="space-y-6">
+          <TabsContent value="community" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
               <div>
                 <h2 className="text-xl font-semibold">Community Showcase</h2>
@@ -2592,7 +2663,7 @@ export default function ClubAdmin() {
             </div>
           </TabsContent>
 
-          <TabsContent value="messages" className="space-y-6">
+          <TabsContent value="messages" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
               <div>
                 <h2 className="text-xl font-semibold">Messages</h2>
@@ -2670,7 +2741,7 @@ export default function ClubAdmin() {
             </div>
           </TabsContent>
 
-          <TabsContent value="settings" className="space-y-6">
+          <TabsContent value="settings" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Club Settings</h2>
               <Button
@@ -2832,6 +2903,243 @@ export default function ClubAdmin() {
               </Card>
             ) : (
               <div className="space-y-6">
+                {/* Info Banner for Missing Data */}
+                {(!(admin as any)?.fullName || !(admin as any)?.email || !(admin as any)?.phone || !displayClub?.facultyAssigned || !displayClub?.phone || !displayClub?.email) && (
+                  <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <p className="text-sm text-amber-900 dark:text-amber-200">
+                      ℹ️ Some information is missing. Click "Edit Profile" to update your administrator details or "Edit Club" to update club information.
+                    </p>
+                  </div>
+                )}
+                
+                {/* Administrator Information Card */}
+                <Card className="p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-semibold">Club Administrator Details</h3>
+                    <Button
+                      variant={editingAdminProfile ? "secondary" : "outline"}
+                      onClick={() => setEditingAdminProfile(!editingAdminProfile)}
+                      size="sm"
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      {editingAdminProfile ? "Cancel" : "Edit Profile"}
+                    </Button>
+                  </div>
+
+                  {editingAdminProfile ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const formData = new FormData(e.target as HTMLFormElement);
+                        updateAdminProfileMutation.mutate({
+                          fullName: formData.get("fullName") as string,
+                          email: formData.get("email") as string,
+                          phone: formData.get("phone") as string,
+                        });
+                      }}
+                      className="space-y-6"
+                    >
+                      <div className="mb-4">
+                        <h4 className="text-base font-semibold mb-2">Edit Administrator Information</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Update your personal contact details.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="fullName">Full Name</Label>
+                          <Input
+                            id="fullName"
+                            name="fullName"
+                            defaultValue={(admin as any)?.fullName || ""}
+                            placeholder="Enter your full name"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="email">Email</Label>
+                          <Input
+                            id="email"
+                            name="email"
+                            type="email"
+                            defaultValue={(admin as any)?.email || ""}
+                            placeholder="your.email@gehu.ac.in"
+                            required
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label htmlFor="phone">Phone Number</Label>
+                          <Input
+                            id="phone"
+                            name="phone"
+                            type="tel"
+                            defaultValue={(admin as any)?.phone || ""}
+                            placeholder="+91 XXXXX XXXXX"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3 pt-4">
+                        <Button
+                          type="submit"
+                          disabled={updateAdminProfileMutation.isPending}
+                        >
+                          {updateAdminProfileMutation.isPending ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                              Updating Profile...
+                            </>
+                          ) : (
+                            <>
+                              <User className="w-4 h-4 mr-2" />
+                              Update Profile
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setEditingAdminProfile(false)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Administrator Information */}
+                      <div>
+                        <h4 className="font-semibold mb-4 text-base">Administrator Information</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Username</Label>
+                            <p className="text-sm font-medium mt-1">{admin?.username || "N/A"}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Full Name</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {(admin as any)?.fullName || (
+                                <span className="text-xs text-amber-600 dark:text-amber-400">Not provided</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Email</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {(admin as any)?.email || (
+                                <span className="text-xs text-amber-600 dark:text-amber-400">Not provided</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Phone</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {(admin as any)?.phone || (
+                                <span className="text-xs text-amber-600 dark:text-amber-400">Not provided</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Club</Label>
+                            <p className="text-sm font-medium mt-1">{displayClub?.name || "N/A"}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Faculty Assigned</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {displayClub?.facultyAssigned ? displayClub.facultyAssigned : (
+                                <span className="text-xs text-amber-600 dark:text-amber-400">Not updated yet</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Club Phone</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {displayClub?.phone ? displayClub.phone : (
+                                <span className="text-xs text-amber-600 dark:text-amber-400">Not updated yet</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Club Email</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {displayClub?.email ? displayClub.email : (
+                                <span className="text-xs text-amber-600 dark:text-amber-400">Not updated yet</span>
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Role</Label>
+                            <Badge variant="outline" className="mt-1">{(admin as any)?.role || "club_admin"}</Badge>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Account Status</Label>
+                            <Badge className="mt-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                              {(admin as any)?.isActive === false ? "Inactive" : "Active"}
+                            </Badge>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Last Login</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {(admin as any)?.lastLogin ? new Date((admin as any).lastLogin).toLocaleString() : "Never"}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Account Created</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {(admin as any)?.createdAt ? new Date((admin as any).createdAt).toLocaleDateString() : new Date().toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Club Created</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {displayClub?.createdAt ? new Date(displayClub.createdAt).toLocaleDateString() : new Date().toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Last Updated</Label>
+                            <p className="text-sm font-medium mt-1">
+                              {(admin as any)?.updatedAt ? new Date((admin as any).updatedAt).toLocaleDateString() : new Date().toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Permissions */}
+                      <div className="border-t pt-6">
+                        <h4 className="font-semibold mb-4 text-base">Permissions</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {(admin as any)?.permissions?.canCreateEvents !== false && (
+                            <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                              <span className="text-sm font-medium">Create Events</span>
+                            </div>
+                          )}
+                          {(admin as any)?.permissions?.canManageMembers !== false && (
+                            <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                              <span className="text-sm font-medium">Manage Members</span>
+                            </div>
+                          )}
+                          {(admin as any)?.permissions?.canEditClub !== false && (
+                            <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                              <span className="text-sm font-medium">Edit Club</span>
+                            </div>
+                          )}
+                          {(admin as any)?.permissions?.canViewAnalytics !== false && (
+                            <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                              <span className="text-sm font-medium">View Analytics</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+
                 {/* Club Overview Card */}
                 <Card className="p-6">
                   <div className="flex items-start gap-6">

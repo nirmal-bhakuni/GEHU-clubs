@@ -5,9 +5,17 @@ const clubSchema = new mongoose.Schema({
   name: String,
   description: String,
   category: String,
+  facultyAssigned: String,
+  phone: String,
+  email: String,
+  eligibility: String,
+  eligibilityYears: [String],
   memberCount: Number,
   logoUrl: String,
   coverImageUrl: String,
+  isFrozen: { type: Boolean, default: false },
+  frozenAt: Date,
+  frozenBy: String,
   createdAt: Date
 });
 

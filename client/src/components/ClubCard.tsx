@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
-import { Users, Heart, Share2, Star, TrendingUp, Calendar, Eye } from "lucide-react";
+import { Users, Heart, Share2, Star, TrendingUp, Calendar, Eye, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ClubCardProps {
@@ -16,6 +16,7 @@ interface ClubCardProps {
   category: string;
   logoUrl?: string;
   coverImageUrl?: string;
+  isFrozen?: boolean;
 }
 
 export default function ClubCard({
@@ -26,6 +27,7 @@ export default function ClubCard({
   category,
   logoUrl,
   coverImageUrl,
+  isFrozen,
 }: ClubCardProps) {
   const [isFavorited, setIsFavorited] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -195,6 +197,17 @@ export default function ClubCard({
             >
               {category}
             </Badge>
+
+            {/* Frozen Badge */}
+            {isFrozen && (
+              <Badge
+                variant="destructive"
+                className="mb-3 flex items-center gap-1"
+              >
+                <AlertCircle className="w-3 h-3" />
+                Frozen
+              </Badge>
+            )}
 
             {/* Club Name */}
             <h3 className={`

@@ -193,14 +193,67 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   app.get("/api/auth/me", async (req: Request, res: Response) => {
     if (!req.session.adminId) return res.status(401).json({ error: "Not authenticated" });
 
-    const admin = await storage.getAdmin(req.session.adminId);
+    const { Admin } = await import("./models/Admin.js");
+    const admin = await Admin.findOne({ id: req.session.adminId });
+    
     if (!admin) return res.status(404).json({ error: "Admin not found" });
 
     res.json({
       id: admin.id,
       username: admin.username,
-      clubId: admin.clubId
+      clubId: admin.clubId,
+      fullName: admin.fullName,
+      email: admin.email,
+      phone: admin.phone,
+      role: admin.role,
+      isActive: admin.isActive,
+      lastLogin: admin.lastLogin,
+      permissions: admin.permissions,
+      createdAt: admin.createdAt,
+      updatedAt: admin.updatedAt
     });
+  });
+
+  // Update admin profile
+  app.patch("/api/admin/profile", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { fullName, email, phone } = req.body;
+      
+      const { Admin } = await import("./models/Admin.js");
+      const admin = await Admin.findOne({ id: req.session.adminId });
+      
+      if (!admin) {
+        return res.status(404).json({ error: "Admin not found" });
+      }
+
+      // Update fields if provided
+      if (fullName !== undefined) admin.fullName = fullName;
+      if (email !== undefined) admin.email = email;
+      if (phone !== undefined) admin.phone = phone;
+
+      await admin.save();
+
+      res.json({
+        success: true,
+        admin: {
+          id: admin.id,
+          username: admin.username,
+          clubId: admin.clubId,
+          fullName: admin.fullName,
+          email: admin.email,
+          phone: admin.phone,
+          role: admin.role,
+          isActive: admin.isActive,
+          lastLogin: admin.lastLogin,
+          permissions: admin.permissions,
+          createdAt: admin.createdAt,
+          updatedAt: admin.updatedAt
+        }
+      });
+    } catch (error) {
+      console.error("Error updating admin profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
   });
 
   app.get("/api/clubs", async (req: Request, res: Response) => {
@@ -282,6 +335,25 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       res.json(updated);
     } catch {
       res.status(400).json({ error: "Failed to update club" });
+    }
+  });
+
+  app.patch("/api/clubs/:id/freeze", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { freeze } = req.body;
+      const admin = await storage.getAdmin(req.session.adminId!);
+      
+      const updated = await storage.updateClub(req.params.id, {
+        isFrozen: freeze,
+        frozenAt: freeze ? new Date() : null,
+        frozenBy: freeze ? admin?.username : null,
+      });
+      
+      if (!updated) return res.status(404).json({ error: "Club not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Freeze club error:", error);
+      res.status(400).json({ error: "Failed to update club freeze status" });
     }
   });
 

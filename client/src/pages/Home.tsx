@@ -36,8 +36,17 @@ export default function Home() {
     },
   });
 
-  const upcomingEvents = events.slice(0, 3);
-  const featuredClubs = clubs.slice(0, 4);
+  const upcomingEvents = events
+    .filter((event) => {
+      // Only show events from non-frozen clubs
+      const club = clubs.find(c => c.id === event.clubId);
+      return !club?.isFrozen;
+    })
+    .slice(0, 3);
+  
+  const featuredClubs = clubs
+    .filter((club) => !club.isFrozen) // Hide frozen clubs
+    .slice(0, 4);
 
   return (
     <div>

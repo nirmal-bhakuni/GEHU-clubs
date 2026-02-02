@@ -10,6 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   LayoutDashboard,
   Users,
   Calendar,
@@ -28,7 +35,10 @@ import {
   Image,
   Upload,
   X,
-  Search
+  Search,
+  AlertCircle,
+  RefreshCw,
+  CheckCircle
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -163,7 +173,14 @@ export default function Dashboard() {
     name: "",
     description: "",
     category: "",
+    facultyAssigned: "",
+    phone: "",
+    email: "",
+    eligibility: "",
+    eligibilityYears: [] as string[],
   });
+  const [clubLoginId, setClubLoginId] = useState("");
+  const [clubLoginPassword, setClubLoginPassword] = useState("");
   const [clubLogoFile, setClubLogoFile] = useState<File | null>(null);
   const [clubLogoPreview, setClubLogoPreview] = useState<string | null>(null);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
@@ -189,6 +206,11 @@ export default function Dashboard() {
   const { toast } = useToast();
   const [targetForAnnouncement, setTargetForAnnouncement] = useState<string>("all");
   const [studentSearch, setStudentSearch] = useState("");
+  const [clubSearch, setClubSearch] = useState("");
+  const [eventSearch, setEventSearch] = useState("");
+  const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('all');
+  const [eventSort, setEventSort] = useState<'date-asc' | 'date-desc' | 'title-asc' | 'title-desc' | 'club'>('date-desc');
+  const eligibilityYearOptions = ["1st", "2nd", "3rd", "4th", "5th"];
 
   const { data: events = [] } = useQuery<Event[]>({
     queryKey: ["api", "events"],
@@ -468,7 +490,17 @@ export default function Dashboard() {
       clubData,
       logoFile,
     }: {
-      clubData: { name: string; description: string; category: string };
+      clubData: {
+        name: string;
+        description: string;
+        category: string;
+        adminName?: string;
+        facultyAssigned?: string;
+        phone?: string;
+        email?: string;
+        eligibility?: string;
+        eligibilityYears?: string[];
+      };
       logoFile?: File | null;
     }) => {
       let logoUrl: string | undefined;
@@ -487,17 +519,40 @@ export default function Dashboard() {
         ...clubData,
         ...(logoUrl ? { logoUrl } : {}),
       });
+      const createdClub = await res.json();
 
-      return res.json();
+      if (clubLoginId && clubLoginPassword) {
+        await apiRequest("POST", "/api/auth/register", {
+          username: clubLoginId,
+          password: clubLoginPassword,
+          clubId: createdClub.id,
+        });
+      }
+
+      return createdClub;
     },
-    onSuccess: () => {
+    onSuccess: (createdClub) => {
       queryClient.invalidateQueries({ queryKey: ["/api/clubs"] });
+      const loginCredentials = clubLoginId && clubLoginPassword 
+        ? ` Club admin can now login at /club-admin-login using username: "${clubLoginId}"`
+        : "";
       toast({
-        title: "Club created",
-        description: "The club has been created successfully.",
+        title: "Club created successfully!",
+        description: `${createdClub.name} has been created.${loginCredentials}`,
       });
       setShowCreateClub(false);
-      setClubForm({ name: "", description: "", category: "" });
+      setClubForm({
+        name: "",
+        description: "",
+        category: "",
+        facultyAssigned: "",
+        phone: "",
+        email: "",
+        eligibility: "",
+        eligibilityYears: [],
+      });
+      setClubLoginId("");
+      setClubLoginPassword("");
       setClubLogoFile(null);
       setClubLogoPreview(null);
     },
@@ -542,7 +597,18 @@ export default function Dashboard() {
         description: "The club has been updated successfully.",
       });
       setEditingClub(null);
-      setClubForm({ name: "", description: "", category: "" });
+      setClubForm({
+        name: "",
+        description: "",
+        category: "",
+        facultyAssigned: "",
+        phone: "",
+        email: "",
+        eligibility: "",
+        eligibilityYears: [],
+      });
+      setClubLoginId("");
+      setClubLoginPassword("");
       setClubLogoFile(null);
       setClubLogoPreview(null);
     },
@@ -572,6 +638,52 @@ export default function Dashboard() {
         description: "Failed to delete club.",
         variant: "destructive",
       });
+    },
+  });
+
+  const toggleFreezeClubMutation = useMutation({
+    mutationFn: async ({ clubId, freeze }: { clubId: string; freeze: boolean }) => {
+      await apiRequest("PATCH", `/api/clubs/${clubId}/freeze`, { freeze });
+    },
+    onMutate: async ({ clubId, freeze }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["api", "clubs"] });
+      
+      // Snapshot previous value
+      const previousClubs = queryClient.getQueryData(["api", "clubs"]);
+      
+      // Optimistically update
+      queryClient.setQueryData(["api", "clubs"], (old: any[]) => {
+        return old?.map(club => 
+          club.id === clubId 
+            ? { ...club, isFrozen: freeze, frozenAt: freeze ? new Date() : null }
+            : club
+        );
+      });
+      
+      return { previousClubs };
+    },
+    onSuccess: (_, variables) => {
+      toast({
+        title: variables.freeze ? "🔒 Club Frozen" : "✅ Club Unfrozen",
+        description: variables.freeze 
+          ? "Club admin can no longer perform operations."
+          : "Club admin operations have been restored.",
+      });
+    },
+    onError: (_, __, context) => {
+      // Rollback on error
+      if (context?.previousClubs) {
+        queryClient.setQueryData(["api", "clubs"], context.previousClubs);
+      }
+      toast({
+        title: "Error",
+        description: "Failed to update club freeze status. Please try again.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["api", "clubs"] });
     },
   });
 
@@ -955,6 +1067,20 @@ export default function Dashboard() {
               </Button>
             </div>
 
+            {/* Search Bar */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  type="text"
+                  placeholder="Search clubs by name, category, or faculty..."
+                  value={clubSearch}
+                  onChange={(e) => setClubSearch(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
             {/* Create/Edit Club Modal */}
             {(showCreateClub || editingClub) && (
               <Card className="p-6">
@@ -1010,6 +1136,95 @@ export default function Dashboard() {
                       required
                     />
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {!editingClub && (
+                      <>
+                        <div>
+                          <Label htmlFor="clubLoginId">Club ID (for dashboard login)</Label>
+                          <Input
+                            id="clubLoginId"
+                            value={clubLoginId}
+                            onChange={(e) => setClubLoginId(e.target.value)}
+                            placeholder="Enter club_id for login"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="clubLoginPassword">Password</Label>
+                          <Input
+                            id="clubLoginPassword"
+                            type="password"
+                            value={clubLoginPassword}
+                            onChange={(e) => setClubLoginPassword(e.target.value)}
+                            placeholder="Create a password"
+                            required
+                          />
+                        </div>
+                      </>
+                    )}
+                    <div>
+                      <Label htmlFor="clubFaculty">Faculty Assigned</Label>
+                      <Input
+                        id="clubFaculty"
+                        value={clubForm.facultyAssigned}
+                        onChange={(e) => setClubForm(prev => ({ ...prev, facultyAssigned: e.target.value }))}
+                        placeholder="Enter faculty assigned"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="clubPhone">Phone No</Label>
+                      <Input
+                        id="clubPhone"
+                        value={clubForm.phone}
+                        onChange={(e) => setClubForm(prev => ({ ...prev, phone: e.target.value }))}
+                        placeholder="Enter phone number"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="clubEmail">Email</Label>
+                      <Input
+                        id="clubEmail"
+                        type="email"
+                        value={clubForm.email}
+                        onChange={(e) => setClubForm(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="Enter email"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="clubEligibility">Eligibility</Label>
+                    <Input
+                      id="clubEligibility"
+                      value={clubForm.eligibility}
+                      onChange={(e) => setClubForm(prev => ({ ...prev, eligibility: e.target.value }))}
+                      placeholder="e.g., CGPA >= 7.0, No backlogs"
+                    />
+                  </div>
+                  <div>
+                    <Label>Eligibility Years</Label>
+                    <div className="flex flex-wrap gap-3 mt-2">
+                      {eligibilityYearOptions.map((year) => (
+                        <label key={year} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={clubForm.eligibilityYears.includes(year)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setClubForm(prev => ({
+                                ...prev,
+                                eligibilityYears: checked
+                                  ? [...prev.eligibilityYears, year]
+                                  : prev.eligibilityYears.filter(y => y !== year)
+                              }));
+                            }}
+                          />
+                          {year}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                   <div>
                     <Label htmlFor="clubLogo">Club Logo</Label>
                     <div className="flex gap-4">
@@ -1060,7 +1275,18 @@ export default function Dashboard() {
                       onClick={() => {
                         setShowCreateClub(false);
                         setEditingClub(null);
-                        setClubForm({ name: "", description: "", category: "" });
+                        setClubForm({
+                          name: "",
+                          description: "",
+                          category: "",
+                          facultyAssigned: "",
+                          phone: "",
+                          email: "",
+                          eligibility: "",
+                          eligibilityYears: [],
+                        });
+                        setClubLoginId("");
+                        setClubLoginPassword("");
                         setClubLogoFile(null);
                         setClubLogoPreview(null);
                       }}
@@ -1074,8 +1300,18 @@ export default function Dashboard() {
 
             {/* Clubs List */}
             <div className="grid gap-4">
-              {clubs.map((club) => (
-                <Card key={club.id} className="p-6">
+              {clubs
+                .filter((club) => {
+                  if (!clubSearch) return true;
+                  const searchLower = clubSearch.toLowerCase();
+                  return (
+                    club.name.toLowerCase().includes(searchLower) ||
+                    club.category?.toLowerCase().includes(searchLower) ||
+                    club.facultyAssigned?.toLowerCase().includes(searchLower)
+                  );
+                })
+                .map((club) => (
+                <Card key={club.id} className={`p-6 transition-all duration-300 ${club.isFrozen ? 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20' : ''}`}>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
@@ -1083,6 +1319,12 @@ export default function Dashboard() {
                         <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full">
                           {club.category}
                         </span>
+                        {club.isFrozen && (
+                          <span className="px-2 py-1 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs rounded-full flex items-center gap-1 animate-in fade-in duration-300">
+                            <AlertCircle className="w-3 h-3" />
+                            Frozen
+                          </span>
+                        )}
                       </div>
                       <p className="text-muted-foreground mb-3">{club.description}</p>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -1092,6 +1334,45 @@ export default function Dashboard() {
                     </div>
                     <div className="flex gap-2">
                       <Button
+                        variant={club.isFrozen ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          const action = club.isFrozen ? "unfreeze" : "freeze";
+                          const confirmed = confirm(
+                            club.isFrozen
+                              ? `Unfreeze "${club.name}"? Club admin will be able to perform operations again.`
+                              : `Freeze "${club.name}"? This will prevent the club admin from creating events, approving members, and making changes.`
+                          );
+                          if (confirmed) {
+                            toggleFreezeClubMutation.mutate({
+                              clubId: club.id,
+                              freeze: !club.isFrozen,
+                            });
+                          }
+                        }}
+                        disabled={toggleFreezeClubMutation.isPending}
+                        className={`
+                          transition-all duration-200
+                          ${club.isFrozen 
+                            ? 'bg-green-600 hover:bg-green-700 text-white' 
+                            : 'border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400'
+                          }
+                          ${toggleFreezeClubMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}
+                        `}
+                      >
+                        {toggleFreezeClubMutation.isPending ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            {club.isFrozen ? (
+                              <><CheckCircle className="w-4 h-4 mr-1" /> Unfreeze</>
+                            ) : (
+                              <><AlertCircle className="w-4 h-4 mr-1" /> Freeze</>
+                            )}
+                          </>
+                        )}
+                      </Button>
+                      <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
@@ -1100,6 +1381,11 @@ export default function Dashboard() {
                             name: club.name,
                             description: club.description || "",
                             category: club.category || "",
+                            facultyAssigned: club.facultyAssigned || "",
+                            phone: club.phone || "",
+                            email: club.email || "",
+                            eligibility: club.eligibility || "",
+                            eligibilityYears: club.eligibilityYears || [],
                           });
                         }}
                       >
@@ -1123,6 +1409,20 @@ export default function Dashboard() {
               ))}
             </div>
 
+            {clubs.filter((club) => {
+              if (!clubSearch) return true;
+              const searchLower = clubSearch.toLowerCase();
+              return (
+                club.name.toLowerCase().includes(searchLower) ||
+                club.category?.toLowerCase().includes(searchLower) ||
+                club.facultyAssigned?.toLowerCase().includes(searchLower)
+              );
+            }).length === 0 && clubs.length > 0 && (
+              <Card className="p-6">
+                <p className="text-muted-foreground text-center">No clubs match your search criteria.</p>
+              </Card>
+            )}
+
             {clubs.length === 0 && (
               <Card className="p-6">
                 <p className="text-muted-foreground text-center">No clubs found. Create your first club to get started.</p>
@@ -1141,6 +1441,63 @@ export default function Dashboard() {
                 Create Event
               </Button>
             </div>
+
+            {/* Search, Filters, and Sort */}
+            {!showCreateEvent && !editingEvent && (
+              <Card className="p-4">
+                <div className="flex flex-col gap-4">
+                  {/* Search Bar and Sort */}
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-1">
+                      <Input
+                        placeholder="Search events by title, description, location, or club..."
+                        value={eventSearch}
+                        onChange={(e) => setEventSearch(e.target.value)}
+                        className="w-full"
+                      />
+                    </div>
+                    <Select value={eventSort} onValueChange={(value: any) => setEventSort(value)}>
+                      <SelectTrigger className="w-full sm:w-[200px]">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="date-desc">Newest First</SelectItem>
+                        <SelectItem value="date-asc">Oldest First</SelectItem>
+                        <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                        <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                        <SelectItem value="club">By Club</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* Filter Buttons */}
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant={eventFilter === 'all' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setEventFilter('all')}
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      All ({events.length})
+                    </Button>
+                    <Button
+                      variant={eventFilter === 'upcoming' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setEventFilter('upcoming')}
+                    >
+                      Upcoming ({events.filter(e => new Date(e.date || new Date()) > new Date()).length})
+                    </Button>
+                    <Button
+                      variant={eventFilter === 'past' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setEventFilter('past')}
+                    >
+                      Past ({events.filter(e => new Date(e.date || new Date()) <= new Date()).length})
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {/* Create/Edit Event Modal */}
             {(showCreateEvent || editingEvent) && (
@@ -1335,7 +1692,52 @@ export default function Dashboard() {
 
             {/* Events List */}
             <div className="grid gap-4">
-              {events.map((event) => {
+              {events
+                .filter(event => {
+                  // Apply search filter
+                  if (eventSearch) {
+                    const searchLower = eventSearch.toLowerCase();
+                    const club = clubs.find(c => c.id === event.clubId);
+                    return event.title.toLowerCase().includes(searchLower) ||
+                           event.description?.toLowerCase().includes(searchLower) ||
+                           event.location?.toLowerCase().includes(searchLower) ||
+                           club?.name.toLowerCase().includes(searchLower);
+                  }
+                  return true;
+                })
+                .filter(event => {
+                  // Apply status filter
+                  const eventDate = new Date(event.date || new Date());
+                  const now = new Date();
+                  switch (eventFilter) {
+                    case 'upcoming':
+                      return eventDate > now;
+                    case 'past':
+                      return eventDate <= now;
+                    default:
+                      return true;
+                  }
+                })
+                .sort((a, b) => {
+                  // Apply sorting
+                  switch (eventSort) {
+                    case 'date-asc':
+                      return new Date(a.date || new Date()).getTime() - new Date(b.date || new Date()).getTime();
+                    case 'date-desc':
+                      return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
+                    case 'title-asc':
+                      return a.title.localeCompare(b.title);
+                    case 'title-desc':
+                      return b.title.localeCompare(a.title);
+                    case 'club':
+                      const clubA = clubs.find(c => c.id === a.clubId)?.name || '';
+                      const clubB = clubs.find(c => c.id === b.clubId)?.name || '';
+                      return clubA.localeCompare(clubB);
+                    default:
+                      return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
+                  }
+                })
+                .map((event) => {
                 const club = clubs.find(c => c.id === event.clubId);
                 return (
                   <Card key={event.id} className="p-6">

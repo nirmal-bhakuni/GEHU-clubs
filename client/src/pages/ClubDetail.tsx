@@ -346,10 +346,10 @@ export default function ClubDetail() {
                           variant="default" 
                           size="sm"
                           className="hover:scale-105 transition-transform bg-primary hover:bg-primary/90"
-                          disabled={hasAlreadyJoinedClub}
+                          disabled={hasAlreadyJoinedClub || club?.isFrozen}
                         >
                           <Users className="w-4 h-4 mr-2" />
-                          {hasAlreadyJoinedClub ? "Already Joined" : "Join Club"}
+                          {club?.isFrozen ? "Club Frozen" : hasAlreadyJoinedClub ? "Already Joined" : "Join Club"}
                         </Button>
                       </DialogTrigger>
                     ) : (
@@ -357,7 +357,16 @@ export default function ClubDetail() {
                         variant="default"
                         size="sm"
                         className="hover:scale-105 transition-transform bg-primary hover:bg-primary/90"
+                        disabled={club?.isFrozen}
                         onClick={() => {
+                          if (club?.isFrozen) {
+                            toast({
+                              title: "Club Frozen",
+                              description: "This club is currently frozen and not accepting new members.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
                           toast({
                             title: "Login Required",
                             description: "Please login as a student to join clubs.",
@@ -368,12 +377,12 @@ export default function ClubDetail() {
                         }}
                       >
                         <Users className="w-4 h-4 mr-2" />
-                        Join Club
+                        {club?.isFrozen ? "Club Frozen" : "Join Club"}
                       </Button>
                     )}
                   </TooltipTrigger>
                   <TooltipContent>
-                    {!isAuthenticated ? "Login required to join clubs" : hasAlreadyJoinedClub ? "You are already a member or have a pending request" : "Join this club"}
+                    {club?.isFrozen ? "This club is frozen and not accepting new members" : !isAuthenticated ? "Login required to join clubs" : hasAlreadyJoinedClub ? "You are already a member or have a pending request" : "Join this club"}
                   </TooltipContent>
                 </Tooltip>
               <DialogContent>

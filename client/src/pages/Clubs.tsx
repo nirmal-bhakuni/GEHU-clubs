@@ -36,12 +36,14 @@ export default function Clubs() {
   console.log("Is loading:", isLoading);
   console.log("Error:", error);
 
-  const filteredClubs = clubs.filter((club) => {
-    const matchesSearch = club.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      club.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === "all" || club.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  }).sort((a, b) => {
+  const filteredClubs = clubs
+    .filter((club) => !club.isFrozen) // Hide frozen clubs
+    .filter((club) => {
+      const matchesSearch = club.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        club.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = selectedCategory === "all" || club.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    }).sort((a, b) => {
     let aValue: string | number;
     let bValue: string | number;
 

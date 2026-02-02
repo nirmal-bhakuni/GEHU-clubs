@@ -26,7 +26,22 @@ export default function Events() {
     },
   });
 
-  const filteredEvents = events.filter((event) => {
+  // Fetch clubs to check which ones are frozen
+  const { data: clubs = [] } = useQuery({
+    queryKey: ["/api/clubs"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/clubs");
+      return res.json();
+    },
+  });
+
+  const frozenClubIds = clubs
+    .filter((club: any) => club.isFrozen)
+    .map((club: any) => club.id);
+
+  const filteredEvents = events
+    .filter((event) => !frozenClubIds.includes(event.clubId)) // Hide events from frozen clubs
+    .filter((event) => {
     const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       event.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "all" || event.category === selectedCategory;

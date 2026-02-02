@@ -41,6 +41,12 @@ export const insertAdminSchema = createInsertSchema(admins).omit({
 export const insertClubSchema = createInsertSchema(clubs).omit({
   id: true,
   createdAt: true,
+}).extend({
+  facultyAssigned: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().email().optional(),
+  eligibility: z.string().optional(),
+  eligibilityYears: z.array(z.string()).optional(),
 });
 
 export const insertEventSchema = createInsertSchema(events).omit({
