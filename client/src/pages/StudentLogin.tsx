@@ -56,7 +56,10 @@ export default function StudentLogin() {
           name: data.student.name,
           enrollment: data.student.enrollment,
           email: data.student.email || "",
-          branch: data.student.branch || "",
+          phone: data.student.phone || "",
+          rollNumber: data.student.rollNumber || "",
+          department: data.student.department || "",
+          yearOfAdmission: data.student.yearOfAdmission || undefined,
         });
         // Store student session for offline functionality
        // localStorage.setItem("currentStudent", enrollment);
@@ -105,7 +108,7 @@ export default function StudentLogin() {
           name: "Demo Student",
           email: "student@example.com",
           enrollment: "EN123456789",
-          branch: "Computer Science"
+          department: "Computer Science"
         }
       };
 
@@ -119,7 +122,9 @@ export default function StudentLogin() {
           name: offlineStudent.name,
           email: offlineStudent.email,
           enrollment: offlineStudent.enrollment,
-          branch: offlineStudent.branch
+          phone: offlineStudent.phone || "",
+          rollNumber: offlineStudent.rollNumber || "",
+          department: offlineStudent.department || ""
         };
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], studentData);

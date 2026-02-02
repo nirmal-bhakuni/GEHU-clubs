@@ -10,8 +10,11 @@ import { useToast } from "@/hooks/use-toast";
 interface StudentData {
   fullName?: string;
   email?: string;
+  phone?: string;
+  rollNumber?: string;
   enrollmentNumber?: string;
-  branch?: string;
+  department?: string;
+  yearOfAdmission?: number;
 }
 
 interface RegistrationFormProps {
@@ -46,16 +49,29 @@ export default function RegistrationForm({
   onLoginRequired,
   onSubmit,
 }: RegistrationFormProps) {
+  // Helper function to calculate year label from admission year
+  const getYearLabel = (admissionYear: number): string => {
+    const currentYear = new Date().getFullYear();
+    const yearOfCourse = currentYear - admissionYear + 1;
+    const yearLabels: Record<number, string> = {
+      1: "First Year",
+      2: "Second Year",
+      3: "Third Year",
+      4: "Fourth Year",
+    };
+    return yearLabels[yearOfCourse] || "First Year";
+  };
+
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const [formData, setFormData] = useState<StudentRegistration>({
     fullName: studentData?.fullName || "",
     email: studentData?.email || "",
-    phone: "",
-    rollNumber: "",
-    department: studentData?.branch || "",
-    year: "First Year",
+    phone: studentData?.phone || "",
+    rollNumber: studentData?.rollNumber || "",
+    department: studentData?.department || "",
+    year: studentData?.yearOfAdmission ? getYearLabel(studentData.yearOfAdmission) : "First Year",
     enrollmentNumber: studentData?.enrollmentNumber || "",
     interests: [],
     experience: "",
@@ -66,12 +82,18 @@ export default function RegistrationForm({
     if (studentData) {
       console.log("Auto-filling form with student data:", studentData);
       setFormData((prev) => {
+        const academicYear = studentData.yearOfAdmission 
+          ? getYearLabel(studentData.yearOfAdmission)
+          : "First Year";
         const updated = {
           ...prev,
           fullName: studentData.fullName || prev.fullName || "",
           email: studentData.email || prev.email || "",
+          phone: studentData.phone || prev.phone || "",
+          rollNumber: studentData.rollNumber || prev.rollNumber || "",
           enrollmentNumber: studentData.enrollmentNumber || prev.enrollmentNumber || "",
-          department: studentData.branch || prev.department || "",
+          department: studentData.department || prev.department || "",
+          year: academicYear,
         };
         console.log("Updated form data:", updated);
         return updated;
@@ -80,12 +102,39 @@ export default function RegistrationForm({
   }, [studentData]);
 
   const departments = [
+    // Engineering Departments
     "Computer Science",
     "Electronics",
     "Mechanical",
     "Civil",
     "Electrical",
     "Chemical",
+    "Biotechnology",
+    "Instrumentation",
+    // Science Departments
+    "Physics",
+    "Chemistry",
+    "Mathematics",
+    "Biology",
+    "Microbiology",
+    // Management & Commerce
+    "Business Administration",
+    "Commerce",
+    "Economics",
+    "Management Studies",
+    // Humanities & Social Sciences
+    "English",
+    "Hindi",
+    "History",
+    "Political Science",
+    "Psychology",
+    "Sociology",
+    // Law
+    "Law",
+    // Fine Arts
+    "Fine Arts",
+    "Performing Arts",
+    // Other
     "Other",
   ];
 
@@ -214,6 +263,7 @@ export default function RegistrationForm({
                 placeholder="John Doe"
                 value={formData.fullName}
                 onChange={handleInputChange}
+                disabled
                 required
               />
             </div>
@@ -228,6 +278,7 @@ export default function RegistrationForm({
                 placeholder="john@example.com"
                 value={formData.email}
                 onChange={handleInputChange}
+                disabled
                 required
               />
             </div>
@@ -242,6 +293,7 @@ export default function RegistrationForm({
                 placeholder="10-digit mobile number"
                 value={formData.phone}
                 onChange={handleInputChange}
+                disabled
                 required
               />
             </div>
@@ -256,6 +308,7 @@ export default function RegistrationForm({
                 placeholder="Enter your roll number"
                 value={formData.rollNumber}
                 onChange={handleInputChange}
+                disabled
                 required
               />
             </div>
@@ -270,6 +323,7 @@ export default function RegistrationForm({
                 placeholder="GEHU/2024/001"
                 value={formData.enrollmentNumber}
                 onChange={handleInputChange}
+                disabled
                 required
               />
             </div>
@@ -289,7 +343,8 @@ export default function RegistrationForm({
                 name="department"
                 value={formData.department}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                disabled
+                className="w-full px-3 py-2 border border-input rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                 required
               >
                 <option value="">Select Department</option>
@@ -309,7 +364,8 @@ export default function RegistrationForm({
                 name="year"
                 value={formData.year}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                disabled
+                className="w-full px-3 py-2 border border-input rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                 required
               >
                 {years.map((year) => (

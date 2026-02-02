@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -152,6 +152,8 @@ export default function ClubAdmin() {
   const [unreadMessages, setUnreadMessages] = useState<number>(0);
   const [unreadAnnouncements, setUnreadAnnouncements] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const prevPendingRegCount = useRef<number | null>(null);
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
@@ -222,10 +224,10 @@ export default function ClubAdmin() {
         return staticClubs.find(c => c.id === admin?.clubId) || null;
       }
     },
-    enabled: !!admin?.clubId && isAuthenticated,
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
     initialData: staticClubs.find(c => c.id === admin?.clubId) || null,
     staleTime: 30000, // 30 seconds
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 
@@ -241,11 +243,12 @@ export default function ClubAdmin() {
         return staticEvents.filter(e => e.clubId === admin?.clubId);
       }
     },
-    enabled: isAuthenticated && !!admin?.clubId,
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
     initialData: staticEvents.filter(e => e.clubId === admin?.clubId) || [],
     staleTime: 30000, // 30 seconds
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
+    refetchInterval: 15000,
   });
 
   const { data: memberships = [] } = useQuery<ClubMembership[]>({
@@ -257,7 +260,7 @@ export default function ClubAdmin() {
         const apiMemberships = await res.json();
         
         // Merge with locally stored pending requests
-        const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+        const pendingRequests = safeParseArray(localStorage.getItem("pendingJoinRequests"));
         const localRequests = pendingRequests
           .filter((req: any) => req.clubId === admin.clubId && req.isFallback)
           .map((req: any) => ({
@@ -277,7 +280,7 @@ export default function ClubAdmin() {
         return [...apiMemberships, ...localRequests];
       } catch (error) {
         // Fallback: return locally stored pending requests
-        const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+        const pendingRequests = safeParseArray(localStorage.getItem("pendingJoinRequests"));
         return pendingRequests
           .filter((req: any) => req.clubId === admin?.clubId && req.isFallback)
           .map((req: any) => ({
@@ -295,11 +298,11 @@ export default function ClubAdmin() {
           }));
       }
     },
-    enabled: !!admin?.clubId && isAuthenticated,
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
   });
 
-  // Filter events for this club
-  const clubEvents = events.filter(event => event.clubId === admin?.clubId);
+  // Filter events for this club (safe guard)
+  const clubEvents = events?.filter(event => event.clubId === admin?.clubId) || [];
 
   const { data: eventRegistrations = [] } = useQuery<any[]>({
     queryKey: ["/api/admin/event-registrations", admin?.clubId],
@@ -308,7 +311,7 @@ export default function ClubAdmin() {
       const res = await apiRequest("GET", `/api/admin/event-registrations/${admin.clubId}`);
       return res.json();
     },
-    enabled: !!admin?.clubId && isAuthenticated,
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
   });
 
   const { data: announcements = [] } = useQuery<any[]>({
@@ -317,7 +320,7 @@ export default function ClubAdmin() {
       const res = await apiRequest("GET", "/api/admin/announcements");
       return res.json();
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !authLoading,
   });
 
   const { data: achievements = [] } = useQuery<Achievement[]>({
@@ -327,7 +330,7 @@ export default function ClubAdmin() {
       const res = await apiRequest("GET", `/api/admin/achievements/${admin.clubId}`);
       return res.json();
     },
-    enabled: !!admin?.clubId && isAuthenticated,
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
   });
 
   const { data: leadership = [] } = useQuery<ClubLeadership[]>({
@@ -337,7 +340,7 @@ export default function ClubAdmin() {
       const res = await apiRequest("GET", `/api/club-leadership/${admin.clubId}`);
       return res.json();
     },
-    enabled: !!admin?.clubId && isAuthenticated,
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
   });
 
   const { data: studentPoints = [] } = useQuery<StudentPoints[]>({
@@ -347,7 +350,7 @@ export default function ClubAdmin() {
       const res = await apiRequest("GET", `/api/admin/student-points/${admin.clubId}`);
       return res.json();
     },
-    enabled: !!admin?.clubId && isAuthenticated,
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
   });
 
   const { data: globalLeaderboard = [] } = useQuery<any[]>({
@@ -356,7 +359,7 @@ export default function ClubAdmin() {
       const res = await apiRequest("GET", "/api/admin/global-points-leaderboard");
       return res.json();
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !authLoading,
   });
 
   const { data: messages = [] } = useQuery<Message[]>({
@@ -366,7 +369,7 @@ export default function ClubAdmin() {
       const res = await apiRequest("GET", `/api/clubs/${admin.clubId}/messages`);
       return res.json();
     },
-    enabled: !!admin?.clubId && isAuthenticated,
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
   });
 
   const handleLogoFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -426,6 +429,23 @@ export default function ClubAdmin() {
     }
   };
 
+  const formatDate = (value?: string | Date) => {
+    if (!value) return "Date TBA";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Date TBA";
+    return date.toLocaleDateString();
+  };
+
+  const safeParseArray = (value: string | null) => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
   // Export members data
   const exportMembers = () => {
     const csvData = memberships.map(member => ({
@@ -434,7 +454,7 @@ export default function ClubAdmin() {
       Enrollment: member.enrollmentNumber,
       Department: member.department,
       Status: member.status,
-      'Join Date': new Date(member.joinedAt).toLocaleDateString(),
+      'Join Date': formatDate(member.joinedAt),
       Reason: member.reason
     }));
 
@@ -457,7 +477,7 @@ export default function ClubAdmin() {
       // Check if this is a locally stored request
       if (membershipId.startsWith('pending-')) {
         // Update localStorage
-        const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+        const pendingRequests = safeParseArray(localStorage.getItem("pendingJoinRequests"));
         const updatedRequests = pendingRequests.map((req: any) => 
           req.id === membershipId ? { ...req, status } : req
         );
@@ -535,12 +555,33 @@ export default function ClubAdmin() {
     },
   });
 
+  const updateRegistrationStatusMutation = useMutation({
+    mutationFn: async ({ registrationId, status }: { registrationId: string; status: 'pending' | 'approved' | 'rejected' }) => {
+      const res = await apiRequest("PATCH", `/api/admin/event-registrations/${registrationId}/status`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/event-registrations", admin?.clubId] });
+      toast({
+        title: "Registration updated",
+        description: "Event registration status has been updated.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Update failed",
+        description: "Failed to update registration status.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteMembershipMutation = useMutation({
     mutationFn: async (membershipId: string) => {
       // Check if this is a locally stored request
       if (membershipId.startsWith('pending-')) {
         // Remove from localStorage
-        const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
+        const pendingRequests = safeParseArray(localStorage.getItem("pendingJoinRequests"));
         const updatedRequests = pendingRequests.filter((req: any) => req.id !== membershipId);
         localStorage.setItem("pendingJoinRequests", JSON.stringify(updatedRequests));
         return { success: true };
@@ -873,19 +914,15 @@ export default function ClubAdmin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
     },
   });
+  
+  const showAuthLoading = authLoading;
+  const showRedirect = !authLoading && (!isAuthenticated || !admin || !admin.clubId);
+  const canRenderDashboard = !authLoading && isAuthenticated && !!admin?.clubId;
+
   // We always have fallback data from staticClubs, so just render
   // Use club data if available, otherwise use static fallback
   const displayClub = club || staticClubs.find(c => c.id === admin?.clubId) || staticClubs[0];
   const effectiveClubId = admin?.clubId || displayClub?.id;
-
-  // Only show loading if we have no admin AND we're still loading
-  if (!admin && authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground font-body">Loading authentication...</p>
-      </div>
-    );
-  }
 
   const stats = [
     {
@@ -965,17 +1002,43 @@ export default function ClubAdmin() {
     setUnreadAnnouncements(unreadAnnounceCount);
   }, [announcements]);
 
+  useEffect(() => {
+    const pendingCount = eventRegistrations.filter(r => !r.status || r.status === 'pending').length;
+    if (prevPendingRegCount.current !== null && pendingCount > prevPendingRegCount.current) {
+      const diff = pendingCount - prevPendingRegCount.current;
+      toast({
+        title: "New registration request",
+        description: diff === 1 ? "1 new event registration request." : `${diff} new event registration requests.`,
+      });
+    }
+    prevPendingRegCount.current = pendingCount;
+  }, [eventRegistrations, toast]);
+
   return (
     <div className="min-h-screen py-16 md:py-20 bg-background">
-      {isRefreshing && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background border border-border rounded-lg p-8 text-center">
-            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-            <p className="text-muted-foreground">Refreshing data...</p>
-          </div>
+      {showAuthLoading && (
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-muted-foreground font-body">Loading authentication...</p>
         </div>
       )}
-      <div className="container mx-auto px-4">
+
+      {showRedirect && (
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-muted-foreground font-body">Redirecting...</p>
+        </div>
+      )}
+
+      {canRenderDashboard && (
+        <>
+          {isRefreshing && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-background border border-border rounded-lg p-8 text-center">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="text-muted-foreground">Refreshing data...</p>
+              </div>
+            </div>
+          )}
+          <div className="container mx-auto px-4">
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center space-x-4">
             {displayClub?.logoUrl && (
@@ -1164,7 +1227,7 @@ export default function ClubAdmin() {
                     <div>
                       <p className="font-medium text-sm">{event.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {new Date(event.date || new Date()).toLocaleDateString()} • {eventRegistrations.filter(r => r.eventId === event.id).length} registrations
+                        {formatDate(event.date)} • {eventRegistrations.filter(r => r.eventId === event.id).length} registrations
                       </p>
                     </div>
                   </div>
@@ -1227,7 +1290,7 @@ export default function ClubAdmin() {
                         <div>
                           <p className="font-medium text-sm">{event.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(event.date || new Date()).toLocaleDateString()} at {event.time}
+                            {formatDate(event.date)} at {event.time}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {eventRegistrations.filter(r => r.eventId === event.id).length} registered
@@ -1268,7 +1331,7 @@ export default function ClubAdmin() {
                             {membership.enrollmentNumber} • {membership.department}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Applied {new Date(membership.joinedAt).toLocaleDateString()}
+                            Applied {formatDate(membership.joinedAt)}
                           </p>
                         </div>
                         <div className="flex gap-2">
@@ -1447,6 +1510,7 @@ export default function ClubAdmin() {
                 })
                 .map((event) => {
                   const eventRegs = eventRegistrations.filter(r => r.eventId === event.id);
+                  const pendingRegs = eventRegs.filter(r => !r.status || r.status === 'pending');
                   const attendedCount = eventRegs.filter(r => r.attended).length;
                   const isUpcoming = new Date(event.date || new Date()) > new Date();
 
@@ -1472,7 +1536,7 @@ export default function ClubAdmin() {
                             <div>
                               <p className="text-sm text-muted-foreground">
                                 <Calendar className="w-4 h-4 inline mr-1" />
-                                {new Date(event.date || new Date()).toLocaleDateString()} at {event.time}
+                                {formatDate(event.date)} at {event.time}
                               </p>
                               <p className="text-sm text-muted-foreground">
                                 <MapPin className="w-4 h-4 inline mr-1" />
@@ -1497,6 +1561,36 @@ export default function ClubAdmin() {
                               {event.description}
                             </p>
                           )}
+                          <div className="mt-3 pt-3 border-t border-border">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Registration Requests</p>
+                            {pendingRegs.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">No pending requests for this event.</p>
+                            ) : (
+                              <ul className="space-y-2">
+                                {pendingRegs.map((registration) => (
+                                  <li key={registration.id} className="flex items-center justify-between text-sm">
+                                    <div>
+                                      <span className="font-medium">{registration.studentName}</span>
+                                      <span className="text-muted-foreground"> • {registration.enrollmentNumber}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary">Pending</Badge>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => updateRegistrationStatusMutation.mutate({
+                                          registrationId: registration.id,
+                                          status: 'approved'
+                                        })}
+                                        disabled={updateRegistrationStatusMutation.isPending}
+                                      >
+                                        Approve
+                                      </Button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
                         </div>
                         <div className="flex gap-2 ml-4">
                           <Button
@@ -1611,23 +1705,32 @@ export default function ClubAdmin() {
             <div className="space-y-4">
               {clubEvents.map((event) => {
                 const eventRegs = eventRegistrations.filter(r => r.eventId === event.id);
+                
                 return (
                   <Card key={event.id} className="p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
+                    <div 
+                      className="flex justify-between items-start mb-4 cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
+                      onClick={() => setExpandedEventId(expandedEventId === event.id ? null : event.id)}
+                    >
+                      <div className="flex-1">
                         <h3 className="font-semibold">{event.title}</h3>
                         <p className="text-sm text-muted-foreground">
-                          {new Date(event.date).toLocaleDateString()} at {event.time}
+                          {formatDate(event.date)} at {event.time}
                         </p>
                         <p className="text-sm text-muted-foreground">{event.location}</p>
                       </div>
-                      <Badge variant="secondary">
-                        {eventRegs.length} registered
-                      </Badge>
+                      <div className="text-right">
+                        <Badge variant="secondary">
+                          {eventRegs.length} registered
+                        </Badge>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {expandedEventId === event.id ? "▼ Hide" : "▶ Show"} registrations
+                        </p>
+                      </div>
                     </div>
 
-                    {eventRegs.length > 0 ? (
-                      <div className="space-y-2">
+                    {expandedEventId === event.id && eventRegs.length > 0 && (
+                      <div className="space-y-2 mt-4 pt-4 border-t border-border">
                         {eventRegs.map((registration) => {
                           const studentGlobalData = globalLeaderboard.find(sp => sp.studentEmail === registration.studentEmail);
                           return (
@@ -1669,7 +1772,7 @@ export default function ClubAdmin() {
                                     registrationId: registration.id,
                                     attended: !registration.attended,
                                     studentData: {
-                                      studentId: registration.studentEmail, // Use email as unique ID
+                                      studentId: registration.studentEmail,
                                       studentName: registration.studentName,
                                       studentEmail: registration.studentEmail,
                                       enrollmentNumber: registration.enrollmentNumber
@@ -1679,12 +1782,26 @@ export default function ClubAdmin() {
                                 >
                                   {registration.attended ? "Mark Absent" : "Mark Present"}
                                 </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    toast({
+                                      title: "Registration approved",
+                                      description: `${registration.studentName} has been approved for ${event.title}`
+                                    });
+                                  }}
+                                >
+                                  Approve
+                                </Button>
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                    ) : (
+                    )}
+                    
+                    {expandedEventId === event.id && eventRegs.length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         No registrations for this event yet
                       </p>
@@ -1814,7 +1931,7 @@ export default function ClubAdmin() {
                     </div>
                     <h3 className="font-medium text-sm">{event.title}</h3>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(event.date).toLocaleDateString()}
+                      {formatDate(event.date)}
                     </p>
                   </Card>
                 ))}
@@ -2080,12 +2197,12 @@ export default function ClubAdmin() {
                             <div className="flex items-center gap-2 text-sm">
                               <Calendar className="w-4 h-4 text-muted-foreground" />
                               <span className="text-muted-foreground">Joined:</span>
-                              <span className="font-medium">{new Date(membership.joinedAt).toLocaleDateString()}</span>
+                              <span className="font-medium">{formatDate(membership.joinedAt)}</span>
                             </div>
                             <div className="flex items-center gap-2 text-sm">
                               <Clock className="w-4 h-4 text-muted-foreground" />
                               <span className="text-muted-foreground">Applied:</span>
-                              <span className="font-medium">{new Date(membership.joinedAt).toLocaleDateString()}</span>
+                              <span className="font-medium">{formatDate(membership.joinedAt)}</span>
                             </div>
                           </div>
                         </div>
@@ -2452,8 +2569,8 @@ export default function ClubAdmin() {
                           {achievement.description}
                         </p>
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Achieved on {new Date(achievement.achievementDate).toLocaleDateString()}</span>
-                          <span>Posted {new Date(achievement.createdAt).toLocaleDateString()}</span>
+                          <span>Achieved on {formatDate(achievement.achievementDate)}</span>
+                          <span>Posted {formatDate(achievement.createdAt)}</span>
                         </div>
                       </div>
                     </Card>
@@ -2517,7 +2634,7 @@ export default function ClubAdmin() {
                         </div>
                       </div>
                       <div className="text-right text-sm text-muted-foreground">
-                        <p>{new Date(message.sentAt).toLocaleDateString()}</p>
+                        <p>{formatDate(message.sentAt)}</p>
                         <p>{new Date(message.sentAt).toLocaleTimeString()}</p>
                       </div>
                     </div>
@@ -2846,7 +2963,7 @@ export default function ClubAdmin() {
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-muted-foreground">Application Date</Label>
-                        <p className="text-sm font-medium">{new Date(member.joinedAt).toLocaleDateString()}</p>
+                        <p className="text-sm font-medium">{formatDate(member.joinedAt)}</p>
                       </div>
                     </div>
                     <div className="space-y-4">
@@ -3373,7 +3490,9 @@ export default function ClubAdmin() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

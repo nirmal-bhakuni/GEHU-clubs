@@ -17,6 +17,7 @@ import {
   Target,
   TrendingUp,
   BookOpen,
+  Phone,
   Zap,
   Upload,
   Download,
@@ -310,15 +311,25 @@ export default function StudentDashboard() {
                 <p className="text-muted-foreground">
                   Ready to explore clubs and events? Your journey starts here.
                 </p>
-                <div className="flex items-center gap-4 mt-4">
+                <div className="flex items-center gap-4 mt-4 flex-wrap">
                   <Badge variant="secondary" className="flex items-center gap-1">
                     <Star className="h-3 w-3" />
                     Enrollment: {student?.enrollment}
                   </Badge>
                   <Badge variant="outline" className="flex items-center gap-1">
-                    <BookOpen className="h-3 w-3" />
-                    {student?.branch}
+                    <Phone className="h-3 w-3" />
+                    {student?.phone || "Phone not set"}
                   </Badge>
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <BookOpen className="h-3 w-3" />
+                    {student?.department || student?.branch || "Branch not set"}
+                  </Badge>
+                  {student?.yearOfCourse && (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      Year {student?.yearOfCourse}
+                    </Badge>
+                  )}
                 </div>
               </div>
               <div className="hidden md:block">
@@ -680,7 +691,7 @@ export default function StudentDashboard() {
                     </div>
                   </div>
                 ))}
-                {registrations.length === 0 && (
+                {studentRegistrations.length === 0 && (
                   <p className="text-muted-foreground text-center py-8">
                     No registered events yet. Register for events to see them here!
                   </p>

@@ -3,8 +3,11 @@ import mongoose from "mongoose";
 const studentSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
+  phone: { type: String, required: false },
+  rollNumber: { type: String, required: false, unique: true, sparse: true },
   enrollment: { type: String, required: true, unique: true },
-  branch: { type: String, required: true },
+  department: { type: String, required: false },
+  yearOfAdmission: { type: Number, required: false },
   password: { type: String, required: true },
   lastLogin: { type: Date, required: false },
   isDisabled: { type: Boolean, default: false },

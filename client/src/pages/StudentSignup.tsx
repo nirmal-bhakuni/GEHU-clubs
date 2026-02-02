@@ -14,13 +14,57 @@ export default function StudentSignup() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    phone: "",
+    rollNumber: "",
     enrollment: "",
-    branch: "",
+    yearOfAdmission: new Date().getFullYear(),
+    department: "",
     password: "",
   });
   const [captchaVerified, setCaptchaVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
+
+  const departments = [
+    // Engineering Departments
+    "Computer Science",
+    "Electronics",
+    "Mechanical",
+    "Civil",
+    "Electrical",
+    "Chemical",
+    "Biotechnology",
+    "Instrumentation",
+    // Science Departments
+    "Physics",
+    "Chemistry",
+    "Mathematics",
+    "Biology",
+    "Microbiology",
+    // Management & Commerce
+    "Business Administration",
+    "Commerce",
+    "Economics",
+    "Management Studies",
+    // Humanities & Social Sciences
+    "English",
+    "Hindi",
+    "History",
+    "Political Science",
+    "Psychology",
+    "Sociology",
+    // Law
+    "Law",
+    // Fine Arts
+    "Fine Arts",
+    "Performing Arts",
+    // Other
+    "Other",
+  ];
+
+  const currentYear = new Date().getFullYear();
+  const admissionYears = Array.from({ length: 10 }, (_, i) => currentYear - i);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +79,7 @@ export default function StudentSignup() {
     }
 
     setIsLoading(true);
+    setValidationErrors({});
 
     try {
       const response = await apiRequest("POST", "/api/student/signup", formData);
@@ -48,38 +93,83 @@ export default function StudentSignup() {
         setLocation("/student/login");
       }
     } catch (error: any) {
-      // Fallback to static signup when API is unavailable
-      // In offline mode, we'll simulate account creation and redirect to login
-      const staticStudent = {
-        id: `offline-${Date.now()}`,
-        name: formData.name,
-        email: formData.email,
-        enrollment: formData.enrollment,
-        branch: formData.branch
-      };
+      const errorMessage = error?.message || "";
+      
+      // Parse error message to check for validation errors
+      if (errorMessage.includes("400:")) {
+        try {
+          const jsonStr = errorMessage.replace(/^400:\s*/, '');
+          const parsed = JSON.parse(jsonStr);
+          
+          if (parsed.error?.includes("enrollment")) {
+            setValidationErrors({ enrollment: parsed.error });
+            toast({
+              title: "Enrollment Error",
+              description: parsed.error,
+              variant: "destructive",
+            });
+          } else if (parsed.error?.includes("roll number")) {
+            setValidationErrors({ rollNumber: parsed.error });
+            toast({
+              title: "Roll Number Error",
+              description: parsed.error,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Signup failed",
+              description: parsed.error || "Please try again",
+              variant: "destructive",
+            });
+          }
+        } catch {
+          toast({
+            title: "Signup failed",
+            description: "An error occurred. Please try again.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        // Fallback to static signup when API is unavailable
+        const staticStudent = {
+          id: `offline-${Date.now()}`,
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          rollNumber: formData.rollNumber,
+          enrollment: formData.enrollment,
+          department: formData.department,
+          yearOfAdmission: formData.yearOfAdmission
+        };
 
-      // Store the "created" account in localStorage for demo purposes
-      const offlineStudents = JSON.parse(localStorage.getItem("offlineStudents") || "{}");
-      offlineStudents[formData.enrollment] = { ...staticStudent, password: formData.password };
-     // localStorage.setItem("offlineStudents", JSON.stringify(offlineStudents));
+        const offlineStudents = JSON.parse(localStorage.getItem("offlineStudents") || "{}");
+        offlineStudents[formData.enrollment] = { ...staticStudent, password: formData.password };
 
-      toast({
-        title: "Account created (Offline mode)",
-        description: "Please login with your credentials",
-      });
-      setLocation("/student/login");
-      setIsLoading(false);
-      return;
+        toast({
+          title: "Account created (Offline mode)",
+          description: "Please login with your credentials",
+        });
+        setLocation("/student/login");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: value
     }));
+    // Clear validation error for this field when user starts typing
+    if (validationErrors[name]) {
+      setValidationErrors(prev => {
+        const updated = { ...prev };
+        delete updated[name];
+        return updated;
+      });
+    }
   };
 
   return (
@@ -120,6 +210,36 @@ export default function StudentSignup() {
           </div>
 
           <div>
+            <Label htmlFor="phone">Phone Number</Label>
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={handleChange}
+              required
+              placeholder="10-digit mobile number"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="rollNumber">Roll Number</Label>
+            <Input
+              id="rollNumber"
+              name="rollNumber"
+              type="text"
+              value={formData.rollNumber}
+              onChange={handleChange}
+              required
+              placeholder="Your university roll number"
+              className={validationErrors.rollNumber ? "border-red-500" : ""}
+            />
+            {validationErrors.rollNumber && (
+              <p className="text-red-500 text-sm mt-1">{validationErrors.rollNumber}</p>
+            )}
+          </div>
+
+          <div>
             <Label htmlFor="enrollment">Enrollment Number</Label>
             <Input
               id="enrollment"
@@ -129,20 +249,49 @@ export default function StudentSignup() {
               onChange={handleChange}
               required
               placeholder="GEHU/2021/001"
+              className={validationErrors.enrollment ? "border-red-500" : ""}
             />
+            {validationErrors.enrollment && (
+              <p className="text-red-500 text-sm mt-1">{validationErrors.enrollment}</p>
+            )}
           </div>
 
           <div>
-            <Label htmlFor="branch">Branch</Label>
-            <Input
-              id="branch"
-              name="branch"
-              type="text"
-              value={formData.branch}
+            <Label htmlFor="department">Department</Label>
+            <select
+              id="department"
+              name="department"
+              value={formData.department}
               onChange={handleChange}
               required
-              placeholder="Computer Science"
-            />
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
+            >
+              <option value="">Select Department</option>
+              {departments.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <Label htmlFor="yearOfAdmission">Year of Admission</Label>
+            <select
+              id="yearOfAdmission"
+              name="yearOfAdmission"
+              value={formData.yearOfAdmission}
+              onChange={handleChange}
+              required
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
+            >
+              <option value="">Select Admission Year</option>
+              {admissionYears.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

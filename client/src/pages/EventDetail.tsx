@@ -281,8 +281,11 @@ export default function EventDetail() {
               studentData={student ? {
                 fullName: student.name,
                 email: student.email,
+                phone: student.phone,
+                rollNumber: student.rollNumber,
                 enrollmentNumber: student.enrollment,
-                branch: student.branch,
+                department: student.department,
+                yearOfAdmission: student.yearOfAdmission,
               } : undefined}
               onSubmit={async (data) => {
                 try {
@@ -294,10 +297,10 @@ export default function EventDetail() {
                   });
                   toast({
                     title: "Registration successful!",
-                    description: `You have been registered for ${event.title}. A membership request has been sent to the club.`,
+                    description: `You have been registered for ${event.title}. The club admin can now approve your registration.`,
                   });
                 } catch (error: any) {
-                  // Fallback: store registration AND membership request locally
+                  // Fallback: store registration locally (no membership request)
                   const pendingRegistrations = JSON.parse(localStorage.getItem("pendingEventRegistrations") || "[]");
                   const registration = {
                     id: `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -312,26 +315,6 @@ export default function EventDetail() {
                   };
                   
                   pendingRegistrations.push(registration);
-                  //localStorage.setItem("pendingEventRegistrations", JSON.stringify(pendingRegistrations));
-                  
-                  // Also create a membership request locally
-                  const pendingMemberships = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
-                  const membershipRequest = {
-                    id: `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                    clubId: event.clubId,
-                    clubName: event.clubName,
-                    studentName: data.fullName,
-                    studentEmail: data.email,
-                    enrollmentNumber: data.enrollmentNumber,
-                    department: data.department,
-                    reason: `Registered for event: ${event.title}`,
-                    status: 'pending',
-                    createdAt: new Date().toISOString(),
-                    isFallback: true
-                  };
-                  
-                  pendingMemberships.push(membershipRequest);
-                 // localStorage.setItem("pendingJoinRequests", JSON.stringify(pendingMemberships));
                   
                   toast({
                     title: "Registration Saved (Offline)",

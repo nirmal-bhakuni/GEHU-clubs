@@ -17,6 +17,7 @@ const eventRegistrationSchema = new mongoose.Schema({
   interests: [{ type: String }],
   experience: { type: String },
   attended: { type: Boolean, default: false },
+  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   attendanceStatus: { type: String, enum: ['pending', 'present', 'absent'], default: 'pending' },
   attendanceMarkedAt: { type: Date },
   attendanceMarkedBy: { type: String },

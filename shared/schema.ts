@@ -40,6 +40,7 @@ export interface EventRegistration {
   interests: string[];
   experience?: string;
   attended?: boolean;
+  status?: 'pending' | 'approved' | 'rejected';
   attendanceStatus?: 'pending' | 'present' | 'absent';
   attendanceMarkedAt?: Date;
   attendanceMarkedBy?: string;

@@ -5,8 +5,12 @@ interface Student {
   id: string;
   name: string;
   email: string;
+  phone?: string;
+  rollNumber?: string;
   enrollment: string;
-  branch: string;
+  department?: string;
+  yearOfAdmission?: number;
+  yearOfCourse?: number;
 }
 
 // Static student data for when API is not available
@@ -16,7 +20,6 @@ const staticStudents: Record<string, Student> = {
     name: "Demo Student",
     email: "student@example.com",
     enrollment: "EN123456789",
-    branch: "Computer Science"
   }
 };
 

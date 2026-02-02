@@ -46,7 +46,7 @@ export default function ClubDetail() {
         ...prev,
         name: student.name,
         email: student.email,
-        department: student.branch,
+        department: student.department,
         enrollmentNumber: student.enrollment
       }));
     }
@@ -333,7 +333,7 @@ export default function ClubDetail() {
                     ...prev,
                     name: student.name,
                     email: student.email,
-                    department: student.branch,
+                    department: student.department,
                     enrollmentNumber: student.enrollment
                   }));
                 }

@@ -83,6 +83,8 @@ export function useAuth() {
     },
     retry: false,
     staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
   });
 
   return {

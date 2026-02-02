@@ -106,10 +106,12 @@ export default function StudentProfile() {
                     <Briefcase className="w-4 h-4 text-muted-foreground" />
                     <span>{studentData.major || "Computer Science"}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="w-4 h-4 text-muted-foreground" />
-                    <span>{studentData.major}</span>
-                  </div>
+                  {studentData.yearOfCourse && (
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-muted-foreground" />
+                      <span>Year {studentData.yearOfCourse}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-muted-foreground" />
                     <span>Joined {studentData.joinedDate}</span>

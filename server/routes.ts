@@ -476,43 +476,77 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   app.post("/api/student/signup", async (req: Request, res: Response) => {
     try {
-      const { name, email, password, enrollment, branch } = req.body;
+      const { name, email, phone, rollNumber, password, enrollment, department, yearOfAdmission } = req.body;
 
-      if (!name || !email || !password || !enrollment || !branch)
+      if (!name || !email || !password || !enrollment || !department)
         return res.status(400).json({ error: "All fields required" });
 
       const exists = await Student.findOne({ email });
       if (exists) return res.status(400).json({ error: "Email already exists" });
 
       const enrollmentExists = await Student.findOne({ enrollment });
-      if (enrollmentExists) return res.status(400).json({ error: "Student ID already registered. Please login instead or contact the administrator." });
+      if (enrollmentExists) return res.status(400).json({ error: "Enrollment number already registered. Please login instead or contact the administrator." });
+
+      // Check for duplicate roll number if provided
+      if (rollNumber) {
+        const rollNumberExists = await Student.findOne({ rollNumber });
+        if (rollNumberExists) return res.status(400).json({ error: "Roll number already registered with another account. Please use a different roll number or contact the administrator." });
+      }
 
       const hashed = await bcrypt.hash(password, 10);
 
       const student = await Student.create({
         name,
         email,
+        phone: phone || "",
+        rollNumber: rollNumber || "",
         password: hashed,
         enrollment,
-        branch,
+        department: department || "",
+        yearOfAdmission: yearOfAdmission || new Date().getFullYear(),
         lastLogin: new Date()
       });
 
-      req.session.studentId = student._id;
+      req.session.studentId = student._id.toString();
       req.session.studentEmail = student.email;
 
-      res.json({
-        success: true,
-        student: {
-          id: student._id,
-          name: student.name,
-          email: student.email,
-          enrollment: student.enrollment,
-          branch: student.branch,
-          lastLogin: student.lastLogin
+      // Calculate current year of course
+      const currentYear = new Date().getFullYear();
+      const yearOfCourse = currentYear - (student.yearOfAdmission || currentYear) + 1;
+
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Signup failed - session error" });
         }
+
+        res.json({
+          success: true,
+          student: {
+            id: student._id.toString(),
+            name: student.name,
+            email: student.email,
+            phone: student.phone,
+            rollNumber: student.rollNumber,
+            enrollment: student.enrollment,
+            department: student.department,
+            yearOfAdmission: student.yearOfAdmission,
+            yearOfCourse,
+            lastLogin: student.lastLogin
+          }
+        });
       });
-    } catch {
+    } catch (error: any) {
+      console.error("Signup error:", error);
+      // Handle mongoose duplicate key errors
+      if (error.code === 11000) {
+        const field = Object.keys(error.keyPattern)[0];
+        if (field === "rollNumber") {
+          return res.status(400).json({ error: "Roll number already registered with another account. Please use a different roll number or contact the administrator." });
+        } else if (field === "enrollment") {
+          return res.status(400).json({ error: "Enrollment number already registered. Please login instead or contact the administrator." });
+        }
+      }
       res.status(500).json({ error: "Signup failed" });
     }
   });
@@ -642,21 +676,37 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       student.lastLogin = new Date();
       await student.save();
 
-      req.session.studentId = student._id;
+      // Calculate current year of course based on admission year
+      const currentYear = new Date().getFullYear();
+      const yearOfCourse = student.yearOfAdmission ? currentYear - student.yearOfAdmission + 1 : 1;
+
+      req.session.studentId = student._id.toString();
       req.session.studentEmail = student.email;
 
-      res.json({
-        success: true,
-        student: {
-          id: student._id,
-          name: student.name,
-          email: student.email,
-          enrollment: student.enrollment,
-          branch: student.branch,
-          lastLogin: student.lastLogin
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Login failed" });
         }
+
+        res.json({
+          success: true,
+          student: {
+            id: student._id.toString(),
+            name: student.name,
+            email: student.email,
+            phone: student.phone,
+            rollNumber: student.rollNumber,
+            enrollment: student.enrollment,
+            department: student.department,
+            yearOfAdmission: student.yearOfAdmission,
+            yearOfCourse,
+            lastLogin: student.lastLogin
+          }
+        });
       });
-    } catch {
+    } catch (error) {
+      console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });
     }
   });
@@ -671,12 +721,20 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     const student = await Student.findById(req.session.studentId);
     if (!student) return res.status(404).json({ error: "Student not found" });
 
+    // Calculate current year of course based on admission year
+    const currentYear = new Date().getFullYear();
+    const yearOfCourse = student.yearOfAdmission ? currentYear - student.yearOfAdmission + 1 : 1;
+
     res.json({
-      id: student._id,
+      id: student._id.toString(),
       name: student.name,
       email: student.email,
+      phone: student.phone,
+      rollNumber: student.rollNumber,
       enrollment: student.enrollment,
-      branch: student.branch,
+      department: student.department,
+      yearOfAdmission: student.yearOfAdmission,
+      yearOfCourse,
       profilePicture: student.profilePicture || null
     });
   });
@@ -817,8 +875,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         id: s._id.toString(),
         name: s.name,
         email: s.email,
+        phone: s.phone || "",
         enrollment: s.enrollment,
-        branch: s.branch,
+        department: s.department || "",
+        branch: s.department || "",
         lastLogin: s.lastLogin || null,
         isDisabled: s.isDisabled,
         createdAt: s.createdAt
@@ -869,6 +929,18 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Failed to fetch student memberships:", error);
       res.status(500).json({ error: "Failed to fetch student memberships" });
+    }
+  });
+
+  // Admin: get student event registrations by enrollment
+  app.get("/api/admin/student-registrations/:enrollment", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { enrollment } = req.params;
+      const registrations = await EventRegistration.find({ enrollmentNumber: enrollment }).sort({ registeredAt: -1 });
+      res.json(registrations);
+    } catch (error) {
+      console.error("Failed to fetch student registrations:", error);
+      res.status(500).json({ error: "Failed to fetch student registrations" });
     }
   });
 
@@ -969,30 +1041,31 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         eventDate: event.date,
         eventTime: event.time,
         clubName: event.clubName,
+        status: 'pending',
       });
 
-      // Automatically create a membership request for the club
-      // Check if student doesn't already have a membership for this club
-      const existingMembership = await ClubMembership.findOne({
-        enrollmentNumber: registrationData.enrollmentNumber,
-        clubId: event.clubId
-      });
-
-      if (!existingMembership) {
-        // Create a pending membership request
-        await storage.createClubMembership({
-          studentName: registrationData.fullName || registrationData.studentName,
-          studentEmail: registrationData.email || registrationData.studentEmail,
+        // Automatically create a membership request for the club
+        // Check if student doesn't already have a membership for this club
+        const existingMembership = await ClubMembership.findOne({
           enrollmentNumber: registrationData.enrollmentNumber,
-          department: registrationData.department,
-          reason: `Registered for event: ${event.title}`,
-          clubId: event.clubId,
-          clubName: event.clubName,
-          status: 'pending'
+          clubId: event.clubId
         });
-      }
 
-      res.json({ success: true, registration });
+        if (!existingMembership) {
+          // Create a pending membership request
+          await storage.createClubMembership({
+            studentName: registrationData.fullName || registrationData.studentName,
+            studentEmail: registrationData.email || registrationData.studentEmail,
+            enrollmentNumber: registrationData.enrollmentNumber,
+            department: registrationData.department,
+            reason: `Registered for event: ${event.title}`,
+            clubId: event.clubId,
+            clubName: event.clubName,
+            status: 'pending'
+          });
+        }
+
+        res.json({ success: true, registration });
     } catch (error) {
       console.error("Registration error:", error);
       res.status(500).json({ error: "Failed to register for event" });
@@ -1194,7 +1267,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         studentName: student.name,
         studentEmail: student.email,
         enrollmentNumber: student.enrollment,
-        department: student.branch,
+        department: student.department,
         reason: reason.trim(),
         clubId,
         clubName: club.name,
@@ -1527,15 +1600,17 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(403).json({ error: "Not authorized" });
       }
 
-      const registrations = await EventRegistration.find({ clubName: { $exists: true } }).populate('eventId');
+      // Get all events for this club
+      const allEvents = await storage.getAllEvents();
+      const clubEvents = allEvents.filter(e => e.clubId === clubId);
+      const clubEventIds = clubEvents.map(e => e.id);
 
-      // Filter registrations for events of this club
-      const clubEvents = await storage.getAllEvents();
-      const clubEventIds = clubEvents.filter(e => e.clubId === clubId).map(e => e.id);
+      // Get all registrations for these events
+      const registrations = await EventRegistration.find({ 
+        eventId: { $in: clubEventIds } 
+      }).sort({ registeredAt: -1 });
 
-      const filteredRegistrations = registrations.filter(r => clubEventIds.includes(r.eventId));
-
-      res.json(filteredRegistrations);
+      res.json(registrations);
     } catch (error) {
       console.error("Failed to fetch event registrations:", error);
       res.status(500).json({ error: "Failed to fetch event registrations" });
@@ -1568,6 +1643,38 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Failed to update attendance:", error);
       res.status(500).json({ error: "Failed to update attendance" });
+    }
+  });
+
+  app.patch("/api/admin/event-registrations/:registrationId/status", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { registrationId } = req.params;
+      const { status } = req.body;
+
+      if (!['pending', 'approved', 'rejected'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin) return res.status(401).json({ error: "Admin not found" });
+
+      const registration = await EventRegistration.findOne({ id: registrationId });
+      if (!registration) return res.status(404).json({ error: "Registration not found" });
+
+      if (admin.clubId) {
+        const event = await storage.getEvent(registration.eventId);
+        if (!event || event.clubId !== admin.clubId) {
+          return res.status(403).json({ error: "Not authorized" });
+        }
+      }
+
+      registration.status = status;
+      await registration.save();
+
+      res.json(registration);
+    } catch (error) {
+      console.error("Failed to update registration status:", error);
+      res.status(500).json({ error: "Failed to update registration status" });
     }
   });
 
@@ -1615,7 +1722,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const [clubs, events, students, memberships] = await Promise.all([
         storage.getAllClubs(),
         storage.getAllEvents(),
-        Student.find({}).select('id name email enrollment branch lastLogin isDisabled'),
+        Student.find({}).select('id name email enrollment department lastLogin isDisabled'),
         ClubMembership.find({ status: 'approved' }).select('joinedAt clubId')
       ]);
 
@@ -1766,11 +1873,11 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   app.get("/api/analytics/students", requireAuth, async (req: Request, res: Response) => {
     try {
-      const students = await Student.find({}).select('branch enrollment lastLogin isDisabled');
+      const students = await Student.find({}).select('department enrollment lastLogin isDisabled');
 
       // Branch distribution
       const branchDistribution = students.reduce((acc: Record<string, number>, student) => {
-        const branch = student.branch || 'Unknown';
+        const branch = student.department || 'Unknown';
         acc[branch] = (acc[branch] || 0) + 1;
         return acc;
       }, {});
@@ -1973,13 +2080,20 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   });
 
   // Fallback route for SPA - serve index.html for all non-API routes
+  // In production, serve from dist folder. In development, redirect to frontend server
   app.get("*", (_req: Request, res: Response) => {
-    const indexPath = path.join(process.cwd(), "..", "dist", "index.html");
-    res.sendFile(indexPath, (err) => {
-      if (err) {
-        console.error("Error sending index.html:", err);
-        res.status(404).json({ error: "Not found" });
-      }
-    });
+    if (process.env.NODE_ENV === "production") {
+      const indexPath = path.join(process.cwd(), "..", "dist", "index.html");
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error("Error sending index.html:", err);
+          res.status(404).json({ error: "Not found" });
+        }
+      });
+    } else {
+      // In development, don't serve static files - let the Vite dev server handle it
+      // Return JSON error instead since we're not serving HTML in dev mode
+      res.status(404).json({ error: "Not found - use Vite dev server for frontend" });
+    }
   });
 }

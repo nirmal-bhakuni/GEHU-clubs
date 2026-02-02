@@ -1458,8 +1458,9 @@ export default function Dashboard() {
                             )}
                           </div>
                           <p className="text-sm text-muted-foreground">{s.email}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Phone: {s.phone || "—"}</p>
                           <p className="text-xs text-muted-foreground mt-1">Enrollment: {s.enrollment}</p>
-                          <p className="text-xs text-muted-foreground">Branch: {s.branch}</p>
+                          <p className="text-xs text-muted-foreground">Branch: {s.department || s.branch || "—"}</p>
                           <p className="text-xs text-muted-foreground mt-1">{s.lastLogin ? `Last active: ${new Date(s.lastLogin).toLocaleString()}` : "Last active: —"}</p>
                         </div>
                         <div className="flex gap-2">
@@ -2101,12 +2102,18 @@ export default function Dashboard() {
                     <p className="text-foreground">{selectedStudent.email}</p>
                   </div>
                   <div>
+                    <Label className="text-sm font-medium">Phone</Label>
+                    <p className="text-foreground">{selectedStudent.phone || "—"}</p>
+                  </div>
+                  <div>
                     <Label className="text-sm font-medium">Enrollment Number</Label>
                     <p className="text-foreground">{selectedStudent.enrollment}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Branch</Label>
-                    <p className="text-foreground">{selectedStudent.branch}</p>
+                    <p className="text-foreground">
+                      {selectedStudent.department || selectedStudent.branch || "—"}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Last Active</Label>
@@ -2157,14 +2164,18 @@ export default function Dashboard() {
                       <div key={membership.id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div>
                           <h4 className="font-medium">{membership.clubName}</h4>
-                          <p className="text-sm text-muted-foreground">Status: {membership.status}</p>
                           <p className="text-xs text-muted-foreground">
                             Joined: {new Date(membership.joinedAt).toLocaleDateString()}
                           </p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm">{membership.department}</p>
-                          <p className="text-xs text-muted-foreground">{membership.reason}</p>
+                        <div className="text-right flex items-center gap-2">
+                          <div>
+                            <p className="text-sm">{membership.department}</p>
+                            <p className="text-xs text-muted-foreground">{membership.reason}</p>
+                          </div>
+                          <Badge variant={membership.status === 'approved' ? 'default' : membership.status === 'pending' ? 'secondary' : 'destructive'}>
+                            {membership.status}
+                          </Badge>
                         </div>
                       </div>
                     ))}
@@ -2187,12 +2198,24 @@ export default function Dashboard() {
                           <p className="text-xs text-muted-foreground">
                             Date: {new Date(registration.eventDate).toLocaleDateString()} at {registration.eventTime}
                           </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm">{registration.location}</p>
                           <p className="text-xs text-muted-foreground">
                             Registered: {new Date(registration.registeredAt).toLocaleDateString()}
                           </p>
+                        </div>
+                        <div className="text-right flex items-center gap-2">
+                          <div>
+                            <p className="text-sm">{registration.department}</p>
+                            <p className="text-xs text-muted-foreground">{registration.year}</p>
+                          </div>
+                          <Badge 
+                            variant={
+                              registration.attendanceStatus === 'present' ? 'default' : 
+                              registration.attendanceStatus === 'absent' ? 'destructive' : 
+                              'secondary'
+                            }
+                          >
+                            {registration.attendanceStatus || (registration.attended ? "Present" : "Pending")}
+                          </Badge>
                         </div>
                       </div>
                     ))}
