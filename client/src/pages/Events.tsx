@@ -86,6 +86,14 @@ export default function Events() {
               <SelectItem value="Seminar">Seminar</SelectItem>
               <SelectItem value="Social">Social</SelectItem>
               <SelectItem value="Competition">Competition</SelectItem>
+              <SelectItem value="Conference">Conference</SelectItem>
+              <SelectItem value="Hackathon">Hackathon</SelectItem>
+              <SelectItem value="Meetup">Meetup</SelectItem>
+              <SelectItem value="Webinar">Webinar</SelectItem>
+              <SelectItem value="Exhibition">Exhibition</SelectItem>
+              <SelectItem value="Festival">Festival</SelectItem>
+              <SelectItem value="Training">Training</SelectItem>
+              <SelectItem value="Networking">Networking</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -138,6 +146,37 @@ export default function Events() {
               </div>
             )}
           </>
+        )}
+
+        {/* Explore by Category Section */}
+        {!isLoading && filteredEvents.length === 0 && (
+          <div className="mt-12">
+            <h3 className="text-2xl font-semibold mb-6">Explore by Category</h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {[
+                { category: "Workshop", icon: "🔧" },
+                { category: "Bootcamp", icon: "💪" },
+                { category: "Seminar", icon: "🎤" },
+                { category: "Social", icon: "🎉" },
+                { category: "Competition", icon: "🏆" },
+                { category: "Conference", icon: "🎯" },
+                { category: "Hackathon", icon: "💡" },
+                { category: "Meetup", icon: "👋" },
+              ].map((cat) => (
+                <button
+                  key={cat.category}
+                  onClick={() => setSelectedCategory(cat.category)}
+                  className="group p-6 rounded-xl border border-border hover:border-primary/50 hover:bg-primary/5 transition-all duration-300 text-center hover:shadow-lg hover:scale-105"
+                >
+                  <div className="text-4xl mb-3 group-hover:scale-125 transition-transform duration-300">{cat.icon}</div>
+                  <h4 className="font-semibold text-sm md:text-base">{cat.category}</h4>
+                  <p className="text-xs md:text-sm text-muted-foreground mt-1">
+                    {events.filter(e => e.category === cat.category && !frozenClubIds.includes(e.clubId)).length} event{events.filter(e => e.category === cat.category && !frozenClubIds.includes(e.clubId)).length !== 1 ? 's' : ''}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

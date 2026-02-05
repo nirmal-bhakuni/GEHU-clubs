@@ -335,3 +335,50 @@
     linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px);
   background-size: 20px 20px;
 }
+
+/* Scrollbar hiding utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
+}
+
+/* Responsive smooth scrolling */
+@media (prefers-reduced-motion: no-preference) {
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Touch-friendly tap highlight removal */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide tooltips and popups in story section */
+.no-tooltip {
+  position: relative;
+}
+
+.no-tooltip:hover::before,
+.no-tooltip:hover::after {
+  display: none !important;
+}
+
+/* Suppress browser default tooltips */
+[title] {
+  cursor: inherit !important;
+}
+
+.story-section [title] {
+  pointer-events: none;
+}
+
+/* Better focus indicators for keyboard navigation */
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}

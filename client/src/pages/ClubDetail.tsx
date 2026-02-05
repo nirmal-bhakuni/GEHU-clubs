@@ -46,7 +46,7 @@ export default function ClubDetail() {
         ...prev,
         name: student.name,
         email: student.email,
-        department: student.department,
+        department: student.department || '',
         enrollmentNumber: student.enrollment
       }));
     }
@@ -333,7 +333,7 @@ export default function ClubDetail() {
                     ...prev,
                     name: student.name,
                     email: student.email,
-                    department: student.department,
+                    department: student.department || '',
                     enrollmentNumber: student.enrollment
                   }));
                 }
@@ -475,47 +475,54 @@ export default function ClubDetail() {
         </TabsContent>
 
         <TabsContent value="achievements" className="space-y-6">
-          <div>
+          <div className="max-w-5xl mx-auto">
             <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
               <Trophy className="w-5 h-5 text-yellow-500" />
               Club Achievements
             </h3>
             {achievements.length === 0 ? (
-              <Card className="p-6 text-center">
-                <Trophy className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h4 className="font-semibold mb-2">No Achievements Yet</h4>
+              <Card className="p-8 text-center border-dashed border-2 hover:border-primary/40 transition-all duration-300">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                  <Trophy className="w-8 h-8 text-yellow-500" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">No Achievements Yet</h4>
                 <p className="text-muted-foreground">
                   This club hasn't added any achievements yet. Check back later to see their accomplishments!
                 </p>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {achievements.map((achievement) => (
-                  <Card key={achievement.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="aspect-video overflow-hidden">
+                {achievements.map((achievement, index) => (
+                  <Card key={achievement.id} className="group relative overflow-hidden border border-primary/10 hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-500 hover:-translate-y-2 hover:scale-[1.02] animate-fade-in-up" style={{ animationDelay: `${index * 100}ms` }}>
+                    {/* Shimmer effect */}
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-1000">
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent animate-shimmer"></div>
+                    </div>
+                    
+                    <div className="aspect-video overflow-hidden relative">
                       <img
                         src={achievement.imageUrl}
                         alt={achievement.title}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                       />
+                      {/* Overlay gradient */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      {/* Award badge */}
+                      <div className="absolute top-3 right-3 w-10 h-10 rounded-full bg-yellow-500/90 flex items-center justify-center shadow-lg animate-bounce-subtle">
+                        <Trophy className="w-5 h-5 text-white" />
+                      </div>
                     </div>
-                    <div className="p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-semibold text-lg line-clamp-2">{achievement.title}</h4>
-                        <Badge variant="outline" className="ml-2 flex-shrink-0">
-                          {achievement.category}
+                    <div className="p-6 relative z-10">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <h4 className="text-lg font-bold group-hover:text-primary transition-colors">{achievement.title}</h4>
+                        <Badge variant="secondary" className="bg-yellow-500/10 text-yellow-600 border border-yellow-500/20 whitespace-nowrap">
+                          {new Date(achievement.achievementDate).getFullYear()}
                         </Badge>
                       </div>
-                      <p className="text-muted-foreground text-sm mb-3 line-clamp-3">
-                        {achievement.description}
-                      </p>
-                      <div className="flex items-center text-xs text-muted-foreground">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {new Date(achievement.achievementDate).toLocaleDateString('en-US', {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
+                      <p className="text-sm text-muted-foreground mb-3 line-clamp-2 leading-relaxed">{achievement.description}</p>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(achievement.achievementDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                       </div>
                     </div>
                   </Card>
@@ -544,25 +551,47 @@ export default function ClubDetail() {
         </TabsContent>
 
         <TabsContent value="events" className="space-y-6">
-          <div>
-            <h3 className="text-xl font-semibold mb-4">Club Events</h3>
+          <div className="max-w-5xl mx-auto">
+            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-primary" />
+              Club Events
+            </h3>
             {eventsLoading ? (
-              <div>Loading events...</div>
+              <div className="text-center py-8">Loading events...</div>
             ) : events.length === 0 ? (
-              <Card className="p-6">
-                <p className="text-muted-foreground">No events for this club yet.</p>
+              <Card className="p-8 text-center border-dashed border-2 hover:border-primary/40 transition-all duration-300">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Calendar className="w-8 h-8 text-primary" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">No Events Yet</h4>
+                <p className="text-muted-foreground">No events for this club yet. Check back soon!</p>
               </Card>
             ) : (
               <div className="grid grid-cols-1 gap-4">
-                {events.map((ev) => (
-                  <Card key={ev.id} className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-semibold">{ev.title}</h4>
-                        <div className="text-sm text-muted-foreground">{ev.date} • {ev.time}</div>
+                {events.map((ev, index) => (
+                  <Card key={ev.id} className="group p-5 hover:border-primary/30 hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 hover:-translate-y-1 animate-fade-in-up border border-primary/10" style={{ animationDelay: `${index * 50}ms` }}>
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
+                        <div className="flex-shrink-0 w-14 h-14 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex flex-col items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-300">
+                          <span className="text-xs font-medium">{new Date(ev.date).toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}</span>
+                          <span className="text-xl font-bold">{new Date(ev.date).getDate()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-lg mb-1 group-hover:text-primary transition-colors">{ev.title}</h4>
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {ev.date}
+                            </span>
+                            <span>•</span>
+                            <span>{ev.time}</span>
+                          </div>
+                        </div>
                       </div>
                       <Link href={`/events/${ev.id}`}>
-                        <Button variant="outline">View</Button>
+                        <Button variant="outline" className="hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-300 shadow-sm hover:shadow-md group-hover:scale-105">
+                          View Details
+                        </Button>
                       </Link>
                     </div>
                   </Card>
@@ -573,65 +602,74 @@ export default function ClubDetail() {
         </TabsContent>
 
         <TabsContent value="leadership" className="space-y-6">
-          <div>
+          <div className="max-w-5xl mx-auto">
             <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
               <Users className="w-5 h-5" />
               Leadership Team
             </h3>
             {leadership.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {leadership.map((leader) => (
-                  <div
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {leadership.map((leader, index) => (
+                  <Card
                     key={leader.id}
-                    className="p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/30 transition-all group"
+                    className="group p-5 hover:border-primary/30 hover:bg-primary/5 hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 hover:-translate-y-1 animate-fade-in-up border border-primary/10"
+                    style={{ animationDelay: `${index * 80}ms` }}
                   >
                     <div className="flex flex-col items-center text-center gap-3">
-                      <Avatar className="w-12 h-12 flex-shrink-0">
-                        <AvatarFallback className="flex items-center justify-center w-full h-full rounded-full bg-primary/10 text-primary font-bold text-base leading-none">
-                          {leader.studentName.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm truncate">{leader.studentName}</p>
-                        <p className="text-xs text-muted-foreground mt-1 truncate">
-                          {leader.role.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </p>
+                      <div className="relative">
+                        <Avatar className="w-16 h-16 ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all duration-300 group-hover:scale-110">
+                          <AvatarFallback className="flex items-center justify-center w-full h-full rounded-full bg-gradient-to-br from-primary to-primary/80 text-white font-bold text-xl leading-none">
+                            {leader.studentName.charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {/* Online indicator */}
+                        <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-background flex items-center justify-center">
+                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
                       </div>
 
-                      <div className="w-full mt-2 space-y-2">
-                        <div className="flex items-center justify-center gap-2">
+                      <div className="min-w-0 w-full">
+                        <p className="font-bold text-base mb-1 truncate group-hover:text-primary transition-colors">{leader.studentName}</p>
+                        <Badge variant="secondary" className="text-xs bg-primary/10 text-primary border border-primary/20">
+                          {leader.role.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </Badge>
+                      </div>
+
+                      <div className="w-full mt-2 space-y-2 pt-3 border-t border-border/50">
+                        <div className="flex items-center justify-center gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors group/email">
                           <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <a
                             href={`mailto:${leader.studentEmail}`}
-                            className="text-primary hover:underline truncate text-sm"
+                            className="text-primary hover:underline truncate text-sm font-medium"
                           >
                             {leader.studentEmail}
                           </a>
                           <button
                             onClick={() => {
                               navigator.clipboard.writeText(leader.studentEmail);
+                              toast({ title: "Copied!", description: "Email copied to clipboard" });
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0"
+                            className="opacity-0 group-hover/email:opacity-100 transition-opacity flex-shrink-0"
                             aria-label={`Copy ${leader.studentEmail}`}
                           >
                             <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-primary" />
                           </button>
                         </div>
 
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors group/phone">
                           <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <a
                             href={`tel:${leader.phoneNumber}`}
-                            className="text-primary hover:underline truncate text-sm"
+                            className="text-primary hover:underline truncate text-sm font-medium"
                           >
                             {leader.phoneNumber}
                           </a>
                           <button
                             onClick={() => {
                               navigator.clipboard.writeText(leader.phoneNumber);
+                              toast({ title: "Copied!", description: "Phone number copied to clipboard" });
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0"
+                            className="opacity-0 group-hover/phone:opacity-100 transition-opacity flex-shrink-0"
                             aria-label={`Copy ${leader.phoneNumber}`}
                           >
                             <ExternalLink className="w-4 h-4 text-muted-foreground hover:text-primary" />
@@ -639,13 +677,15 @@ export default function ClubDetail() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             ) : (
-              <Card className="p-6 text-center">
-                <Award className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h4 className="font-semibold mb-2">Leadership Team</h4>
+              <Card className="p-8 text-center border-dashed border-2 hover:border-primary/40 transition-all duration-300">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Award className="w-8 h-8 text-primary" />
+                </div>
+                <h4 className="font-semibold text-lg mb-2">Leadership Team</h4>
                 <p className="text-muted-foreground">
                   Leadership positions for this club will be displayed here once assigned by the club administrators.
                 </p>
@@ -656,6 +696,36 @@ export default function ClubDetail() {
 
       </Tabs>
     </div>
+
+    <style>{`
+      @keyframes fade-in-up {
+        from {
+          opacity: 0;
+          transform: translateY(1rem);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+      }
+      @keyframes bounce-subtle {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-3px); }
+      }
+      .animate-fade-in-up {
+        animation: fade-in-up 0.6s ease-out forwards;
+      }
+      .animate-shimmer {
+        animation: shimmer 2s ease-in-out infinite;
+      }
+      .animate-bounce-subtle {
+        animation: bounce-subtle 2s ease-in-out infinite;
+      }
+    `}</style>
     </TooltipProvider>
   );
 }

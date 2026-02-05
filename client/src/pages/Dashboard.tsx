@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -38,12 +38,52 @@ import {
   Search,
   AlertCircle,
   RefreshCw,
-  CheckCircle
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  Bookmark,
+  Filter
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event, Club } from "@shared/schema";
+
+// Interfaces for Campus Feed
+interface StoryHighlight {
+  clubId: string;
+  clubName: string;
+  clubLogo: string;
+  viewed?: boolean;
+  timestamp?: Date;
+}
+
+interface FeedPost {
+  id: string;
+  clubId: string;
+  clubName: string;
+  clubLogo: string;
+  title: string;
+  description?: string;
+  content?: string;
+  timestamp: Date;
+  views?: number;
+  interactions?: number;
+  type?: "post" | "announcement" | "event" | "achievement";
+  imageUrl?: string;
+}
+
+interface Recommendation {
+  clubId: string;
+  clubName: string;
+  clubLogo: string;
+  category: string;
+  description: string;
+  memberCount?: number;
+  reason?: string;
+  matchPercentage?: number;
+}
 
 // Static data for when API is not available
 const staticClubs: Club[] = [
@@ -2842,6 +2882,16 @@ export default function Dashboard() {
           )}
         </DialogContent>
       </Dialog>
+
+      <style>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
 }

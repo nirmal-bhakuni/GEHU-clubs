@@ -29,7 +29,7 @@ export default function EventCard({
 }: EventCardProps) {
   return (
     <Card className={`
-      overflow-hidden transition-all duration-500 group
+      overflow-hidden transition-all duration-500 group h-full min-h-[420px] md:min-h-[440px]
       hover:-translate-y-2 hover:shadow-2xl hover:border-primary/40
       border-2 border-border hover:border-primary/40
       before:absolute before:inset-0 before:bg-gradient-to-br before:from-primary/0 before:via-primary/5 before:to-primary/0 
@@ -57,7 +57,7 @@ export default function EventCard({
           {category}
         </Badge>
       </div>
-      <div className="p-6 relative z-10">
+      <div className="p-6 relative z-10 flex flex-col h-full">
         <div className="flex items-center gap-2 mb-2">
           <Badge variant="secondary" className={`
             text-xs transition-all duration-300
@@ -66,15 +66,17 @@ export default function EventCard({
             {clubName}
           </Badge>
         </div>
-        <h3 className={`
-          text-xl font-semibold mb-2 line-clamp-2 transition-all duration-300
-          group-hover:text-primary group-hover:scale-105 origin-left
-        `} data-testid={`text-title-${id}`}>
-          {title}
-        </h3>
-        <p className="text-muted-foreground text-sm mb-4 line-clamp-2 font-body group-hover:text-foreground/80 transition-colors duration-300" data-testid={`text-description-${id}`}>
-          {description}
-        </p>
+        <div className="min-h-[96px]">
+          <h3 className={`
+            text-xl font-semibold mb-2 line-clamp-2 transition-all duration-300
+            group-hover:text-primary group-hover:scale-105 origin-left
+          `} data-testid={`text-title-${id}`}>
+            {title}
+          </h3>
+          <p className="text-muted-foreground text-sm mb-4 line-clamp-2 font-body group-hover:text-foreground/80 transition-colors duration-300" data-testid={`text-description-${id}`}>
+            {description}
+          </p>
+        </div>
         <div className="space-y-2 mb-4">
           <div className={`
             flex items-center gap-2 text-sm text-muted-foreground 
@@ -98,7 +100,7 @@ export default function EventCard({
             <span data-testid={`text-location-${id}`}>{location}</span>
           </div>
         </div>
-        <Link href={`/events/${id}`}>
+        <Link href={`/events/${id}`} className="mt-auto">
           <Button className={`
             w-full transition-all duration-300
             hover:scale-105 hover:shadow-lg active:scale-95

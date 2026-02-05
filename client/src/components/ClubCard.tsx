@@ -94,7 +94,7 @@ export default function ClubCard({
       <Link href={`/clubs/${id}`} className="block group" aria-label={`Open ${name} details`}>
         <Card
           className={`
-            p-6 transition-all duration-500 h-full relative overflow-hidden
+            p-6 transition-all duration-500 h-full min-h-[360px] md:min-h-[380px] relative overflow-hidden
             hover:-translate-y-2 hover:shadow-2xl hover:border-primary/40
             border-2 border-border hover:border-primary/40
             before:absolute before:inset-0 before:bg-gradient-to-br before:from-primary/0 before:via-primary/5 before:to-primary/0 
@@ -209,18 +209,19 @@ export default function ClubCard({
               </Badge>
             )}
 
-            {/* Club Name */}
-            <h3 className={`
-              text-xl font-semibold mb-2 transition-all duration-300
-              group-hover:text-primary group-hover:scale-110
-            `} data-testid={`text-name-${id}`}>
-              {name}
-            </h3>
+            {/* Club Name + Description */}
+            <div className="min-h-[96px]">
+              <h3 className={`
+                text-xl font-semibold mb-2 transition-all duration-300
+                group-hover:text-primary group-hover:scale-110
+              `} data-testid={`text-name-${id}`}>
+                {name}
+              </h3>
 
-            {/* Description */}
-            <p className="text-muted-foreground text-sm mb-4 line-clamp-3 font-body leading-relaxed" data-testid={`text-description-${id}`}>
-              {description}
-            </p>
+              <p className="text-muted-foreground text-sm mb-4 line-clamp-3 font-body leading-relaxed" data-testid={`text-description-${id}`}>
+                {description}
+              </p>
+            </div>
 
             {/* Member Count with Tooltip */}
             <Tooltip>
