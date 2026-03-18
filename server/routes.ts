@@ -95,6 +95,70 @@ async function requireClubOwnership(req: Request, res: Response, next: NextFunct
   }
 }
 
+function parseLocalDateTime(date: string, time: string): Date | null {
+  const dateMatch = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const timeMatch = /^\d{2}:\d{2}$/.test(time);
+  if (!dateMatch || !timeMatch) return null;
+
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
+
+  const parsed = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizeLocation(location: string) {
+  return location.trim().toLowerCase();
+}
+
+async function findVenueConflict(params: {
+  date: string;
+  time: string;
+  durationMinutes?: number;
+  location: string;
+  excludeEventId?: string;
+}) {
+  const { date, time, durationMinutes = 120, location, excludeEventId } = params;
+
+  const requestedStart = parseLocalDateTime(date, time);
+  if (!requestedStart) return { error: "Invalid event date or time format" as const };
+
+  const requestedDuration = Number(durationMinutes);
+  if (!Number.isFinite(requestedDuration) || requestedDuration < 15) {
+    return { error: "Event duration must be at least 15 minutes" as const };
+  }
+
+  const requestedEnd = new Date(requestedStart.getTime() + requestedDuration * 60 * 1000);
+  const cooldownMs = 30 * 60 * 1000;
+  const normalizedLocation = normalizeLocation(location);
+
+  const sameDateEvents = await Event.find({
+    date,
+    ...(excludeEventId ? { id: { $ne: excludeEventId } } : {}),
+  });
+
+  const conflictingEvent = sameDateEvents.find((existing: any) => {
+    if (!existing?.location || normalizeLocation(existing.location) !== normalizedLocation) {
+      return false;
+    }
+
+    const existingStart = parseLocalDateTime(existing.date, existing.time);
+    if (!existingStart) return false;
+
+    const existingDuration = Number(existing.durationMinutes ?? 120);
+    const safeExistingDuration =
+      Number.isFinite(existingDuration) && existingDuration > 0 ? existingDuration : 120;
+    const existingEnd = new Date(existingStart.getTime() + safeExistingDuration * 60 * 1000);
+
+    return (
+      requestedStart.getTime() < existingEnd.getTime() + cooldownMs &&
+      existingStart.getTime() < requestedEnd.getTime() + cooldownMs
+    );
+  });
+
+  return { conflict: conflictingEvent };
+}
+
 export async function registerRoutes(app: ReturnType<typeof express>): Promise<void> {
   app.use("/uploads", express.static(uploadsDir));
 
@@ -450,10 +514,29 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         ...req.body,
         clubId: clubId,
         clubName: club.name,
+        durationMinutes: req.body.durationMinutes,
         imageUrl: req.file ? `/uploads/${req.file.filename}` : null
       };
 
       const validated = insertEventSchema.parse(eventData);
+
+      const conflictCheck = await findVenueConflict({
+        date: validated.date,
+        time: validated.time,
+        durationMinutes: validated.durationMinutes,
+        location: validated.location,
+      });
+
+      if ("error" in conflictCheck) {
+        return res.status(400).json({ error: conflictCheck.error });
+      }
+
+      if (conflictCheck.conflict) {
+        return res.status(409).json({
+          error: `Venue conflict: "${conflictCheck.conflict.title}" is already scheduled at ${conflictCheck.conflict.location} on ${conflictCheck.conflict.date} ${conflictCheck.conflict.time}. Keep at least 30 minutes gap after an event ends before scheduling another at the same venue.`,
+        });
+      }
+
       const event = await storage.createEvent(validated);
 
       res.status(201).json(event);
@@ -494,6 +577,32 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         ...safeUpdates,
         ...(req.file && { imageUrl: `/uploads/${req.file.filename}` })
       };
+
+      const nextDate = updates.date ?? oldEvent.date;
+      const nextTime = updates.time ?? oldEvent.time;
+      const nextLocation = updates.location ?? oldEvent.location;
+      const nextDurationMinutes =
+        updates.durationMinutes !== undefined
+          ? Number(updates.durationMinutes)
+          : Number(oldEvent.durationMinutes ?? 120);
+
+      const conflictCheck = await findVenueConflict({
+        date: nextDate,
+        time: nextTime,
+        durationMinutes: nextDurationMinutes,
+        location: nextLocation,
+        excludeEventId: oldEvent.id,
+      });
+
+      if ("error" in conflictCheck) {
+        return res.status(400).json({ error: conflictCheck.error });
+      }
+
+      if (conflictCheck.conflict) {
+        return res.status(409).json({
+          error: `Venue conflict: "${conflictCheck.conflict.title}" is already scheduled at ${conflictCheck.conflict.location} on ${conflictCheck.conflict.date} ${conflictCheck.conflict.time}. Keep at least 30 minutes gap after an event ends before scheduling another at the same venue.`,
+        });
+      }
 
       const event = await storage.updateEvent(req.params.id, updates);
       res.json(event);

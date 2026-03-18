@@ -28,6 +28,7 @@ export default function UploadForm() {
     description: "",
     date: "",
     time: "",
+    durationMinutes: "120",
     location: "",
     category: "",
     clubId: "",
@@ -69,6 +70,7 @@ export default function UploadForm() {
         description: "",
         date: "",
         time: "",
+        durationMinutes: "120",
         location: "",
         category: "",
         clubId: "",
@@ -78,10 +80,11 @@ export default function UploadForm() {
       setSelectedFiles([]);
     },
 
-    onError: () => {
+    onError: (error: any) => {
+      const errorMessage = error?.message || "Failed to create event. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to create event. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -182,6 +185,21 @@ export default function UploadForm() {
               value={formData.time}
               onChange={(e) =>
                 setFormData({ ...formData, time: e.target.value })
+              }
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="event-duration">Duration (minutes)</Label>
+            <Input
+              id="event-duration"
+              type="number"
+              min="15"
+              step="15"
+              value={formData.durationMinutes}
+              onChange={(e) =>
+                setFormData({ ...formData, durationMinutes: e.target.value })
               }
               required
             />

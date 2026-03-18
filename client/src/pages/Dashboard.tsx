@@ -230,6 +230,7 @@ export default function Dashboard() {
     description: "",
     date: "",
     time: "",
+    durationMinutes: "120",
     location: "",
     category: "",
     clubId: "",
@@ -744,7 +745,7 @@ export default function Dashboard() {
         description: "The event has been created successfully.",
       });
       setShowCreateEvent(false);
-      setEventForm({ title: "", description: "", date: "", time: "", location: "", category: "", clubId: "" });
+      setEventForm({ title: "", description: "", date: "", time: "", durationMinutes: "120", location: "", category: "", clubId: "" });
       setEventImageFile(null);
       setEventImagePreview(null);
     },
@@ -770,14 +771,15 @@ export default function Dashboard() {
         description: "The event has been updated successfully.",
       });
       setEditingEvent(null);
-      setEventForm({ title: "", description: "", date: "", time: "", location: "", category: "", clubId: "" });
+      setEventForm({ title: "", description: "", date: "", time: "", durationMinutes: "120", location: "", category: "", clubId: "" });
       setEventImageFile(null);
       setEventImagePreview(null);
     },
-    onError: () => {
+    onError: (error: any) => {
+      const errorMessage = error?.message || "Failed to update event.";
       toast({
         title: "Error",
-        description: "Failed to update event.",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -1621,7 +1623,7 @@ export default function Dashboard() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                       <Label htmlFor="eventDate">Date</Label>
                       <Input
@@ -1649,6 +1651,19 @@ export default function Dashboard() {
                         value={eventForm.location}
                         onChange={(e) => setEventForm(prev => ({ ...prev, location: e.target.value }))}
                         placeholder="Event location"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="eventDuration">Duration (minutes)</Label>
+                      <Input
+                        id="eventDuration"
+                        type="number"
+                        min="15"
+                        step="15"
+                        value={eventForm.durationMinutes}
+                        onChange={(e) => setEventForm(prev => ({ ...prev, durationMinutes: e.target.value }))}
+                        placeholder="120"
                         required
                       />
                     </div>
@@ -1723,7 +1738,7 @@ export default function Dashboard() {
                       onClick={() => {
                         setShowCreateEvent(false);
                         setEditingEvent(null);
-                        setEventForm({ title: "", description: "", date: "", time: "", location: "", category: "", clubId: "" });
+                        setEventForm({ title: "", description: "", date: "", time: "", durationMinutes: "120", location: "", category: "", clubId: "" });
                         setEventImageFile(null);
                         setEventImagePreview(null);
                       }}
@@ -1813,6 +1828,7 @@ export default function Dashboard() {
                               description: event.description || "",
                               date: event.date,
                               time: event.time,
+                              durationMinutes: String(event.durationMinutes ?? 120),
                               location: event.location,
                               category: event.category || "",
                               clubId: event.clubId,

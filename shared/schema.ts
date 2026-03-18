@@ -4,6 +4,7 @@ export interface Event {
   description: string;
   date: string;
   time: string;
+  durationMinutes?: number;
   location: string;
   category: string;
   clubId: string;

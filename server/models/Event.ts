@@ -6,6 +6,10 @@ const eventSchema = new mongoose.Schema({
   description: String,
   date: String,
   time: String,
+  durationMinutes: {
+    type: Number,
+    default: 120,
+  },
   location: String,
   category: String,
   clubId: String,

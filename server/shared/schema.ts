@@ -26,6 +26,7 @@ export const events = pgTable("events", {
   description: text("description").notNull(),
   date: text("date").notNull(),
   time: text("time").notNull(),
+  durationMinutes: integer("duration_minutes").notNull().default(120),
   location: text("location").notNull(),
   category: text("category").notNull(),
   clubId: varchar("club_id").notNull(),
@@ -52,6 +53,8 @@ export const insertClubSchema = createInsertSchema(clubs).omit({
 export const insertEventSchema = createInsertSchema(events).omit({
   id: true,
   createdAt: true,
+}).extend({
+  durationMinutes: z.coerce.number().int().min(15).max(720).default(120),
 });
 
 export type InsertAdmin = z.infer<typeof insertAdminSchema>;

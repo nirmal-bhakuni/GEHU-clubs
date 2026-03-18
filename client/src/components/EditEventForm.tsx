@@ -30,6 +30,7 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
     description: event?.description || "",
     date: event?.date || "",
     time: event?.time || "",
+    durationMinutes: String(event?.durationMinutes ?? 120),
     location: event?.location || "",
     category: event?.category || "",
     clubId: event?.clubId || clubId || "",
@@ -68,10 +69,11 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
       onSuccess?.();
       onClose();
     },
-    onError: () => {
+    onError: (error: any) => {
+      const errorMessage = error?.message || `Failed to ${event ? "update" : "create"} event. Please check your connection and try again.`;
       toast({
         title: "Error",
-        description: `Failed to ${event ? "update" : "create"} event. Please check your connection and try again.`,
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -95,6 +97,16 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields, including selecting a category.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const duration = Number(formData.durationMinutes);
+    if (!Number.isFinite(duration) || duration < 15) {
+      toast({
+        title: "Validation Error",
+        description: "Duration must be at least 15 minutes.",
         variant: "destructive",
       });
       return;
@@ -144,7 +156,7 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="edit-event-date">Date</Label>
               <Input
@@ -165,6 +177,19 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
                 onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                 required
                 data-testid="input-edit-event-time"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-event-duration">Duration (minutes)</Label>
+              <Input
+                id="edit-event-duration"
+                type="number"
+                min="15"
+                step="15"
+                value={formData.durationMinutes}
+                onChange={(e) => setFormData({ ...formData, durationMinutes: e.target.value })}
+                required
+                data-testid="input-edit-event-duration"
               />
             </div>
           </div>
