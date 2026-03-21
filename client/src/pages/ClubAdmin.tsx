@@ -151,6 +151,10 @@ export default function ClubAdmin() {
   const [selectedStudentForCertificate, setSelectedStudentForCertificate] = useState<ClubMembership | null>(null);
   const [certificateTitle, setCertificateTitle] = useState("");
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [storyCaption, setStoryCaption] = useState("");
+  const [storyFile, setStoryFile] = useState<File | null>(null);
+  const [storyPreview, setStoryPreview] = useState<string | null>(null);
+  const [storyAsHighlight, setStoryAsHighlight] = useState(true);
   const [unreadMessages, setUnreadMessages] = useState<number>(0);
   const [unreadAnnouncements, setUnreadAnnouncements] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -372,6 +376,15 @@ export default function ClubAdmin() {
     enabled: !!admin?.clubId && isAuthenticated && !authLoading,
   });
 
+  const { data: myStories = [] } = useQuery<any[]>({
+    queryKey: ["/api/admin/stories/my"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/stories/my");
+      return res.json();
+    },
+    enabled: !!admin?.clubId && isAuthenticated && !authLoading,
+  });
+
   const handleLogoFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -387,6 +400,18 @@ export default function ClubAdmin() {
   const removeLogo = () => {
     setSelectedLogoFile(null);
     setLogoPreview(null);
+  };
+
+  const handleStoryFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setStoryFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setStoryPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Bulk actions for members
@@ -848,6 +873,105 @@ export default function ClubAdmin() {
     },
   });
 
+  const deleteEventChatMutation = useMutation({
+    mutationFn: async (eventId: string) => {
+      const groupsRes = await apiRequest("GET", "/api/chat/groups");
+      const groupsData = await groupsRes.json();
+      const eventChat = groupsData?.sections?.events?.find((group: any) => group.eventId === eventId);
+
+      if (!eventChat?.id) {
+        throw new Error("No chat group found for this event.");
+      }
+
+      await apiRequest("DELETE", `/api/chat/groups/${eventChat.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/chat/groups"] });
+      toast({
+        title: "Chat deleted",
+        description: "Event chat deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete event chat.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createStoryMutation = useMutation({
+    mutationFn: async (payload: { caption: string; isHighlight: boolean; file: File }) => {
+      const formData = new FormData();
+      formData.append("file", payload.file);
+      formData.append("type", "club-story");
+
+      const uploadRes = await apiRequest("POST", "/api/upload", formData);
+      const uploadData = await uploadRes.json();
+
+      const res = await apiRequest("POST", "/api/admin/stories", {
+        mediaUrl: uploadData.url,
+        caption: payload.caption,
+        isHighlight: payload.isHighlight,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stories/my"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stories/highlights"] });
+      setStoryCaption("");
+      setStoryFile(null);
+      setStoryPreview(null);
+      setStoryAsHighlight(true);
+      toast({
+        title: "Story uploaded",
+        description: "Your story is now live.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to upload story.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toggleStoryHighlightMutation = useMutation({
+    mutationFn: async (payload: { storyId: string; isHighlight: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/admin/stories/${payload.storyId}`, {
+        isHighlight: payload.isHighlight,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stories/my"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stories/highlights"] });
+    },
+  });
+
+  const deleteStoryMutation = useMutation({
+    mutationFn: async (storyId: string) => {
+      await apiRequest("DELETE", `/api/admin/stories/${storyId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stories/my"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stories/highlights"] });
+      toast({
+        title: "Story deleted",
+        description: "The story was removed.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete story.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const updateClubMutation = useMutation({
     mutationFn: async (data: { clubData: Partial<Club>; logoFile?: File }) => {
       if (!club?.id) throw new Error("No club ID");
@@ -1254,6 +1378,16 @@ export default function ClubAdmin() {
                 <CheckSquare className="w-6 h-6 text-orange-600" />
                 <span className="text-sm font-medium">Track Attendance</span>
               </Button>
+              <Button
+                onClick={() => setActiveTab("stories")}
+                className="h-auto p-4 flex flex-col items-center gap-2 hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+                variant="outline"
+                disabled={club?.isFrozen}
+                title={club?.isFrozen ? "Cannot upload stories - club is frozen" : "Upload club stories"}
+              >
+                <Upload className="w-6 h-6 text-indigo-600" />
+                <span className="text-sm font-medium">Upload Story</span>
+              </Button>
             </div>
           </Card>
         </div>
@@ -1272,7 +1406,7 @@ export default function ClubAdmin() {
                     <div>
                       <p className="font-medium text-sm">{event.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {formatDate(event.date)} • {eventRegistrations.filter(r => r.eventId === event.id).length} registrations
+                        {formatDate(event.date)} G�� {eventRegistrations.filter(r => r.eventId === event.id).length} registrations
                       </p>
                     </div>
                   </div>
@@ -1290,7 +1424,7 @@ export default function ClubAdmin() {
         </Card>
 
         <Tabs value={activeTab} onValueChange={club?.isFrozen ? undefined : setActiveTab} className="space-y-6">
-          <TabsList className={`grid w-full grid-cols-10 relative transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
+          <TabsList className={`grid w-full grid-cols-11 relative transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <TabsTrigger value="dashboard" disabled={club?.isFrozen}>Dashboard</TabsTrigger>
             <TabsTrigger value="events" disabled={club?.isFrozen}>Events</TabsTrigger>
             <TabsTrigger value="attendance" disabled={club?.isFrozen}>Attendance</TabsTrigger>
@@ -1314,6 +1448,7 @@ export default function ClubAdmin() {
               )}
             </TabsTrigger>
             <TabsTrigger value="community" disabled={club?.isFrozen}>Community</TabsTrigger>
+            <TabsTrigger value="stories" disabled={club?.isFrozen}>Stories</TabsTrigger>
             <TabsTrigger value="settings" disabled={club?.isFrozen}>Settings</TabsTrigger>
           </TabsList>
 
@@ -1373,7 +1508,7 @@ export default function ClubAdmin() {
                         <div>
                           <p className="font-medium text-sm">{membership.studentName}</p>
                           <p className="text-xs text-muted-foreground">
-                            {membership.enrollmentNumber} • {membership.department}
+                            {membership.enrollmentNumber} G�� {membership.department}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             Applied {formatDate(membership.joinedAt)}
@@ -1642,7 +1777,7 @@ export default function ClubAdmin() {
                                   <li key={registration.id} className="flex items-center justify-between text-sm">
                                     <div>
                                       <span className="font-medium">{registration.studentName}</span>
-                                      <span className="text-muted-foreground"> • {registration.enrollmentNumber}</span>
+                                      <span className="text-muted-foreground"> G�� {registration.enrollmentNumber}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <Badge variant="secondary">Pending</Badge>
@@ -1678,6 +1813,18 @@ export default function ClubAdmin() {
                             disabled={deleteMutation.isPending}
                           >
                             Delete
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm("This will permanently delete the event chat and all its messages. Continue?")) {
+                                deleteEventChatMutation.mutate(event.id);
+                              }
+                            }}
+                            disabled={deleteEventChatMutation.isPending}
+                          >
+                            Delete Chat
                           </Button>
                         </div>
                       </div>
@@ -1749,7 +1896,7 @@ export default function ClubAdmin() {
                         <div>
                           <p className="font-medium">{student.studentName}</p>
                           <p className="text-sm text-muted-foreground">
-                            {student.enrollmentNumber} • {student.totalPoints} total points
+                            {student.enrollmentNumber} G�� {student.totalPoints} total points
                           </p>
                         </div>
                       </div>
@@ -1795,7 +1942,7 @@ export default function ClubAdmin() {
                           {eventRegs.length} registered
                         </Badge>
                         <p className="text-xs text-muted-foreground mt-2">
-                          {expandedEventId === event.id ? "▼ Hide" : "▶ Show"} registrations
+                          {expandedEventId === event.id ? "G�+ Hide" : "G�� Show"} registrations
                         </p>
                       </div>
                     </div>
@@ -1811,7 +1958,7 @@ export default function ClubAdmin() {
                                   <div>
                                     <p className="font-medium">{registration.studentName}</p>
                                     <p className="text-sm text-muted-foreground">
-                                      {registration.enrollmentNumber} • {registration.department}
+                                      {registration.enrollmentNumber} G�� {registration.department}
                                     </p>
                                   </div>
                                   {studentGlobalData && (
@@ -1913,7 +2060,7 @@ export default function ClubAdmin() {
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              By {announcement.authorName} • {(() => {
+                              By {announcement.authorName} G�� {(() => {
                                 const now = new Date();
                                 const announcementDate = new Date(announcement.createdAt);
                                 const diffInHours = Math.floor((now.getTime() - announcementDate.getTime()) / (1000 * 60 * 60));
@@ -2741,6 +2888,120 @@ export default function ClubAdmin() {
             </div>
           </TabsContent>
 
+          <TabsContent value="stories" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Stories</h2>
+              <Badge variant="secondary">Home Story Highlights</Badge>
+            </div>
+
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Upload Club Story</h3>
+                <span className="text-xs text-muted-foreground">Instagram-style highlights</span>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="storyFile">Story Media</Label>
+                  <input
+                    id="storyFile"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleStoryFileSelect}
+                    className="block w-full text-sm mt-2"
+                  />
+                </div>
+
+                {storyPreview && (
+                  <div className="rounded-lg border p-2 inline-block">
+                    <img src={storyPreview} alt="Story preview" className="h-24 w-24 object-cover rounded" />
+                  </div>
+                )}
+
+                <div>
+                  <Label htmlFor="storyCaption">Caption</Label>
+                  <Input
+                    id="storyCaption"
+                    value={storyCaption}
+                    onChange={(e) => setStoryCaption(e.target.value)}
+                    placeholder="Add a short caption"
+                    maxLength={120}
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={storyAsHighlight}
+                    onChange={(e) => setStoryAsHighlight(e.target.checked)}
+                  />
+                  Add this story to highlights
+                </label>
+
+                <Button
+                  type="button"
+                  disabled={!storyFile || createStoryMutation.isPending}
+                  onClick={() => {
+                    if (!storyFile) return;
+                    createStoryMutation.mutate({
+                      file: storyFile,
+                      caption: storyCaption.trim(),
+                      isHighlight: storyAsHighlight,
+                    });
+                  }}
+                >
+                  {createStoryMutation.isPending ? "Uploading..." : "Upload Story"}
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold mb-4">Your Recent Stories</h3>
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {myStories.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No stories uploaded yet.</p>
+                )}
+
+                {myStories.map((story: any) => (
+                  <div key={story.id} className="flex items-center justify-between gap-3 border rounded-lg p-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img src={story.mediaUrl} alt="Story" className="h-12 w-12 rounded object-cover" />
+                      <div className="min-w-0">
+                        <p className="text-sm truncate">{story.caption || "(No caption)"}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {story.isHighlight ? "In Highlights" : "Story only"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          toggleStoryHighlightMutation.mutate({
+                            storyId: story.id,
+                            isHighlight: !story.isHighlight,
+                          })
+                        }
+                        disabled={toggleStoryHighlightMutation.isPending}
+                      >
+                        {story.isHighlight ? "Unhighlight" : "Highlight"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deleteStoryMutation.mutate(story.id)}
+                        disabled={deleteStoryMutation.isPending}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="settings" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Club Settings</h2>
@@ -2771,6 +3032,7 @@ export default function ClubAdmin() {
                         name: formData.get("name") as string,
                         description: formData.get("description") as string,
                         category: formData.get("category") as string,
+                        isHighlighted: formData.get("isHighlighted") === "on",
                       },
                       logoFile: selectedLogoFile || undefined,
                     });
@@ -2793,7 +3055,7 @@ export default function ClubAdmin() {
                             onClick={removeLogo}
                             className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
                           >
-                            ×
+                            +�
                           </button>
                         )}
                       </div>
@@ -2868,6 +3130,25 @@ export default function ClubAdmin() {
                     </p>
                   </div>
 
+                  {/* Story Highlight Toggle */}
+                  <div className="rounded-lg border p-4 bg-muted/20">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <Label htmlFor="isHighlighted" className="text-sm font-medium">Show In Story Highlights</Label>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Enable this to feature your club in the Story Highlights strip on the home feed.
+                        </p>
+                      </div>
+                      <input
+                        id="isHighlighted"
+                        name="isHighlighted"
+                        type="checkbox"
+                        defaultChecked={!!displayClub?.isHighlighted}
+                        className="h-4 w-4 mt-1"
+                      />
+                    </div>
+                  </div>
+
                   {/* Action Buttons */}
                   <div className="flex gap-3 pt-4 border-t">
                     <Button
@@ -2907,10 +3188,118 @@ export default function ClubAdmin() {
                 {(!(admin as any)?.fullName || !(admin as any)?.email || !(admin as any)?.phone || !displayClub?.facultyAssigned || !displayClub?.phone || !displayClub?.email) && (
                   <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
                     <p className="text-sm text-amber-900 dark:text-amber-200">
-                      ℹ️ Some information is missing. Click "Edit Profile" to update your administrator details or "Edit Club" to update club information.
+                      G�n+� Some information is missing. Click "Edit Profile" to update your administrator details or "Edit Club" to update club information.
                     </p>
                   </div>
                 )}
+
+                {/* Story Studio */}
+                <Card className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">Story Studio</h3>
+                    <span className="text-xs text-muted-foreground">Instagram-style highlights</span>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="storyFile">Story Media</Label>
+                      <input
+                        id="storyFile"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleStoryFileSelect}
+                        className="block w-full text-sm mt-2"
+                      />
+                    </div>
+
+                    {storyPreview && (
+                      <div className="rounded-lg border p-2 inline-block">
+                        <img src={storyPreview} alt="Story preview" className="h-24 w-24 object-cover rounded" />
+                      </div>
+                    )}
+
+                    <div>
+                      <Label htmlFor="storyCaption">Caption</Label>
+                      <Input
+                        id="storyCaption"
+                        value={storyCaption}
+                        onChange={(e) => setStoryCaption(e.target.value)}
+                        placeholder="Add a short caption"
+                        maxLength={120}
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={storyAsHighlight}
+                        onChange={(e) => setStoryAsHighlight(e.target.checked)}
+                      />
+                      Add this story to highlights
+                    </label>
+
+                    <Button
+                      type="button"
+                      disabled={!storyFile || createStoryMutation.isPending}
+                      onClick={() => {
+                        if (!storyFile) return;
+                        createStoryMutation.mutate({
+                          file: storyFile,
+                          caption: storyCaption.trim(),
+                          isHighlight: storyAsHighlight,
+                        });
+                      }}
+                    >
+                      {createStoryMutation.isPending ? "Uploading..." : "Upload Story"}
+                    </Button>
+                  </div>
+
+                  <div className="mt-6">
+                    <h4 className="text-sm font-medium mb-3">Your Recent Stories</h4>
+                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                      {myStories.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No stories uploaded yet.</p>
+                      )}
+
+                      {myStories.map((story: any) => (
+                        <div key={story.id} className="flex items-center justify-between gap-3 border rounded-lg p-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <img src={story.mediaUrl} alt="Story" className="h-12 w-12 rounded object-cover" />
+                            <div className="min-w-0">
+                              <p className="text-sm truncate">{story.caption || "(No caption)"}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {story.isHighlight ? "In Highlights" : "Story only"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                toggleStoryHighlightMutation.mutate({
+                                  storyId: story.id,
+                                  isHighlight: !story.isHighlight,
+                                })
+                              }
+                              disabled={toggleStoryHighlightMutation.isPending}
+                            >
+                              {story.isHighlight ? "Unhighlight" : "Highlight"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deleteStoryMutation.mutate(story.id)}
+                              disabled={deleteStoryMutation.isPending}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </Card>
                 
                 {/* Administrator Information Card */}
                 <Card className="p-6">

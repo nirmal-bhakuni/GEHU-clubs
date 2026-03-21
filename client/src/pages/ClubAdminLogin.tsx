@@ -24,7 +24,8 @@ export default function ClubAdminLogin() {
     mutationFn: async (data: typeof formData) => {
       try {
         const res = await apiRequest("POST", "/api/auth/club-login", data);
-        return res.json();
+        const payload = await res.json();
+        return { ...payload, __offline: false };
       } catch (error) {
         // Fallback to static authentication when API is unavailable
         const staticAdmins = {
@@ -37,7 +38,7 @@ export default function ClubAdminLogin() {
         };
 
         if (data.password === "admin123" && staticAdmins[data.username as keyof typeof staticAdmins]) {
-          return { admin: staticAdmins[data.username as keyof typeof staticAdmins] };
+          return { admin: staticAdmins[data.username as keyof typeof staticAdmins], __offline: true };
         }
         throw new Error("Invalid credentials");
       }
@@ -46,8 +47,23 @@ export default function ClubAdminLogin() {
       if (data.admin.clubId) {
         // Store admin session for offline functionality
         localStorage.setItem("currentAdmin", formData.username);
+        localStorage.setItem("adminCache", JSON.stringify(data.admin));
         // Set the admin data directly in the query cache
         queryClient.setQueryData(["/api/auth/me"], data.admin);
+
+        // Refresh chat identity immediately after login so chat opens without stale guest state.
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/groups"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/unread-count"] });
+
+        if (data.__offline) {
+          toast({
+            title: "Offline login mode",
+            description: "Chat requires server-authenticated login. Please use online login for chat access.",
+            variant: "destructive",
+          });
+        }
+
         // Club admin logged in successfully
         setLocation("/club-admin");
         toast({

@@ -5,6 +5,8 @@ import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   LayoutDashboard,
   Users,
@@ -37,6 +39,13 @@ export default function StudentDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingProfile, setIsUploadingProfile] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    phone: "",
+    department: "",
+    yearOfAdmission: "",
+    rollNumber: "",
+  });
 
   const { data: events = [] } = useQuery<Event[]>({
     queryKey: ["/api/events"],
@@ -169,17 +178,21 @@ export default function StudentDashboard() {
       const formData = new FormData();
       formData.append("profilePicture", file);
       const res = await apiRequest("POST", "/api/student/profile-picture", formData);
-      return res.json();
+      const data = await res.json();
+      return data;
     },
     onSuccess: (data) => {
-      setProfileImage(data.imageUrl);
+      // Immediately invalidate to fetch fresh student data including new profilePicture
       queryClient.invalidateQueries({ queryKey: ["/api/student/me"] });
+      // Clear local state to force using the fresh data from server
+      setProfileImage(null);
       toast({
         title: "Success",
         description: "Profile picture uploaded successfully",
       });
     },
     onError: (error: any) => {
+      console.error("Profile picture upload error:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to upload profile picture",
@@ -188,16 +201,63 @@ export default function StudentDashboard() {
     },
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async (payload: {
+      phone: string;
+      department: string;
+      yearOfAdmission?: number;
+      rollNumber: string;
+    }) => {
+      const res = await apiRequest("PATCH", "/api/student/me", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/student/me"] });
+      setIsEditingProfile(false);
+      toast({
+        title: "Profile updated",
+        description: "Your student profile was updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error?.message || "Could not update profile.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (!student) return;
+    setProfileForm({
+      phone: student.phone || "",
+      department: student.department || "",
+      yearOfAdmission: student.yearOfAdmission ? String(student.yearOfAdmission) : "",
+      rollNumber: student.rollNumber || "",
+    });
+  }, [student]);
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       setLocation("/student/login");
     }
   }, [authLoading, isAuthenticated, setLocation]);
 
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      sessionStorage.setItem("studentDashboardLock", "1");
+    }
+  }, [authLoading, isAuthenticated]);
+
   const handleLogout = async () => {
     try {
       await apiRequest("POST", "/api/student/logout", {});
+      sessionStorage.removeItem("studentDashboardLock");
       await queryClient.invalidateQueries({ queryKey: ["/api/student/me"] });
+      queryClient.setQueryData(["/api/chat/me"], { loggedIn: false, role: "guest" });
+      queryClient.removeQueries({ queryKey: ["/api/chat/groups"] });
+      queryClient.removeQueries({ queryKey: ["/api/chat/unread-count"] });
       toast({
         title: "Logged out",
         description: "You have been logged out successfully",
@@ -333,14 +393,26 @@ export default function StudentDashboard() {
                 </div>
               </div>
               <div className="hidden md:block">
-                <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-colors" onClick={handleProfilePictureClick}>
-                  {profileImage ? (
-                    <img src={profileImage} alt="Profile" className="w-20 h-20 rounded-full object-cover" />
+                <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-colors" onClick={handleProfilePictureClick} title="Click to upload profile picture">
+                  {student?.profilePicture || profileImage ? (
+                    <img src={student?.profilePicture || profileImage || ''} alt="Profile" className="w-20 h-20 rounded-full object-cover" />
                   ) : (
                     <Users className="h-10 w-10 text-primary" />
                   )}
+                  {isUploadingProfile && (
+                    <div className="absolute inset-0 bg-black/30 rounded-full flex items-center justify-center">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                  )}
                 </div>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditingProfile((prev) => !prev)}
+              >
+                {isEditingProfile ? "Close Profile Edit" : "Edit Profile"}
+              </Button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -351,6 +423,72 @@ export default function StudentDashboard() {
               />
             </div>
           </Card>
+
+          {isEditingProfile && (
+            <Card className="p-6">
+              <h3 className="mb-4 text-lg font-semibold">Edit Student Profile</h3>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="student-phone">Phone</Label>
+                  <Input
+                    id="student-phone"
+                    value={profileForm.phone}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Enter phone number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="student-department">Department / Branch</Label>
+                  <Input
+                    id="student-department"
+                    value={profileForm.department}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, department: e.target.value }))}
+                    placeholder="e.g. Computer Science"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="student-roll">Roll Number</Label>
+                  <Input
+                    id="student-roll"
+                    value={profileForm.rollNumber}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, rollNumber: e.target.value }))}
+                    placeholder="Enter roll number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="student-admission-year">Year Of Admission</Label>
+                  <Input
+                    id="student-admission-year"
+                    type="number"
+                    value={profileForm.yearOfAdmission}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, yearOfAdmission: e.target.value }))}
+                    placeholder="e.g. 2024"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setIsEditingProfile(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    updateProfileMutation.mutate({
+                      phone: profileForm.phone.trim(),
+                      department: profileForm.department.trim(),
+                      rollNumber: profileForm.rollNumber.trim(),
+                      yearOfAdmission: profileForm.yearOfAdmission
+                        ? Number(profileForm.yearOfAdmission)
+                        : undefined,
+                    })
+                  }
+                  disabled={updateProfileMutation.isPending}
+                >
+                  {updateProfileMutation.isPending ? "Saving..." : "Save Profile"}
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Stats Overview */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

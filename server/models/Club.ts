@@ -13,6 +13,7 @@ const clubSchema = new mongoose.Schema({
   memberCount: Number,
   logoUrl: String,
   coverImageUrl: String,
+  isHighlighted: { type: Boolean, default: false },
   isFrozen: { type: Boolean, default: false },
   frozenAt: Date,
   frozenBy: String,

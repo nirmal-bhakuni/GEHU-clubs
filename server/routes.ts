@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
+import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import multer from "multer";
@@ -19,6 +20,10 @@ import { Club } from "./models/Club";
 import { Message } from "./models/Message";
 import { Announcement } from "./models/Announcement";
 import { Event } from "./models/Event";
+import { ClubStory } from "./models/ClubStory";
+import { ChatGroup } from "./models/ChatGroup";
+import { ChatMessage } from "./models/ChatMessage";
+import { ChatReadState } from "./models/ChatReadState";
 import { notifyAnnouncement, notifyNewEvent } from "./services/emailService";
 
 const uploadsDir = path.join(process.cwd(), "..", "uploads");
@@ -40,9 +45,218 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
+const fallbackClubs = [
+  {
+    id: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    name: "IEEE",
+    description: "Building innovative solutions...",
+    category: "Technology",
+    memberCount: 125,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRGCvDLx2YLXsTqnLYhQPbyv6wDRXXhNkU7ww&s",
+    coverImageUrl: "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop",
+    createdAt: new Date(),
+  },
+  {
+    id: "484c2b24-6193-42c1-879b-185457a9598f",
+    name: "ARYAVRAT",
+    description: "Sharpen your argumentation skills...",
+    category: "Academic",
+    memberCount: 85,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHSQ26pPoXAi8YKQZQPoLwPeETRdh9ywhCAQ&s",
+    coverImageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=400&fit=crop",
+    createdAt: new Date(),
+  },
+  {
+    id: "181d3e7d-d6cd-4f40-b712-7182fcd77154",
+    name: "PAPERTECH-GEHU",
+    description: "Express yourself through various art forms...",
+    category: "Arts",
+    memberCount: 95,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRN4okYreu0Yak1U5bjkWeSCRBUuagbLTanHg&s",
+    coverImageUrl: "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=800&h=400&fit=crop",
+    createdAt: new Date(),
+  },
+  {
+    id: "cc71501e-1525-4e3b-959c-f3874db96396",
+    name: "Entrepreneurship Hub",
+    description: "Connect with fellow entrepreneurs...",
+    category: "Business",
+    memberCount: 150,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRkdkjI3VT0FR0WkyDb_xIOPfPpoULRDPybNA&s",
+    coverImageUrl: "https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=400&fit=crop",
+    createdAt: new Date(),
+  },
+  {
+    id: "485300f0-e4cc-4116-aa49-d60dd19070d8",
+    name: "CODE_HUNTERS",
+    description: "Discover the wonders of science...",
+    category: "Academic",
+    memberCount: 110,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR-SeTgtHQSr0YhjNgYKbk3y_arKfREH0DdNA&s",
+    coverImageUrl: "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop",
+    createdAt: new Date(),
+  },
+  {
+    id: "ff82f1ca-01be-4bff-b0f5-8a1e44dcf951",
+    name: "RANGMANCH",
+    description: "Make a difference in our community...",
+    category: "Social",
+    memberCount: 175,
+    logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxB5o3X1zEYYTEL6XAalXWOiubGY_mrVJCvA&s",
+    coverImageUrl: "https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800&h=400&fit=crop",
+    createdAt: new Date(),
+  },
+];
+
+const fallbackEvents = [
+  {
+    id: randomUUID(),
+    title: "Web Development Bootcamp",
+    description: "Learn modern web development...",
+    date: "November 15, 2025",
+    time: "9:00 AM - 5:00 PM",
+    location: "Engineering Building",
+    category: "Bootcamp",
+    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    clubName: "IEEE",
+    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTUzgijNqFpoWRSWhPKpXOqB-W2ccjhrFBeKw&s",
+    createdAt: new Date(),
+  },
+  {
+    id: randomUUID(),
+    title: "Winter Tech Fest",
+    description: "Two-day technology festival...",
+    date: "December 20, 2025",
+    time: "10:00 AM - 6:00 PM",
+    location: "Main Auditorium",
+    category: "Festival",
+    clubId: "f54a2526-787b-4de5-9582-0a42f4aaa61b",
+    clubName: "IEEE",
+    imageUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSI9p1_QlWws8d3TwlotQjB_Itnxyb_BYoRBQ&s",
+    createdAt: new Date(),
+  },
+];
+
 function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.adminId) return res.status(401).json({ error: "Unauthorized" });
   next();
+}
+
+function requireAnyAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.adminId && !req.session.studentId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  next();
+}
+
+type ChatActor = {
+  userType: "student" | "admin";
+  userId: string;
+  userKey: string;
+  displayName: string;
+  role: "student" | "club_admin" | "university_admin";
+  clubId?: string;
+  enrollmentNumber?: string;
+};
+
+async function resolveChatActor(req: Request): Promise<ChatActor | null> {
+  // Admin should take precedence if both ids exist in session.
+  if (req.session.adminId) {
+    const admin = await Admin.findOne({ id: req.session.adminId });
+    if (!admin) return null;
+
+    const isUniversityAdmin = !admin.clubId;
+    return {
+      userType: "admin",
+      userId: admin.id,
+      userKey: `admin:${admin.id}`,
+      displayName: admin.fullName || admin.username,
+      role: isUniversityAdmin ? "university_admin" : "club_admin",
+      clubId: admin.clubId || undefined,
+    };
+  }
+
+  if (req.session.studentId) {
+    const student = await Student.findById(req.session.studentId);
+    if (!student || student.isDisabled) return null;
+
+    return {
+      userType: "student",
+      userId: String(student._id),
+      userKey: `student:${student.enrollment}`,
+      displayName: student.name,
+      role: "student",
+      enrollmentNumber: student.enrollment,
+    };
+  }
+
+  return null;
+}
+
+async function getAccessibleChatScope(actor: ChatActor): Promise<{ clubIds: string[]; eventIds: string[] }> {
+  if (actor.role === "university_admin") {
+    const [clubs, events] = await Promise.all([
+      Club.find({}).select("id"),
+      Event.find({}).select("id"),
+    ]);
+
+    return {
+      clubIds: clubs.map((club: any) => club.id),
+      eventIds: events.map((event: any) => event.id),
+    };
+  }
+
+  if (actor.role === "club_admin") {
+    const clubId = actor.clubId;
+    if (!clubId) return { clubIds: [], eventIds: [] };
+
+    const events = await Event.find({ clubId }).select("id");
+    return {
+      clubIds: [clubId],
+      eventIds: events.map((event: any) => event.id),
+    };
+  }
+
+  if (!actor.enrollmentNumber) return { clubIds: [], eventIds: [] };
+
+  const [approvedMemberships, registrations] = await Promise.all([
+    ClubMembership.find({
+      enrollmentNumber: actor.enrollmentNumber,
+      status: "approved",
+    }).select("clubId"),
+    EventRegistration.find({
+      enrollmentNumber: actor.enrollmentNumber,
+      status: { $ne: "rejected" },
+    }).select("eventId"),
+  ]);
+
+  return {
+    clubIds: [...new Set(approvedMemberships.map((membership: any) => membership.clubId))],
+    eventIds: [...new Set(registrations.map((registration: any) => registration.eventId))],
+  };
+}
+
+async function createSystemAuditMessage(params: {
+  groupId: string;
+  actor: ChatActor;
+  action: string;
+  content: string;
+}) {
+  await ChatMessage.create({
+    id: randomUUID(),
+    chatGroupId: params.groupId,
+    senderType: "admin",
+    senderId: params.actor.userId,
+    senderName: "System",
+    content: params.content,
+    type: "text",
+    isSystem: true,
+    systemAction: params.action,
+    deleted: false,
+    createdAt: new Date(),
+  });
+
+  await ChatGroup.updateOne({ id: params.groupId }, { $set: { updatedAt: new Date() } });
 }
 
 // Middleware to check if student is authenticated and account is not disabled
@@ -178,6 +392,183 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     }
   });
 
+  app.post("/api/chat/upload", requireAnyAuth, upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const groupId = String(req.body?.groupId || "").trim();
+      if (!groupId) {
+        return res.status(400).json({ error: "groupId is required for chat uploads" });
+      }
+
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      if (group.isFrozen) {
+        return res.status(403).json({ error: "This chat group is frozen and no messages can be sent" });
+      }
+
+      const canAccess = await canAccessChatGroup(actor, group);
+      if (!canAccess) return res.status(403).json({ error: "Access denied" });
+
+      if (actor.userType !== "admin") {
+        if (group.adminOnlyMessaging) {
+          return res.status(403).json({ error: "Only admins can send attachments in this chat" });
+        }
+
+        if (Array.isArray(group.blockedUserKeys) && group.blockedUserKeys.includes(actor.userKey)) {
+          return res.status(403).json({ error: "You are restricted from sending attachments in this chat" });
+        }
+      }
+
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+      const fileUrl = `/uploads/${req.file.filename}`;
+      res.json({
+        url: fileUrl,
+        filename: req.file.originalname,
+        mimeType: req.file.mimetype,
+      });
+    } catch {
+      res.status(500).json({ error: "Failed to upload chat attachment" });
+    }
+  });
+
+  app.get("/api/stories/highlights", async (_req: Request, res: Response) => {
+    try {
+      const stories = await ClubStory.find({ isHighlight: true }).sort({ createdAt: -1 });
+      const clubs = await Club.find({ isFrozen: { $ne: true } }).select("id name logoUrl");
+      const clubMap = new Map(clubs.map((club: any) => [club.id, club]));
+
+      const seenClubs = new Set<string>();
+      const highlights = stories
+        .filter((story: any) => {
+          if (!clubMap.has(story.clubId)) return false;
+          if (seenClubs.has(story.clubId)) return false;
+          seenClubs.add(story.clubId);
+          return true;
+        })
+        .map((story: any) => {
+          const club = clubMap.get(story.clubId);
+          return {
+            id: story.id,
+            clubId: story.clubId,
+            clubName: story.clubName,
+            clubLogo: club?.logoUrl || "",
+            mediaUrl: story.mediaUrl,
+            caption: story.caption || "",
+            isHighlight: !!story.isHighlight,
+            createdAt: story.createdAt,
+          };
+        });
+
+      res.json(highlights);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch story highlights" });
+    }
+  });
+
+  app.get("/api/admin/stories/my", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin?.clubId) {
+        return res.status(403).json({ error: "Only club admins can manage stories" });
+      }
+
+      const stories = await ClubStory.find({ clubId: admin.clubId }).sort({ createdAt: -1 });
+      res.json(stories);
+    } catch {
+      res.status(500).json({ error: "Failed to fetch stories" });
+    }
+  });
+
+  app.post("/api/admin/stories", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin?.clubId) {
+        return res.status(403).json({ error: "Only club admins can create stories" });
+      }
+
+      const club = await Club.findOne({ id: admin.clubId });
+      if (!club) {
+        return res.status(404).json({ error: "Club not found" });
+      }
+
+      const mediaUrl = String(req.body?.mediaUrl || "").trim();
+      const caption = String(req.body?.caption || "").trim();
+      const isHighlight = !!req.body?.isHighlight;
+      const expiresInHoursRaw = Number(req.body?.expiresInHours ?? 24);
+      const expiresInHours = Number.isFinite(expiresInHoursRaw)
+        ? Math.min(Math.max(expiresInHoursRaw, 1), 168)
+        : 24;
+
+      if (!mediaUrl) {
+        return res.status(400).json({ error: "mediaUrl is required" });
+      }
+
+      const story = await ClubStory.create({
+        id: randomUUID(),
+        clubId: admin.clubId,
+        clubName: club.name,
+        mediaUrl,
+        caption,
+        isHighlight,
+        expiresAt: new Date(Date.now() + expiresInHours * 60 * 60 * 1000),
+        createdByAdminId: admin.id,
+        createdAt: new Date(),
+      });
+
+      res.status(201).json(story);
+    } catch {
+      res.status(500).json({ error: "Failed to create story" });
+    }
+  });
+
+  app.patch("/api/admin/stories/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin?.clubId) {
+        return res.status(403).json({ error: "Only club admins can update stories" });
+      }
+
+      const story = await ClubStory.findOne({ id: req.params.id, clubId: admin.clubId });
+      if (!story) {
+        return res.status(404).json({ error: "Story not found" });
+      }
+
+      if (typeof req.body?.isHighlight === "boolean") {
+        story.isHighlight = req.body.isHighlight;
+      }
+      if (typeof req.body?.caption === "string") {
+        story.caption = req.body.caption.trim();
+      }
+
+      await story.save();
+      res.json(story);
+    } catch {
+      res.status(500).json({ error: "Failed to update story" });
+    }
+  });
+
+  app.delete("/api/admin/stories/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin?.clubId) {
+        return res.status(403).json({ error: "Only club admins can delete stories" });
+      }
+
+      const deleted = await ClubStory.findOneAndDelete({ id: req.params.id, clubId: admin.clubId });
+      if (!deleted) {
+        return res.status(404).json({ error: "Story not found" });
+      }
+
+      res.json({ success: true });
+    } catch {
+      res.status(500).json({ error: "Failed to delete story" });
+    }
+  });
+
   // University admin login - clubId must be null
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
@@ -196,6 +587,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       // Update last login
       await Admin.findOneAndUpdate({ id: admin.id }, { lastLogin: new Date() });
 
+      // Ensure session represents admin context only.
+      req.session.studentId = undefined;
       req.session.adminId = admin.id;
       req.session.save((err: any) => {
         if (err) {
@@ -231,6 +624,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       // Update last login
       await Admin.findOneAndUpdate({ id: admin.id }, { lastLogin: new Date() });
 
+      // Ensure session represents admin context only.
+      req.session.studentId = undefined;
       req.session.adminId = admin.id;
       req.session.save((err: any) => {
         if (err) {
@@ -325,6 +720,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const { search, category } = req.query;
       let clubs = await storage.getAllClubs();
 
+      if (!Array.isArray(clubs) || clubs.length === 0) {
+        clubs = fallbackClubs as any;
+      }
+
       // Fetch all club memberships once for efficiency
       const { ClubMembership } = await import("./models/ClubMembership.js");
       const allMemberships = await ClubMembership.find({ status: { $ne: 'rejected' } });
@@ -359,7 +758,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       res.json(filteredClubs);
     } catch (error) {
       console.error("Error fetching clubs:", error);
-      res.status(500).json({ error: "Failed to fetch clubs" });
+      res.json(fallbackClubs);
     }
   });
 
@@ -386,6 +785,21 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     try {
       const data = insertClubSchema.parse(req.body);
       const club = await storage.createClub(data);
+
+      // Ensure every newly created club has a default chat group.
+      const admin = await storage.getAdmin(req.session.adminId!);
+      const existingGroup = await ChatGroup.findOne({ type: "club", clubId: club.id });
+      if (!existingGroup) {
+        await ChatGroup.create({
+          id: randomUUID(),
+          name: `${club.name} Club Chat`,
+          type: "club",
+          clubId: club.id,
+          createdByType: "admin",
+          createdById: admin?.id || req.session.adminId!,
+        });
+      }
+
       res.status(201).json(club);
     } catch {
       res.status(400).json({ error: "Invalid club data" });
@@ -414,6 +828,19 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       });
       
       if (!updated) return res.status(404).json({ error: "Club not found" });
+      
+      // Also freeze the club's chat group when freezing the club
+      await ChatGroup.updateMany(
+        { clubId: req.params.id },
+        {
+          $set: {
+            isFrozen: freeze,
+            frozenAt: freeze ? new Date() : null,
+            frozenBy: freeze ? admin?.username : null,
+          }
+        }
+      );
+      
       res.json(updated);
     } catch (error) {
       console.error("Freeze club error:", error);
@@ -451,6 +878,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           ? await storage.getEventsByClub(clubId)
           : await storage.getAllEvents();
 
+      if (!Array.isArray(events) || events.length === 0) {
+        events = fallbackEvents as any;
+      }
+
       if (search && typeof search === "string") {
         const s = search.toLowerCase();
         events = events.filter(
@@ -473,7 +904,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       res.json(eventsWithId);
     } catch {
-      res.status(500).json({ error: "Failed to fetch events" });
+      res.json(fallbackEvents);
     }
   });
 
@@ -496,7 +927,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     }
   });
 
-  app.post("/api/events", requireAuth, upload.single("imageFile"), async (req: Request, res: Response) => {
+  app.post("/api/events", requireAuth, upload.fields([{ name: "imageFile", maxCount: 1 }, { name: "image", maxCount: 1 }]), async (req: Request, res: Response) => {
     try {
       if (!req.session.adminId) return res.status(401).json({ error: "Unauthorized" });
       
@@ -510,12 +941,15 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const club = await storage.getClub(clubId);
       if (!club) return res.status(400).json({ error: "Club not found" });
 
+      const uploadedFiles = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      const uploadedImage = uploadedFiles?.imageFile?.[0] || uploadedFiles?.image?.[0];
+
       const eventData = {
         ...req.body,
         clubId: clubId,
         clubName: club.name,
         durationMinutes: req.body.durationMinutes,
-        imageUrl: req.file ? `/uploads/${req.file.filename}` : null
+        imageUrl: uploadedImage ? `/uploads/${uploadedImage.filename}` : null
       };
 
       const validated = insertEventSchema.parse(eventData);
@@ -558,7 +992,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     }
   });
 
-  app.patch("/api/events/:id", requireAuth, upload.single("imageFile"), async (req: Request, res: Response) => {
+  app.patch("/api/events/:id", requireAuth, upload.fields([{ name: "imageFile", maxCount: 1 }, { name: "image", maxCount: 1 }]), async (req: Request, res: Response) => {
     try {
       const oldEvent = await storage.getEvent(req.params.id);
       if (!oldEvent) return res.status(404).json({ error: "Event not found" });
@@ -573,9 +1007,12 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       const { clubId, ...safeUpdates } = req.body;
 
+      const uploadedFiles = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+      const uploadedImage = uploadedFiles?.imageFile?.[0] || uploadedFiles?.image?.[0];
+
       const updates = {
         ...safeUpdates,
-        ...(req.file && { imageUrl: `/uploads/${req.file.filename}` })
+        ...(uploadedImage && { imageUrl: `/uploads/${uploadedImage.filename}` })
       };
 
       const nextDate = updates.date ?? oldEvent.date;
@@ -861,6 +1298,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const currentYear = new Date().getFullYear();
       const yearOfCourse = student.yearOfAdmission ? currentYear - student.yearOfAdmission + 1 : 1;
 
+      // Ensure session represents student context only.
+      req.session.adminId = undefined;
       req.session.studentId = student._id.toString();
       req.session.studentEmail = student.email;
 
@@ -920,21 +1359,88 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     });
   });
 
+  app.patch("/api/student/me", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const { phone, department, yearOfAdmission, rollNumber } = req.body as {
+        phone?: string;
+        department?: string;
+        yearOfAdmission?: number;
+        rollNumber?: string;
+      };
+
+      if (typeof phone === "string") {
+        student.phone = phone.trim();
+      }
+
+      if (typeof department === "string") {
+        student.department = department.trim();
+      }
+
+      if (typeof rollNumber === "string") {
+        student.rollNumber = rollNumber.trim();
+      }
+
+      if (typeof yearOfAdmission === "number") {
+        const currentYear = new Date().getFullYear();
+        const normalizedYear = Math.floor(yearOfAdmission);
+        if (normalizedYear < 2000 || normalizedYear > currentYear + 1) {
+          return res.status(400).json({ error: "Invalid admission year" });
+        }
+        student.yearOfAdmission = normalizedYear;
+      }
+
+      await student.save();
+
+      const currentYear = new Date().getFullYear();
+      const yearOfCourse = student.yearOfAdmission ? currentYear - student.yearOfAdmission + 1 : 1;
+
+      res.json({
+        success: true,
+        student: {
+          id: student._id.toString(),
+          name: student.name,
+          email: student.email,
+          phone: student.phone,
+          rollNumber: student.rollNumber,
+          enrollment: student.enrollment,
+          department: student.department,
+          yearOfAdmission: student.yearOfAdmission,
+          yearOfCourse,
+          profilePicture: student.profilePicture || null,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to update student profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
   // Student: Upload profile picture
   app.post("/api/student/profile-picture", requireStudentAuth, upload.single("profilePicture"), async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      if (!req.session.studentId) return res.status(401).json({ error: "Student not authenticated" });
 
       const imageUrl = `/uploads/${req.file.filename}`;
       
-      // Update student profile with image URL
-      await Student.findByIdAndUpdate(req.session.studentId, {
-        profilePicture: imageUrl
-      });
+      // Update student profile with image URL and verify update
+      const updatedStudent = await Student.findByIdAndUpdate(
+        req.session.studentId,
+        { profilePicture: imageUrl },
+        { new: true }
+      );
+
+      if (!updatedStudent) {
+        return res.status(404).json({ error: "Student not found" });
+      }
 
       res.json({ 
         success: true, 
         imageUrl,
+        profilePicture: imageUrl,
         message: "Profile picture uploaded successfully" 
       });
     } catch (error) {
@@ -1393,6 +1899,809 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Failed to mark message as read:", error);
       res.status(500).json({ error: "Failed to mark message as read" });
+    }
+  });
+
+  async function getScopedChatGroups(actor: ChatActor) {
+    const scope = await getAccessibleChatScope(actor);
+
+    if (actor.role === "student" && scope.clubIds.length > 0) {
+      const existingClubGroups = await ChatGroup.find({
+        type: "club",
+        clubId: { $in: scope.clubIds },
+      }).select("clubId");
+
+      const existingClubIds = new Set(
+        existingClubGroups
+          .map((group: any) => group.clubId)
+          .filter((clubId: any): clubId is string => typeof clubId === "string" && clubId.length > 0)
+      );
+
+      const missingClubIds = scope.clubIds.filter((clubId) => !existingClubIds.has(clubId));
+
+      if (missingClubIds.length > 0) {
+        const clubs = await Club.find({ id: { $in: missingClubIds } }).select("id name");
+
+        await Promise.all(
+          clubs.map(async (club: any) => {
+            const alreadyExists = await ChatGroup.findOne({ type: "club", clubId: club.id }).select("id");
+            if (alreadyExists) return;
+
+            await ChatGroup.create({
+              id: randomUUID(),
+              name: `${club.name} Club Chat`,
+              type: "club",
+              clubId: club.id,
+              createdByType: "admin",
+              createdById: "system:auto",
+            });
+          })
+        );
+      }
+    }
+
+    if ((actor.role === "student" || actor.role === "club_admin") && scope.eventIds.length > 0) {
+      const existingEventGroups = await ChatGroup.find({
+        type: "event",
+        eventId: { $in: scope.eventIds },
+      }).select("eventId");
+
+      const existingEventIds = new Set(
+        existingEventGroups
+          .map((group: any) => group.eventId)
+          .filter((eventId: any): eventId is string => typeof eventId === "string" && eventId.length > 0)
+      );
+
+      const missingEventIds = scope.eventIds.filter((eventId) => !existingEventIds.has(eventId));
+
+      if (missingEventIds.length > 0) {
+        const events = await Event.find({ id: { $in: missingEventIds } }).select("id title clubId");
+
+        await Promise.all(
+          events.map(async (event: any) => {
+            const alreadyExists = await ChatGroup.findOne({ type: "event", eventId: event.id }).select("id");
+            if (alreadyExists) return;
+
+            await ChatGroup.create({
+              id: randomUUID(),
+              name: `${event.title} Event Chat`,
+              type: "event",
+              clubId: event.clubId,
+              eventId: event.id,
+              createdByType: "admin",
+              createdById: "system:auto",
+            });
+          })
+        );
+      }
+    }
+
+    let groups: any[] = [];
+    if (actor.role === "university_admin") {
+      groups = await ChatGroup.find({}).sort({ updatedAt: -1 });
+    } else {
+      const filters: any[] = [];
+      if (scope.clubIds.length > 0) {
+        filters.push({ type: "club", clubId: { $in: scope.clubIds } });
+      }
+      if (scope.eventIds.length > 0) {
+        filters.push({ type: "event", eventId: { $in: scope.eventIds } });
+      }
+
+      if (filters.length === 0) {
+        groups = [];
+      } else {
+        groups = await ChatGroup.find({ $or: filters }).sort({ updatedAt: -1 });
+      }
+    }
+
+    return { groups, scope };
+  }
+
+  async function canAccessChatGroup(actor: ChatActor, group: any) {
+    if (actor.role === "university_admin") return true;
+
+    const scope = await getAccessibleChatScope(actor);
+    if (group.type === "club") {
+      return !!group.clubId && scope.clubIds.includes(group.clubId);
+    }
+    if (group.type === "event") {
+      return !!group.eventId && scope.eventIds.includes(group.eventId);
+    }
+    return false;
+  }
+
+  function canModerateChatGroup(actor: ChatActor, group: any) {
+    if (actor.role === "university_admin") return true;
+    if (actor.role === "club_admin") return !!actor.clubId && !!group.clubId && actor.clubId === group.clubId;
+    return false;
+  }
+
+  app.get("/api/chat/me", async (req: Request, res: Response) => {
+    const actor = await resolveChatActor(req);
+    if (!actor) {
+      return res.json({ loggedIn: false, role: "guest" });
+    }
+
+    res.json({
+      loggedIn: true,
+      role: actor.role,
+      userType: actor.userType,
+      displayName: actor.displayName,
+      userId: actor.userId,
+      canCreateGroup: actor.role !== "student",
+      clubId: actor.clubId,
+      enrollmentNumber: actor.enrollmentNumber,
+    });
+  });
+
+  app.get("/api/chat/groups", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groups } = await getScopedChatGroups(actor);
+
+      const groupSummaries = await Promise.all(
+        groups.map(async (group: any) => {
+          const [lastMessage, readState, membersCount] = await Promise.all([
+            ChatMessage.findOne({ chatGroupId: group.id, deleted: { $ne: true } }).sort({ createdAt: -1 }),
+            ChatReadState.findOne({ chatGroupId: group.id, userKey: actor.userKey }),
+            group.type === "club"
+              ? ClubMembership.countDocuments({ clubId: group.clubId, status: "approved" })
+              : EventRegistration.countDocuments({ eventId: group.eventId, status: "approved" }),
+          ]);
+
+          const unreadQuery: any = {
+            chatGroupId: group.id,
+            deleted: { $ne: true },
+            $or: [
+              { senderType: { $ne: actor.userType } },
+              { senderId: { $ne: actor.userId } },
+            ],
+          };
+
+          if (readState?.lastReadAt) {
+            unreadQuery.createdAt = { $gt: readState.lastReadAt };
+          }
+
+          const unreadCount = await ChatMessage.countDocuments(unreadQuery);
+          const isNew = unreadCount > 0;
+
+          const lastMessagePreview =
+            lastMessage?.content ||
+            (lastMessage?.type === "image"
+              ? "Photo"
+              : lastMessage?.type === "document"
+                ? "Document"
+                : "No messages yet");
+
+          return {
+            id: group.id,
+            name: group.name,
+            type: group.type,
+            clubId: group.clubId,
+            eventId: group.eventId,
+            adminOnlyMessaging: !!group.adminOnlyMessaging,
+            blockedMembersCount: Array.isArray(group.blockedUserKeys) ? group.blockedUserKeys.length : 0,
+            icon: group.type === "club" ? "🏛️" : "🎫",
+            membersCount,
+            unreadCount,
+            isNew,
+            lastMessagePreview,
+            lastMessageAt: lastMessage?.createdAt || group.updatedAt || group.createdAt,
+          };
+        })
+      );
+
+      const sorted = groupSummaries.sort(
+        (a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime()
+      );
+
+      const totalUnread = sorted.reduce((sum, group) => sum + group.unreadCount, 0);
+
+      res.json({
+        role: actor.role,
+        canCreateGroup: actor.role !== "student",
+        totalUnread,
+        sections: {
+          clubs: sorted.filter((group) => group.type === "club"),
+          events: sorted.filter((group) => group.type === "event"),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch chat groups:", error);
+      res.status(500).json({ error: "Failed to fetch chat groups" });
+    }
+  });
+
+  app.get("/api/chat/unread-count", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groups } = await getScopedChatGroups(actor);
+      const readStates = await ChatReadState.find({ userKey: actor.userKey });
+      const readMap = new Map(readStates.map((state: any) => [state.chatGroupId, state.lastReadAt]));
+
+      let totalUnread = 0;
+      for (const group of groups) {
+        const unreadQuery: any = {
+          chatGroupId: group.id,
+          deleted: { $ne: true },
+          $or: [
+            { senderType: { $ne: actor.userType } },
+            { senderId: { $ne: actor.userId } },
+          ],
+        };
+
+        const lastReadAt = readMap.get(group.id);
+        if (lastReadAt) {
+          unreadQuery.createdAt = { $gt: lastReadAt };
+        }
+
+        totalUnread += await ChatMessage.countDocuments(unreadQuery);
+      }
+
+      res.json({ totalUnread });
+    } catch (error) {
+      console.error("Failed to fetch unread count:", error);
+      res.status(500).json({ error: "Failed to fetch unread count" });
+    }
+  });
+
+  app.post("/api/chat/groups", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+      if (actor.role === "student") {
+        return res.status(403).json({ error: "Students cannot create chat groups" });
+      }
+
+      const { name, type, clubId, eventId } = req.body as {
+        name?: string;
+        type?: "club" | "event";
+        clubId?: string;
+        eventId?: string;
+      };
+
+      if (type !== "club" && type !== "event") {
+        return res.status(400).json({ error: "Invalid group type" });
+      }
+
+      if (type === "club") {
+        const targetClubId = clubId || actor.clubId;
+        if (!targetClubId) return res.status(400).json({ error: "clubId is required" });
+        if (actor.role === "club_admin" && targetClubId !== actor.clubId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+
+        const club = await Club.findOne({ id: targetClubId });
+        if (!club) return res.status(404).json({ error: "Club not found" });
+
+        const existing = await ChatGroup.findOne({ type: "club", clubId: targetClubId });
+        if (existing) return res.json(existing);
+
+        const group = await ChatGroup.create({
+          id: randomUUID(),
+          name: (name || `${club.name} Club Chat`).trim(),
+          type: "club",
+          clubId: targetClubId,
+          createdByType: actor.userType,
+          createdById: actor.userId,
+        });
+
+        return res.status(201).json(group);
+      }
+
+      if (!eventId) return res.status(400).json({ error: "eventId is required" });
+
+      const event = await Event.findOne({ id: eventId });
+      if (!event) return res.status(404).json({ error: "Event not found" });
+      if (actor.role === "club_admin" && event.clubId !== actor.clubId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const group = await ChatGroup.create({
+        id: randomUUID(),
+        name: (name || `${event.title} Event Chat`).trim(),
+        type: "event",
+        clubId: event.clubId,
+        eventId: event.id,
+        createdByType: actor.userType,
+        createdById: actor.userId,
+      });
+
+      return res.status(201).json(group);
+    } catch (error) {
+      console.error("Failed to create chat group:", error);
+      res.status(500).json({ error: "Failed to create chat group" });
+    }
+  });
+
+  app.get("/api/chat/groups/:groupId/messages", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      if (group.isFrozen) {
+        return res.status(403).json({ error: "This chat group is frozen and no messages can be sent" });
+      }
+
+      const canAccess = await canAccessChatGroup(actor, group);
+      if (!canAccess) return res.status(403).json({ error: "Access denied" });
+
+      const requestedLimit = Number(req.query.limit || 40);
+      const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 40;
+      const before = String(req.query.before || "").trim();
+
+      const query: any = { chatGroupId: groupId };
+      if (before) {
+        const beforeDate = new Date(before);
+        if (!Number.isNaN(beforeDate.getTime())) {
+          query.createdAt = { $lt: beforeDate };
+        }
+      }
+
+      const latestFirst = await ChatMessage.find(query).sort({ createdAt: -1 }).limit(limit + 1);
+      const hasMore = latestFirst.length > limit;
+      const sliced = hasMore ? latestFirst.slice(0, limit) : latestFirst;
+      const messages = sliced.reverse();
+      const nextCursor = hasMore && messages.length > 0 ? messages[0].createdAt : null;
+
+      res.json({
+        messages,
+        hasMore,
+        nextCursor,
+      });
+    } catch (error) {
+      console.error("Failed to fetch chat messages:", error);
+      res.status(500).json({ error: "Failed to fetch chat messages" });
+    }
+  });
+
+  app.post("/api/chat/groups/:groupId/messages", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      if (group.isFrozen) {
+        return res.status(403).json({ error: "This chat group is frozen and no messages can be sent" });
+      }
+
+      const canAccess = await canAccessChatGroup(actor, group);
+      if (!canAccess) return res.status(403).json({ error: "Access denied" });
+
+      if (actor.role === "student") {
+        if (group.adminOnlyMessaging) {
+          return res.status(403).json({ error: "Only admins can send messages in this chat" });
+        }
+
+        if (Array.isArray(group.blockedUserKeys) && group.blockedUserKeys.includes(actor.userKey)) {
+          return res.status(403).json({ error: "You are restricted from sending messages in this chat" });
+        }
+      }
+
+      const {
+        content,
+        type,
+        attachmentUrl,
+        attachmentName,
+        replyToMessageId,
+        clientRequestId,
+      } = req.body as {
+        content?: string;
+        type?: "text" | "image" | "document";
+        attachmentUrl?: string;
+        attachmentName?: string;
+        replyToMessageId?: string;
+        clientRequestId?: string;
+      };
+
+      let replyToSenderName: string | undefined;
+      let replyToContentPreview: string | undefined;
+      if (replyToMessageId) {
+        const parentMessage = await ChatMessage.findOne({ id: replyToMessageId, chatGroupId: group.id });
+        if (!parentMessage) {
+          return res.status(400).json({ error: "Reply target message not found" });
+        }
+
+        replyToSenderName = parentMessage.senderName;
+        replyToContentPreview = parentMessage.deleted
+          ? "Deleted message"
+          : (parentMessage.content ||
+              (parentMessage.type === "image"
+                ? "Photo"
+                : parentMessage.type === "document"
+                  ? "Document"
+                  : "Message"));
+      }
+
+      const safeContent = (content || "").trim();
+      if (!safeContent && !attachmentUrl) {
+        return res.status(400).json({ error: "Message content is required" });
+      }
+
+      const messageType = type || (attachmentUrl ? "document" : "text");
+      if (!["text", "image", "document"].includes(messageType)) {
+        return res.status(400).json({ error: "Invalid message type" });
+      }
+
+      const message = await ChatMessage.create({
+        id: randomUUID(),
+        chatGroupId: group.id,
+        senderType: actor.userType,
+        senderId: actor.userId,
+        senderName: actor.displayName,
+        content: safeContent,
+        type: messageType,
+        attachmentUrl,
+        attachmentName,
+        replyToMessageId,
+        replyToSenderName,
+        replyToContentPreview,
+        clientRequestId: clientRequestId || undefined,
+        deleted: false,
+        createdAt: new Date(),
+      });
+
+      await ChatGroup.updateOne({ id: group.id }, { $set: { updatedAt: new Date() } });
+
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Failed to send chat message:", error);
+      res.status(500).json({ error: "Failed to send chat message" });
+    }
+  });
+
+  app.post("/api/chat/groups/:groupId/read", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      const canAccess = await canAccessChatGroup(actor, group);
+      if (!canAccess) return res.status(403).json({ error: "Access denied" });
+
+      await ChatReadState.findOneAndUpdate(
+        { chatGroupId: groupId, userKey: actor.userKey },
+        { $set: { lastReadAt: new Date() } },
+        { upsert: true, new: true }
+      );
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to update chat read state:", error);
+      res.status(500).json({ error: "Failed to update read state" });
+    }
+  });
+
+  app.patch("/api/chat/groups/:groupId/messages/:messageId/pin", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId, messageId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      const canAccess = await canAccessChatGroup(actor, group);
+      if (!canAccess) return res.status(403).json({ error: "Access denied" });
+
+      const message = await ChatMessage.findOne({ id: messageId, chatGroupId: group.id });
+      if (!message) return res.status(404).json({ error: "Message not found" });
+
+      const isOwnMessage = message.senderType === actor.userType && message.senderId === actor.userId;
+      if (!isOwnMessage && !canModerateChatGroup(actor, group)) {
+        return res.status(403).json({ error: "Not allowed to pin this message" });
+      }
+
+      const { pinned } = req.body as { pinned?: boolean };
+      const nextPinned = typeof pinned === "boolean" ? pinned : !message.isPinned;
+
+      message.isPinned = nextPinned;
+      message.pinnedAt = nextPinned ? new Date() : undefined;
+      message.pinnedByUserKey = nextPinned ? actor.userKey : undefined;
+      await message.save();
+
+      await createSystemAuditMessage({
+        groupId: group.id,
+        actor,
+        action: nextPinned ? "message_pinned" : "message_unpinned",
+        content: `${actor.displayName} ${nextPinned ? "pinned" : "unpinned"} a message.`,
+      });
+
+      return res.json({ success: true, pinned: message.isPinned });
+    } catch (error) {
+      console.error("Failed to pin message:", error);
+      res.status(500).json({ error: "Failed to pin message" });
+    }
+  });
+
+  app.delete("/api/chat/groups/:groupId/messages/:messageId", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId, messageId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      const canAccess = await canAccessChatGroup(actor, group);
+      if (!canAccess) return res.status(403).json({ error: "Access denied" });
+
+      const message = await ChatMessage.findOne({ id: messageId, chatGroupId: group.id });
+      if (!message) return res.status(404).json({ error: "Message not found" });
+
+      const isOwnMessage = message.senderType === actor.userType && message.senderId === actor.userId;
+      if (!isOwnMessage && !canModerateChatGroup(actor, group)) {
+        return res.status(403).json({ error: "You can delete only your own message" });
+      }
+
+      message.deleted = true;
+      message.deletedAt = new Date();
+      message.deletedByUserKey = actor.userKey;
+      message.content = "";
+      message.attachmentUrl = undefined;
+      message.attachmentName = undefined;
+      message.type = "text";
+      await message.save();
+
+      await createSystemAuditMessage({
+        groupId: group.id,
+        actor,
+        action: "message_deleted",
+        content: `${actor.displayName} deleted a message.`,
+      });
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete message:", error);
+      res.status(500).json({ error: "Failed to delete message" });
+    }
+  });
+
+  app.get("/api/chat/groups/:groupId/pinned", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      const canAccess = await canAccessChatGroup(actor, group);
+      if (!canAccess) return res.status(403).json({ error: "Access denied" });
+
+      const pinnedMessages = await ChatMessage.find({
+        chatGroupId: group.id,
+        isPinned: true,
+        deleted: { $ne: true },
+      })
+        .sort({ pinnedAt: -1, createdAt: -1 })
+        .limit(50);
+
+      return res.json({ messages: pinnedMessages });
+    } catch (error) {
+      console.error("Failed to fetch pinned messages:", error);
+      res.status(500).json({ error: "Failed to fetch pinned messages" });
+    }
+  });
+
+  app.get("/api/chat/groups/:groupId/members", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      const canAccess = await canAccessChatGroup(actor, group);
+      if (!canAccess) return res.status(403).json({ error: "Access denied" });
+
+      const blockedSet = new Set(Array.isArray(group.blockedUserKeys) ? group.blockedUserKeys : []);
+
+      if (group.type === "club") {
+        const memberships = await ClubMembership.find({ clubId: group.clubId, status: "approved" });
+        const members = memberships.map((membership: any) => {
+          const userKey = `student:${membership.enrollmentNumber}`;
+          return {
+            enrollmentNumber: membership.enrollmentNumber,
+            name: membership.studentName,
+            email: membership.studentEmail,
+            userKey,
+            blocked: blockedSet.has(userKey),
+          };
+        });
+
+        return res.json({
+          groupId: group.id,
+          groupType: group.type,
+          adminOnlyMessaging: !!group.adminOnlyMessaging,
+          canModerate: canModerateChatGroup(actor, group),
+          members,
+        });
+      }
+
+      const registrations = await EventRegistration.find({ eventId: group.eventId, status: "approved" });
+      const members = registrations.map((registration: any) => {
+        const userKey = `student:${registration.enrollmentNumber}`;
+        return {
+          enrollmentNumber: registration.enrollmentNumber,
+          name: registration.studentName,
+          email: registration.studentEmail,
+          userKey,
+          blocked: blockedSet.has(userKey),
+        };
+      });
+
+      return res.json({
+        groupId: group.id,
+        groupType: group.type,
+        adminOnlyMessaging: !!group.adminOnlyMessaging,
+        canModerate: canModerateChatGroup(actor, group),
+        members,
+      });
+    } catch (error) {
+      console.error("Failed to fetch chat members:", error);
+      res.status(500).json({ error: "Failed to fetch chat members" });
+    }
+  });
+
+  app.delete("/api/chat/groups/:groupId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      // Only admins can delete event chats
+      if (group.type === "event") {
+        if (actor.userType !== "admin") {
+          return res.status(403).json({ error: "Only admins can delete event chats" });
+        }
+      } else {
+        // For club chats, only the club admin or university admin can delete
+        if (!canModerateChatGroup(actor, group)) {
+          return res.status(403).json({ error: "You do not have permission to delete this chat group" });
+        }
+      }
+
+      // Delete all messages in the chat group
+      await ChatMessage.deleteMany({ chatGroupId: groupId });
+
+      // Delete the chat group
+      await ChatGroup.deleteOne({ id: groupId });
+
+      res.json({ success: true, message: "Chat group deleted successfully" });
+    } catch (error) {
+      console.error("Failed to delete chat group:", error);
+      res.status(500).json({ error: "Failed to delete chat group" });
+    }
+  });
+
+  app.patch("/api/chat/groups/:groupId/settings", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      if (!canModerateChatGroup(actor, group)) {
+        return res.status(403).json({ error: "Only admins of this club can change chat settings" });
+      }
+
+      const { adminOnlyMessaging } = req.body as { adminOnlyMessaging?: boolean };
+      if (typeof adminOnlyMessaging !== "boolean") {
+        return res.status(400).json({ error: "adminOnlyMessaging must be a boolean" });
+      }
+
+      const previousValue = !!group.adminOnlyMessaging;
+      group.adminOnlyMessaging = adminOnlyMessaging;
+
+      await group.save();
+
+      if (previousValue !== group.adminOnlyMessaging) {
+        await createSystemAuditMessage({
+          groupId: group.id,
+          actor,
+          action: "settings_update",
+          content: `${actor.displayName} ${group.adminOnlyMessaging ? "enabled" : "disabled"} admin-only messaging.`,
+        });
+      }
+
+      res.json({
+        success: true,
+        adminOnlyMessaging: !!group.adminOnlyMessaging,
+      });
+    } catch (error) {
+      console.error("Failed to update chat settings:", error);
+      res.status(500).json({ error: "Failed to update chat settings" });
+    }
+  });
+
+  app.patch("/api/chat/groups/:groupId/members/:enrollmentNumber", requireAnyAuth, async (req: Request, res: Response) => {
+    try {
+      const actor = await resolveChatActor(req);
+      if (!actor) return res.status(401).json({ error: "Unauthorized" });
+
+      const { groupId, enrollmentNumber } = req.params;
+      const group = await ChatGroup.findOne({ id: groupId });
+      if (!group) return res.status(404).json({ error: "Chat group not found" });
+
+      if (!canModerateChatGroup(actor, group)) {
+        return res.status(403).json({ error: "Only admins of this club can moderate members" });
+      }
+
+      const { action } = req.body as { action?: "block" | "unblock" | "remove" };
+      if (!action || !["block", "unblock", "remove"].includes(action)) {
+        return res.status(400).json({ error: "Invalid moderation action" });
+      }
+
+      const userKey = `student:${enrollmentNumber}`;
+      const blockedSet = new Set(Array.isArray(group.blockedUserKeys) ? group.blockedUserKeys : []);
+
+      if (action === "block") {
+        blockedSet.add(userKey);
+      }
+
+      if (action === "unblock") {
+        blockedSet.delete(userKey);
+      }
+
+      if (action === "remove") {
+        blockedSet.add(userKey);
+
+        if (group.type === "club") {
+          await ClubMembership.findOneAndUpdate(
+            { clubId: group.clubId, enrollmentNumber },
+            { status: "rejected" },
+            { new: true }
+          );
+        } else {
+          await EventRegistration.findOneAndUpdate(
+            { eventId: group.eventId, enrollmentNumber },
+            { status: "rejected" },
+            { new: true }
+          );
+        }
+      }
+
+      group.blockedUserKeys = Array.from(blockedSet);
+      await group.save();
+
+      await createSystemAuditMessage({
+        groupId: group.id,
+        actor,
+        action: `member_${action}`,
+        content:
+          action === "remove"
+            ? `${actor.displayName} removed ${enrollmentNumber} from this chat.`
+            : action === "block"
+              ? `${actor.displayName} blocked ${enrollmentNumber} from sending messages.`
+              : `${actor.displayName} unblocked ${enrollmentNumber}.`,
+      });
+
+      res.json({ success: true, action, enrollmentNumber, blocked: blockedSet.has(userKey) });
+    } catch (error) {
+      console.error("Failed to moderate chat member:", error);
+      res.status(500).json({ error: "Failed to moderate member" });
     }
   });
 

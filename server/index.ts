@@ -59,7 +59,8 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   try {
     const connected = await connectDB();
 
-    if (connected && process.env.NODE_ENV !== "production") {
+    const disableAutoSeed = String(process.env.DISABLE_AUTO_SEED || "").toLowerCase() === "true";
+    if (connected && !disableAutoSeed) {
       await seedDatabase();
     }
 

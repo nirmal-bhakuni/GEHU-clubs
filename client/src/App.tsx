@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { useEffect, useState, Component, type ReactNode } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +9,7 @@ import { initializeSampleUsers } from "@/lib/userManager";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Sidebar from "@/components/Sidebar";
+import FloatingChat from "@/components/FloatingChat";
 import Home from "@/pages/Home";
 import Clubs from "@/pages/Clubs";
 import ClubDetail from "@/pages/ClubDetail";
@@ -23,6 +24,8 @@ import StudentSignup from "@/pages/StudentSignup";
 import StudentDashboard from "@/pages/StudentDashboard";
 import StudentProfile from "@/pages/StudentProfile";
 import NotFound from "@/pages/not-found";
+import { useStudentAuth } from "@/hooks/useStudentAuth";
+import { useAuth } from "@/hooks/useAuth";
 
 function Router() {
   return (
@@ -87,7 +90,18 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppShell />
+    </QueryClientProvider>
+  );
+}
+
+function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [location, setLocation] = useLocation();
+  const { isAuthenticated: isStudentAuthenticated, isLoading: studentAuthLoading } = useStudentAuth();
+  const { admin, isAuthenticated: isAdminAuthenticated, isLoading: adminAuthLoading } = useAuth();
 
   useEffect(() => {
     // Initialize sample users on first app load
@@ -122,29 +136,80 @@ function App() {
     };
   }, [sidebarOpen]);
 
+  // Keep student users pinned to student dashboard for this tab session until logout.
+  useEffect(() => {
+    if (studentAuthLoading) return;
+
+    if (!isStudentAuthenticated) {
+      sessionStorage.removeItem("studentDashboardLock");
+      return;
+    }
+
+    if (sessionStorage.getItem("studentDashboardLock") !== "1") return;
+
+    // Keep session sticky on app entry/auth routes, but do not block normal browsing.
+    const stickyRedirectPaths = new Set([
+      "/student-login",
+      "/student/login",
+      "/student-signup",
+      "/student/signup",
+    ]);
+
+    if (stickyRedirectPaths.has(location)) {
+      setLocation("/student/dashboard");
+    }
+  }, [studentAuthLoading, isStudentAuthenticated, location, setLocation]);
+
+  // Resolve the shared /dashboard route to the correct dashboard by active login role.
+  useEffect(() => {
+    if (location !== "/dashboard") return;
+    if (studentAuthLoading || adminAuthLoading) return;
+
+    if (isStudentAuthenticated) {
+      setLocation("/student/dashboard");
+      return;
+    }
+
+    if (isAdminAuthenticated && admin?.clubId) {
+      setLocation("/club-admin");
+      return;
+    }
+
+    if (!isAdminAuthenticated) {
+      setLocation("/admin/login");
+    }
+  }, [
+    location,
+    studentAuthLoading,
+    adminAuthLoading,
+    isStudentAuthenticated,
+    isAdminAuthenticated,
+    admin,
+    setLocation,
+  ]);
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <ThemeProvider>
-          <div className="flex flex-col min-h-screen">
-            <Navbar
-              onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-              sidebarOpen={sidebarOpen}
-            />
-            <div className="flex flex-1">
-              <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-              <main className="flex-1">
-                <ErrorBoundary>
-                  <Router />
-                </ErrorBoundary>
-              </main>
-            </div>
-            <Footer />
+    <TooltipProvider>
+      <ThemeProvider>
+        <div className="flex flex-col min-h-screen">
+          <Navbar
+            onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+            sidebarOpen={sidebarOpen}
+          />
+          <div className="flex flex-1">
+            <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <main className="flex-1">
+              <ErrorBoundary>
+                <Router />
+              </ErrorBoundary>
+            </main>
           </div>
-          <Toaster />
-        </ThemeProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+          <Footer />
+          <FloatingChat />
+        </div>
+        <Toaster />
+      </ThemeProvider>
+    </TooltipProvider>
   );
 }
 

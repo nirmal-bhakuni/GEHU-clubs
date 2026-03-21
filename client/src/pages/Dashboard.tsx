@@ -223,6 +223,8 @@ export default function Dashboard() {
   const [clubLoginPassword, setClubLoginPassword] = useState("");
   const [clubLogoFile, setClubLogoFile] = useState<File | null>(null);
   const [clubLogoPreview, setClubLogoPreview] = useState<string | null>(null);
+  const [clubCoverFile, setClubCoverFile] = useState<File | null>(null);
+  const [clubCoverPreview, setClubCoverPreview] = useState<string | null>(null);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [eventForm, setEventForm] = useState({
@@ -492,8 +494,13 @@ export default function Dashboard() {
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       setLocation("/admin/login");
+      return;
     }
-  }, [authLoading, isAuthenticated, setLocation]);
+
+    if (!authLoading && isAuthenticated && !!admin?.clubId) {
+      setLocation("/club-admin");
+    }
+  }, [authLoading, isAuthenticated, admin?.clubId, setLocation]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -504,6 +511,9 @@ export default function Dashboard() {
       localStorage.removeItem("currentAdmin");
       localStorage.removeItem("adminCache");
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.setQueryData(["/api/chat/me"], { loggedIn: false, role: "guest" });
+      queryClient.removeQueries({ queryKey: ["/api/chat/groups"] });
+      queryClient.removeQueries({ queryKey: ["/api/chat/unread-count"] });
       setLocation("/admin/login");
     },
   });
@@ -535,6 +545,7 @@ export default function Dashboard() {
     mutationFn: async ({
       clubData,
       logoFile,
+      coverFile,
     }: {
       clubData: {
         name: string;
@@ -548,8 +559,10 @@ export default function Dashboard() {
         eligibilityYears?: string[];
       };
       logoFile?: File | null;
+      coverFile?: File | null;
     }) => {
       let logoUrl: string | undefined;
+      let coverImageUrl: string | undefined;
 
       if (logoFile) {
         const formData = new FormData();
@@ -561,9 +574,20 @@ export default function Dashboard() {
         logoUrl = uploadJson.url;
       }
 
+      if (coverFile) {
+        const formData = new FormData();
+        formData.append("file", coverFile);
+        formData.append("type", "club-cover");
+
+        const uploadRes = await apiRequest("POST", "/api/upload", formData);
+        const uploadJson = await uploadRes.json();
+        coverImageUrl = uploadJson.url;
+      }
+
       const res = await apiRequest("POST", "/api/clubs", {
         ...clubData,
         ...(logoUrl ? { logoUrl } : {}),
+        ...(coverImageUrl ? { coverImageUrl } : {}),
       });
       const createdClub = await res.json();
 
@@ -601,6 +625,8 @@ export default function Dashboard() {
       setClubLoginPassword("");
       setClubLogoFile(null);
       setClubLogoPreview(null);
+      setClubCoverFile(null);
+      setClubCoverPreview(null);
     },
     onError: () => {
       toast({
@@ -616,10 +642,12 @@ export default function Dashboard() {
       id,
       data,
       logoFile,
+      coverFile,
     }: {
       id: string;
       data: Partial<Club>;
       logoFile?: File | null;
+      coverFile?: File | null;
     }) => {
       let nextData = { ...data };
 
@@ -631,6 +659,16 @@ export default function Dashboard() {
         const uploadRes = await apiRequest("POST", "/api/upload", formData);
         const uploadJson = await uploadRes.json();
         nextData = { ...nextData, logoUrl: uploadJson.url };
+      }
+
+      if (coverFile) {
+        const formData = new FormData();
+        formData.append("file", coverFile);
+        formData.append("type", "club-cover");
+
+        const uploadRes = await apiRequest("POST", "/api/upload", formData);
+        const uploadJson = await uploadRes.json();
+        nextData = { ...nextData, coverImageUrl: uploadJson.url };
       }
 
       const res = await apiRequest("PATCH", `/api/clubs/${id}`, nextData);
@@ -657,6 +695,8 @@ export default function Dashboard() {
       setClubLoginPassword("");
       setClubLogoFile(null);
       setClubLogoPreview(null);
+      setClubCoverFile(null);
+      setClubCoverPreview(null);
     },
     onError: () => {
       toast({
@@ -800,6 +840,26 @@ export default function Dashboard() {
       toast({
         title: "Error",
         description: "Failed to delete event.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteChatGroupMutation = useMutation({
+    mutationFn: async (groupId: string) => {
+      await apiRequest("DELETE", `/api/chat/groups/${groupId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["api", "chat", "groups"] });
+      toast({
+        title: "Chat deleted",
+        description: "The chat group has been deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete chat group.",
         variant: "destructive",
       });
     },
@@ -1142,11 +1202,13 @@ export default function Dashboard() {
                         id: editingClub.id,
                         data: clubForm,
                         logoFile: clubLogoFile,
+                        coverFile: clubCoverFile,
                       });
                     } else {
                       createClubMutation.mutate({
                         clubData: clubForm,
                         logoFile: clubLogoFile,
+                        coverFile: clubCoverFile,
                       });
                     }
                   }}
@@ -1272,9 +1334,9 @@ export default function Dashboard() {
                       ))}
                     </div>
                   </div>
-                  <div>
-                    <Label htmlFor="clubLogo">Club Logo</Label>
-                    <div className="flex gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="clubLogo">Club Logo</Label>
                       <Input
                         id="clubLogo"
                         type="file"
@@ -1291,23 +1353,58 @@ export default function Dashboard() {
                           }
                         }}
                       />
+                      {clubLogoPreview && (
+                        <div className="mt-3 flex items-center gap-2">
+                          <img src={clubLogoPreview} alt="Club logo preview" className="h-20 w-20 object-cover rounded-lg" />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              setClubLogoFile(null);
+                              setClubLogoPreview(null);
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                    {clubLogoPreview && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <img src={clubLogoPreview} alt="Club logo preview" className="h-20 w-20 object-cover rounded-lg" />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => {
-                            setClubLogoFile(null);
-                            setClubLogoPreview(null);
-                          }}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    )}
+                    <div>
+                      <Label htmlFor="clubCover">Club Cover Photo</Label>
+                      <Input
+                        id="clubCover"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setClubCoverFile(file);
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setClubCoverPreview(event.target?.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      {clubCoverPreview && (
+                        <div className="mt-3 flex items-center gap-2">
+                          <img src={clubCoverPreview} alt="Club cover preview" className="h-20 w-24 object-cover rounded-lg" />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              setClubCoverFile(null);
+                              setClubCoverPreview(null);
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -1336,6 +1433,8 @@ export default function Dashboard() {
                         setClubLoginPassword("");
                         setClubLogoFile(null);
                         setClubLogoPreview(null);
+                        setClubCoverFile(null);
+                        setClubCoverPreview(null);
                       }}
                     >
                       Cancel
@@ -1849,6 +1948,38 @@ export default function Dashboard() {
                         >
                           Delete
                         </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              if (confirm("This will delete all messages in the chat. This action cannot be undone.")) {
+                                // Query chat groups to find the one for this event
+                                apiRequest("GET", "/api/chat/groups")
+                                  .then((response: any) => {
+                                    const eventChat = response.sections?.events?.find((g: any) => g.eventId === event.id);
+                                    if (eventChat) {
+                                      deleteChatGroupMutation.mutate(eventChat.id);
+                                    } else {
+                                      toast({
+                                        title: "Not Found",
+                                        description: "No chat group found for this event.",
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  })
+                                  .catch(() => {
+                                    toast({
+                                      title: "Error",
+                                      description: "Failed to fetch chat groups.",
+                                      variant: "destructive",
+                                    });
+                                  });
+                              }
+                            }}
+                            disabled={deleteChatGroupMutation.isPending}
+                          >
+                            Delete Chat
+                          </Button>
                       </div>
                     </div>
                   </Card>

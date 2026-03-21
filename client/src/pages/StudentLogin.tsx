@@ -48,8 +48,12 @@ export default function StudentLogin() {
       const data = await response.json();
 
       if (data.success) {
+        sessionStorage.setItem("studentDashboardLock", "1");
         // Invalidate the query cache to fetch fresh student data
         queryClient.invalidateQueries({ queryKey: ["/api/student/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/groups"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/unread-count"] });
         // Also set initial data from login response
         queryClient.setQueryData(["/api/student/me"], {
           id: data.student.id,
@@ -117,6 +121,7 @@ export default function StudentLogin() {
       const offlineStudent = offlineStudents[enrollment];
 
       if (offlineStudent && offlineStudent.password === password) {
+        sessionStorage.setItem("studentDashboardLock", "1");
         const studentData = {
           id: offlineStudent.id,
           name: offlineStudent.name,
@@ -150,6 +155,7 @@ export default function StudentLogin() {
 
       // Check static demo student
       if (password === "password123" && staticStudents[enrollment as keyof typeof staticStudents]) {
+        sessionStorage.setItem("studentDashboardLock", "1");
         const studentData = staticStudents[enrollment as keyof typeof staticStudents];
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], studentData);

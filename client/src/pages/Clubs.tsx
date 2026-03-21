@@ -36,6 +36,34 @@ export default function Clubs() {
   console.log("Is loading:", isLoading);
   console.log("Error:", error);
 
+  const defaultCategoryOptions = [
+    "Technology",
+    "Academic",
+    "Arts",
+    "Business",
+    "Social",
+    "Sports",
+    "Cultural",
+    "Literary",
+    "Music",
+    "Dance",
+    "Drama",
+    "Photography",
+    "Innovation",
+    "Environment",
+    "Community Service",
+    "Research",
+    "Design",
+    "Media",
+  ];
+
+  const categoryOptions = Array.from(
+    new Set([
+      ...defaultCategoryOptions,
+      ...clubs.map((club) => club.category).filter(Boolean),
+    ])
+  );
+
   const filteredClubs = clubs
     .filter((club) => !club.isFrozen) // Hide frozen clubs
     .filter((club) => {
@@ -104,11 +132,11 @@ export default function Clubs() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="Technology">Technology</SelectItem>
-              <SelectItem value="Academic">Academic</SelectItem>
-              <SelectItem value="Arts">Arts</SelectItem>
-              <SelectItem value="Business">Business</SelectItem>
-              <SelectItem value="Social">Social</SelectItem>
+              {categoryOptions.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

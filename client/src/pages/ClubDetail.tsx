@@ -37,7 +37,18 @@ export default function ClubDetail() {
     reason: ''
   });
   const { toast } = useToast();
-  const { student, isAuthenticated } = useStudentAuth();
+  const { student, isAuthenticated, isLoading: studentAuthLoading } = useStudentAuth();
+  const missingProfileFields = [
+    !student?.name ? "name" : null,
+    !student?.email ? "email" : null,
+    !student?.department ? "department" : null,
+    !student?.enrollment ? "enrollment number" : null,
+  ].filter(Boolean) as string[];
+  const isStudentProfileComplete =
+    !!student?.name &&
+    !!student?.email &&
+    !!student?.enrollment &&
+    !!student?.department;
 
   // Pre-fill form when student data is available
   useEffect(() => {
@@ -86,13 +97,23 @@ export default function ClubDetail() {
       return;
     }
 
-    // Ensure form is properly filled
-    if (!joinForm.name || !joinForm.email || !joinForm.department || !joinForm.enrollmentNumber) {
+    if (studentAuthLoading) {
       toast({
-        title: "Form Incomplete",
-        description: "Please wait for your information to load and try again.",
+        title: "Please wait",
+        description: "Loading your student profile.",
         variant: "destructive",
       });
+      return;
+    }
+
+    if (!isStudentProfileComplete) {
+      toast({
+        title: "Profile incomplete",
+        description: "Please complete your student profile (including department) before joining a club.",
+        variant: "destructive",
+      });
+      setIsJoinModalOpen(false);
+      setLocation("/student");
       return;
     }
 
@@ -125,10 +146,10 @@ export default function ClubDetail() {
         id: `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         clubId: id,
         clubName: club?.name || "Unknown Club",
-        studentName: joinForm.name,
-        studentEmail: joinForm.email,
-        enrollmentNumber: joinForm.enrollmentNumber,
-        department: joinForm.department,
+        studentName: student.name,
+        studentEmail: student.email,
+        enrollmentNumber: student.enrollment,
+        department: student.department,
         reason: joinForm.reason.trim(),
         status: 'pending',
         createdAt: new Date().toISOString(),
@@ -390,6 +411,14 @@ export default function ClubDetail() {
                   <DialogTitle>Join {club.name}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleJoinSubmit} className="space-y-4">
+                  <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    Name, email, department, and enrollment number are auto-filled from your logged-in student profile and cannot be edited here.
+                  </p>
+                  {!isStudentProfileComplete && (
+                    <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      Submit is disabled because your profile is missing: {missingProfileFields.join(", ")}. Please complete your student profile first.
+                    </div>
+                  )}
                   <div>
                     <Label htmlFor="name">Full Name</Label>
                     <Input
@@ -443,9 +472,22 @@ export default function ClubDetail() {
                       required
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={isSubmitting || hasAlreadyJoinedClub}>
-                    {isSubmitting ? "Submitting..." : hasAlreadyJoinedClub ? "Already a member or request pending" : "Submit Join Request"}
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={isSubmitting || hasAlreadyJoinedClub || !isStudentProfileComplete}
+                  >
+                    {isSubmitting
+                      ? "Submitting..."
+                      : hasAlreadyJoinedClub
+                        ? "Already a member or request pending"
+                        : !isStudentProfileComplete
+                          ? "Complete Profile To Submit"
+                          : "Submit Join Request"}
                   </Button>
+                  {!isStudentProfileComplete && (
+                    <Button type="button" variant="outline" className="w-full" onClick={() => setLocation("/student")}>Go To Student Profile</Button>
+                  )}
                 </form>
               </DialogContent>
             </Dialog>

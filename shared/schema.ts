@@ -26,6 +26,7 @@ export interface Club {
   memberCount: number;
   logoUrl?: string;
   coverImageUrl?: string;
+  isHighlighted?: boolean;
   isFrozen?: boolean;
   frozenAt?: Date;
   frozenBy?: string;
@@ -117,4 +118,57 @@ export interface Message {
   message: string;
   sentAt: Date;
   read: boolean;
+}
+
+export interface ChatGroup {
+  id: string;
+  name: string;
+  type: "club" | "event";
+  clubId?: string;
+  eventId?: string;
+  adminOnlyMessaging?: boolean;
+  blockedMembersCount?: number;
+  icon: string;
+  membersCount: number;
+  unreadCount: number;
+  isNew: boolean;
+  lastMessagePreview: string;
+  lastMessageAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  chatGroupId: string;
+  senderType: "student" | "admin";
+  senderId: string;
+  senderName: string;
+  content: string;
+  type: "text" | "image" | "document";
+  attachmentUrl?: string;
+  attachmentName?: string;
+  replyToMessageId?: string;
+  replyToSenderName?: string;
+  replyToContentPreview?: string;
+  isPinned?: boolean;
+  pinnedAt?: string;
+  pinnedByUserKey?: string;
+  isSystem?: boolean;
+  systemAction?: string;
+  clientRequestId?: string;
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedByUserKey?: string;
+  createdAt: string;
+}
+
+export interface ClubStory {
+  id: string;
+  clubId: string;
+  clubName: string;
+  clubLogo?: string;
+  mediaUrl: string;
+  caption?: string;
+  isHighlight?: boolean;
+  expiresAt?: string | Date;
+  createdAt?: string | Date;
 }

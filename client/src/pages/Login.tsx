@@ -34,6 +34,7 @@ export default function Login() {
       // Try API first, fallback to static authentication
       let loginSuccess = false;
       let loginData = null;
+      let usedOfflineFallback = false;
 
       try {
         const response = await apiRequest("POST", "/api/auth/login", { username, password });
@@ -47,6 +48,7 @@ export default function Login() {
       } catch (apiError: any) {
         // Fallback to static authentication
         if (username === "admin" && password === "admin123") {
+          usedOfflineFallback = true;
           loginSuccess = true;
           loginData = { 
             success: true, 
@@ -66,6 +68,19 @@ export default function Login() {
         localStorage.setItem("currentAdmin", username);
         // Set the admin data directly in the query cache
         queryClient.setQueryData(["/api/auth/me"], loginData.admin);
+
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/me"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/groups"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/chat/unread-count"] });
+
+        if (usedOfflineFallback) {
+          toast({
+            title: "Offline login mode",
+            description: "Chat requires server-authenticated login. Please use online login for chat access.",
+            variant: "destructive",
+          });
+        }
+
         toast({
           title: "Login successful",
           description: "Welcome back!",

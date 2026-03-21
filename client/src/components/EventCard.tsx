@@ -4,12 +4,28 @@ import { Button } from "@/components/ui/button";
 import { Calendar, Clock, MapPin } from "lucide-react";
 import { Link } from "wouter";
 
+function formatDuration(minutes?: number): string {
+  const safeMinutes = Number(minutes);
+  const totalMinutes = Number.isFinite(safeMinutes) && safeMinutes > 0 ? safeMinutes : 120;
+  const hours = Math.floor(totalMinutes / 60);
+  const remainingMinutes = totalMinutes % 60;
+
+  if (hours > 0 && remainingMinutes > 0) {
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h`;
+  }
+  return `${totalMinutes}m`;
+}
+
 interface EventCardProps {
   id: string;
   title: string;
   description: string;
   date: string;
   time: string;
+  durationMinutes?: number;
   location: string;
   clubName: string;
   category: string;
@@ -21,6 +37,7 @@ export default function EventCard({
   description,
   date,
   time,
+  durationMinutes,
   location,
   clubName,
   category,
@@ -90,7 +107,7 @@ export default function EventCard({
             group-hover:text-primary transition-colors duration-300
           `}>
             <Clock className="w-4 h-4 group-hover:scale-110 transition-transform duration-300" />
-            <span data-testid={`text-time-${id}`}>{time}</span>
+            <span data-testid={`text-time-${id}`}>{time} ({formatDuration(durationMinutes)})</span>
           </div>
           <div className={`
             flex items-center gap-2 text-sm text-muted-foreground 

@@ -16,6 +16,21 @@ import { useToast } from "@/hooks/use-toast";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import type { Event } from "@shared/schema";
 
+function formatDuration(minutes?: number): string {
+  const safeMinutes = Number(minutes);
+  const totalMinutes = Number.isFinite(safeMinutes) && safeMinutes > 0 ? safeMinutes : 120;
+  const hours = Math.floor(totalMinutes / 60);
+  const remainingMinutes = totalMinutes % 60;
+
+  if (hours > 0 && remainingMinutes > 0) {
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h`;
+  }
+  return `${totalMinutes}m`;
+}
+
 export default function EventDetail() {
   const params = useParams<{ id: string }>();
   const eventId = params?.id;
@@ -205,7 +220,7 @@ export default function EventDetail() {
 
             <h1 className="text-4xl md:text-5xl font-bold mb-4">{event.title}</h1>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 p-6 bg-muted/50 rounded-lg border border-border">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 p-6 bg-muted/50 rounded-lg border border-border">
               <div className="flex items-start gap-3">
                 <Calendar className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
                 <div>
@@ -218,6 +233,13 @@ export default function EventDetail() {
                 <div>
                   <p className="text-sm text-muted-foreground">Time</p>
                   <p className="text-lg font-semibold">{event.time}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Clock className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Duration</p>
+                  <p className="text-lg font-semibold">{formatDuration(event.durationMinutes)}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">

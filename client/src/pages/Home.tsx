@@ -7,35 +7,134 @@ import ClubCard from "@/components/ClubCard";
 import StatsSection from "@/components/StatsSection";
 import { SwipeActivityCard } from "@/components/SwipeActivityCard";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Calendar, Users, Flame } from "lucide-react";
+import { ArrowRight, Calendar, Users, Flame, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import type { Event, Club } from "@shared/schema";
+import type { Event, Club, ClubStory } from "@shared/schema";
 import eventPlaceholder from "@assets/stock_images/student_club_meeting_08b2a880.jpg";
+
+const demoEvents: Event[] = [
+  {
+    id: "demo-event-1",
+    title: "Web Development Bootcamp",
+    description: "Learn modern web development fundamentals and build real projects.",
+    date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+    time: "10:00 AM",
+    durationMinutes: 180,
+    location: "Main Auditorium",
+    category: "Technology",
+    clubId: "demo-club-1",
+    clubName: "Code Hunters",
+    imageUrl: eventPlaceholder,
+    createdAt: new Date(),
+  },
+  {
+    id: "demo-event-2",
+    title: "Cultural Evening",
+    description: "Performances, music, and campus culture celebration.",
+    date: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString(),
+    time: "5:00 PM",
+    durationMinutes: 120,
+    location: "Open Air Theater",
+    category: "Cultural",
+    clubId: "demo-club-2",
+    clubName: "Rangmanch",
+    imageUrl: eventPlaceholder,
+    createdAt: new Date(),
+  },
+];
+
+const demoClubs: Club[] = [
+  {
+    id: "demo-club-1",
+    name: "Code Hunters",
+    description: "Build projects, crack hackathons, and grow as developers.",
+    category: "Technical",
+    memberCount: 124,
+    logoUrl: "",
+    createdAt: new Date(),
+  },
+  {
+    id: "demo-club-2",
+    name: "Rangmanch",
+    description: "Theatre, expression, and stage performance culture.",
+    category: "Cultural",
+    memberCount: 96,
+    logoUrl: "",
+    createdAt: new Date(),
+  },
+  {
+    id: "demo-club-3",
+    name: "NSS GEHU",
+    description: "Community service and social impact initiatives.",
+    category: "Social",
+    memberCount: 142,
+    logoUrl: "",
+    createdAt: new Date(),
+  },
+];
 
 export default function Home() {
   const [visibleEvents, setVisibleEvents] = useState(false);
   const [visibleClubs, setVisibleClubs] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [bookmarkedClubs, setBookmarkedClubs] = useState<Set<string>>(new Set());
+  const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
+  const [storyProgress, setStoryProgress] = useState(0);
+  const [seenStoryClubIds, setSeenStoryClubIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setTimeout(() => setVisibleEvents(true), 200);
     setTimeout(() => setVisibleClubs(true), 600);
   }, []);
 
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("home-story-seen-clubs");
+      if (!stored) return;
+      const ids = JSON.parse(stored);
+      if (Array.isArray(ids)) {
+        setSeenStoryClubIds(new Set(ids));
+      }
+    } catch {
+      // no-op
+    }
+  }, []);
+
   const { data: events = [], isLoading: eventsLoading } = useQuery<Event[]>({
     queryKey: ["/api/events"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/events");
-      return res.json();
+      try {
+        const res = await apiRequest("GET", "/api/events");
+        const data = await res.json();
+        return Array.isArray(data) && data.length > 0 ? data : demoEvents;
+      } catch {
+        return demoEvents;
+      }
     },
   });
 
   const { data: clubs = [], isLoading: clubsLoading } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/clubs");
-      return res.json();
+      try {
+        const res = await apiRequest("GET", "/api/clubs");
+        const data = await res.json();
+        return Array.isArray(data) && data.length > 0 ? data : demoClubs;
+      } catch {
+        return demoClubs;
+      }
+    },
+  });
+
+  const { data: storyHighlights = [] } = useQuery<ClubStory[]>({
+    queryKey: ["/api/stories/highlights"],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", "/api/stories/highlights");
+        return res.json();
+      } catch {
+        return [];
+      }
     },
   });
 
@@ -49,6 +148,95 @@ export default function Home() {
   
   const featuredClubs = clubs
     .filter((club) => !club.isFrozen); // Hide frozen clubs
+
+  const highlightedClubIds = storyHighlights.map((story) => story.clubId);
+  const storyClubs = highlightedClubIds
+    .map((clubId) => featuredClubs.find((club) => club.id === clubId))
+    .filter((club): club is Club => !!club);
+
+  const storyByClubId = new Map(storyHighlights.map((story) => [story.clubId, story]));
+  const storyItems = storyClubs.map((club) => ({
+    club,
+    story: storyByClubId.get(club.id),
+  }));
+
+  const activeStory = activeStoryIndex !== null ? storyItems[activeStoryIndex] : null;
+
+  const openStoryViewer = (index: number) => {
+    if (!storyItems[index]) return;
+    setActiveStoryIndex(index);
+    setStoryProgress(0);
+  };
+
+  const closeStoryViewer = () => {
+    setActiveStoryIndex(null);
+    setStoryProgress(0);
+  };
+
+  const nextStory = () => {
+    if (activeStoryIndex === null) return;
+    if (activeStoryIndex >= storyItems.length - 1) {
+      closeStoryViewer();
+      return;
+    }
+    setActiveStoryIndex(activeStoryIndex + 1);
+    setStoryProgress(0);
+  };
+
+  const prevStory = () => {
+    if (activeStoryIndex === null) return;
+    if (activeStoryIndex <= 0) return;
+    setActiveStoryIndex(activeStoryIndex - 1);
+    setStoryProgress(0);
+  };
+
+  useEffect(() => {
+    if (activeStoryIndex === null) return;
+    if (activeStoryIndex >= storyItems.length) {
+      closeStoryViewer();
+    }
+  }, [activeStoryIndex, storyItems.length]);
+
+  useEffect(() => {
+    if (activeStoryIndex === null) return;
+    const story = storyItems[activeStoryIndex];
+    if (!story) return;
+
+    setSeenStoryClubIds((prev) => {
+      const next = new Set(prev);
+      next.add(story.club.id);
+      localStorage.setItem("home-story-seen-clubs", JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, [activeStoryIndex, storyItems]);
+
+  useEffect(() => {
+    if (activeStoryIndex === null) return;
+
+    const timer = window.setInterval(() => {
+      setStoryProgress((prev) => {
+        const next = prev + 2.5;
+        if (next >= 100) {
+          window.clearInterval(timer);
+          nextStory();
+          return 100;
+        }
+        return next;
+      });
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [activeStoryIndex]);
+
+  useEffect(() => {
+    if (activeStoryIndex !== null) {
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = "";
+      };
+    }
+    document.body.style.overflow = "";
+  }, [activeStoryIndex]);
   
   const filteredClubs = featuredClubs
     .filter((club) => selectedCategory === 'All' || club.category === selectedCategory)
@@ -229,9 +417,9 @@ export default function Home() {
       {/* Your Campus Feed - Unified Section */}
       <section className="py-12 sm:py-16 md:py-20 bg-gradient-to-b from-background via-primary/5 to-background relative overflow-hidden">
         {/* Animated decorative background elements */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl opacity-20 animate-pulse-slow" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl opacity-20 animate-pulse-slow [animation-delay:1s]" />
-        <div className="absolute top-1/2 right-1/3 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl opacity-20 animate-float" />
+        <div className="pointer-events-none absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl opacity-20 animate-pulse-slow" />
+        <div className="pointer-events-none absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl opacity-20 animate-pulse-slow [animation-delay:1s]" />
+        <div className="pointer-events-none absolute top-1/2 right-1/3 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl opacity-20 animate-float" />
         
         <div className="max-w-7xl mx-auto px-4 md:px-8 relative z-10">
           {/* Enhanced Section Header with animated badge - Positioned Left */}
@@ -256,7 +444,7 @@ export default function Home() {
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1.5 sm:gap-2">
                 <span className="text-xl sm:text-2xl animate-sparkle">✨</span> Story Highlights
-                <span className="text-[10px] sm:text-xs font-normal text-muted-foreground">• {featuredClubs.length} clubs</span>
+                <span className="text-[10px] sm:text-xs font-normal text-muted-foreground">• {storyClubs.length} clubs</span>
               </h3>
               <Link href="/clubs">
                 <button className="text-[10px] sm:text-xs text-primary hover:text-primary/80 hover:underline flex items-center gap-0.5 sm:gap-1 transition-colors">
@@ -269,36 +457,130 @@ export default function Home() {
             </div>
             <div className="relative group">
               <div className="flex gap-3 sm:gap-4 md:gap-6 overflow-x-auto pb-3 sm:pb-4 scrollbar-hide scroll-smooth snap-x">
-                {featuredClubs.map((club, index) => (
-                  <Link href={`/clubs/${club.id}`} key={club.id} className="no-tooltip">
-                    <button
-                      className="flex-shrink-0 snap-start group/story outline-none"
-                      style={{ animationDelay: `${index * 100}ms` }}
-                      aria-label={`View ${club.name} club`}
+                {storyItems.map(({ club, story }, index) => (
+                  <button
+                    type="button"
+                    key={club.id}
+                    className="flex-shrink-0 snap-start group/story outline-none cursor-pointer select-none"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                    aria-label={`View ${club.name} story`}
+                    onClick={() => openStoryViewer(index)}
+                    onPointerUp={() => openStoryViewer(index)}
+                  >
+                    <div className="flex flex-col items-center gap-1.5 sm:gap-2 cursor-pointer animate-fade-in-up">
+                    <div
+                      className={`relative w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 rounded-full p-[2.5px] sm:p-[3px] transition-all duration-300 hover:scale-110 hover:shadow-lg hover:rotate-6 group-hover/story:animate-pulse-ring ${
+                        seenStoryClubIds.has(club.id)
+                          ? 'bg-gradient-to-br from-muted-foreground/40 to-muted-foreground/30'
+                          : 'bg-gradient-to-br from-primary via-primary/80 to-primary'
+                      }`}
                     >
-                      <div className="flex flex-col items-center gap-1.5 sm:gap-2 cursor-pointer animate-fade-in-up">
-                      <div className="relative w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-primary via-primary/80 to-primary p-[2.5px] sm:p-[3px] transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-primary/30 hover:rotate-6 group-hover/story:animate-pulse-ring">
-                        <div className="w-full h-full rounded-full bg-card flex items-center justify-center overflow-hidden border-2 border-background">
-                          {club.logoUrl ? (
-                            <img src={club.logoUrl} alt={club.name} className="w-full h-full object-cover group-hover/story:scale-110 transition-transform duration-300" />
-                          ) : (
-                            <span className="text-lg font-bold bg-gradient-to-br from-blue-400 to-purple-500 bg-clip-text text-transparent">{club.name.substring(0, 2).toUpperCase()}</span>
-                          )}
-                        </div>
+                      <div className="w-full h-full rounded-full bg-card flex items-center justify-center overflow-hidden border-2 border-background">
+                        {club.logoUrl ? (
+                          <img
+                            src={club.logoUrl}
+                            alt={club.name}
+                            className="w-full h-full object-cover group-hover/story:scale-110 transition-transform duration-300"
+                          />
+                        ) : (
+                          <span className="text-lg font-bold bg-gradient-to-br from-blue-400 to-purple-500 bg-clip-text text-transparent">{club.name.substring(0, 2).toUpperCase()}</span>
+                        )}
                       </div>
-                      <p className="text-[10px] sm:text-xs font-medium text-center max-w-[60px] sm:max-w-[70px] md:max-w-[80px] truncate group-hover/story:text-primary transition-colors">
-                        {club.name}
-                      </p>
-                      </div>
-                    </button>
-                  </Link>
+                    </div>
+                    <p className="text-[10px] sm:text-xs font-medium text-center max-w-[60px] sm:max-w-[70px] md:max-w-[80px] truncate group-hover/story:text-primary transition-colors">
+                      {club.name}
+                    </p>
+                    </div>
+                  </button>
                 ))}
               </div>
-              {/* Enhanced scroll gradient indicators */}
-              <div className="absolute right-0 top-0 bottom-4 w-20 bg-gradient-to-l from-background via-background/80 to-transparent pointer-events-none"></div>
-              <div className="absolute left-0 top-0 bottom-4 w-20 bg-gradient-to-r from-background via-background/80 to-transparent pointer-events-none"></div>
+              {storyItems.length === 0 && (
+                <p className="text-sm text-muted-foreground py-2">No story highlights yet. Club admins can upload stories from the Club Admin panel.</p>
+              )}
             </div>
           </div>
+
+          {activeStory && (
+            <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4">
+              <div className="relative w-full max-w-md h-[78vh] bg-black rounded-2xl overflow-hidden border border-white/10">
+                <div className="absolute top-0 left-0 right-0 z-20 p-3">
+                  <div className="flex gap-1 mb-3">
+                    {storyItems.map((_, idx) => (
+                      <div key={`story-progress-${idx}`} className="h-1 flex-1 rounded bg-white/25 overflow-hidden">
+                        <div
+                          className="h-full bg-white transition-all duration-100"
+                          style={{
+                            width:
+                              idx < (activeStoryIndex ?? 0)
+                                ? '100%'
+                                : idx === activeStoryIndex
+                                  ? `${storyProgress}%`
+                                  : '0%',
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between text-white">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img
+                        src={activeStory.club.logoUrl || activeStory.story?.mediaUrl || eventPlaceholder}
+                        alt={activeStory.club.name}
+                        className="w-8 h-8 rounded-full object-cover border border-white/40"
+                      />
+                      <span className="text-sm font-medium truncate">{activeStory.club.name}</span>
+                    </div>
+                    <button type="button" onClick={closeStoryViewer} className="p-1 rounded-full hover:bg-white/20" aria-label="Close story viewer">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <img
+                  src={activeStory.story?.mediaUrl || activeStory.club.logoUrl || eventPlaceholder}
+                  alt={activeStory.club.name}
+                  className="w-full h-full object-cover"
+                />
+
+                {activeStory.story?.caption && (
+                  <div className="absolute bottom-14 left-0 right-0 px-4">
+                    <p className="text-white text-sm bg-black/45 rounded-lg px-3 py-2 backdrop-blur-sm">
+                      {activeStory.story.caption}
+                    </p>
+                  </div>
+                )}
+
+                <div className="absolute inset-0 grid grid-cols-2">
+                  <button type="button" className="h-full" onClick={prevStory} aria-label="Previous story" />
+                  <button type="button" className="h-full" onClick={nextStory} aria-label="Next story" />
+                </div>
+
+                <button
+                  type="button"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 text-white hover:bg-black/60"
+                  onClick={prevStory}
+                  aria-label="Previous story"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/40 text-white hover:bg-black/60"
+                  onClick={nextStory}
+                  aria-label="Next story"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+
+                <div className="absolute bottom-3 left-0 right-0 flex justify-center">
+                  <Link href={`/clubs/${activeStory.club.id}`}>
+                    <Button size="sm" className="bg-white text-black hover:bg-white/90">Open Club</Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Activity Feed Swipe Cards with Header */}
           <div className="mb-10 sm:mb-12 md:mb-16 max-w-5xl ml-0 px-4 sm:px-0">

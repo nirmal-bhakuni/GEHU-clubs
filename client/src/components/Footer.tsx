@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Facebook, Twitter, Instagram, Linkedin, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Footer() {
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const { admin, isAuthenticated } = useAuth();
+  const dashboardPath = isAuthenticated && admin?.clubId ? "/club-admin" : "/dashboard";
 
   const handleNewsletterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +103,7 @@ export default function Footer() {
 
               <li>
                 <Link
-                  href="/dashboard"
+                  href={dashboardPath}
                   className={`
                     text-sm text-muted-foreground hover:text-primary 
                     transition-all duration-300 rounded px-2 py-1 -ml-2

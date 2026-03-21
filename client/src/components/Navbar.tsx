@@ -4,6 +4,7 @@ import { Menu, Moon, Sun, X } from "lucide-react";
 import { useState } from "react";
 import { useTheme } from "./ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { useStudentAuth } from "@/hooks/useStudentAuth";
 
 interface NavbarProps {
   onToggleSidebar: () => void;
@@ -15,14 +16,20 @@ export default function Navbar({ onToggleSidebar, sidebarOpen = false }: NavbarP
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { admin, isAuthenticated } = useAuth();
+  const { isAuthenticated: isStudentAuthenticated } = useStudentAuth();
   const isHomePage = location === "/";
+  const dashboardPath = isStudentAuthenticated
+    ? "/student/dashboard"
+    : isAuthenticated && admin?.clubId
+      ? "/club-admin"
+      : "/dashboard";
 
   const navItems = [
     { path: "/", label: "Home" },
     { path: "/clubs", label: "Clubs" },
     { path: "/events", label: "Events" },
     {
-      path: "/dashboard",
+      path: dashboardPath,
       label: "Dashboard"
     },
   ];
