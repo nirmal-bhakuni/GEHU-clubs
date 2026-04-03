@@ -121,13 +121,13 @@ export default function ClubCard({
           <div className={`absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
 
           {/* Favorite and Share buttons */}
-          <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10">
+          <div className="absolute top-3 right-3 flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 z-10">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 bg-white/80 backdrop-blur-sm hover:bg-white"
+                  className="h-10 w-10 md:h-8 md:w-8 p-0 bg-white/85 backdrop-blur-sm hover:bg-white"
                   onClick={handleFavorite}
                 >
                   <Heart className={`h-4 w-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
@@ -143,7 +143,7 @@ export default function ClubCard({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 bg-white/80 backdrop-blur-sm hover:bg-white"
+                  className="h-10 w-10 md:h-8 md:w-8 p-0 bg-white/85 backdrop-blur-sm hover:bg-white"
                   onClick={handleShare}
                 >
                   <Share2 className="h-4 w-4 text-gray-600" />

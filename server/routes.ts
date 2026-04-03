@@ -42,8 +42,16 @@ const storage_multer = multer.diskStorage({
 
 const upload = multer({
   storage: storage_multer,
-  limits: { fileSize: 5 * 1024 * 1024 }
+  limits: { fileSize: 25 * 1024 * 1024 }
 });
+
+const STORY_EXPIRY_HOURS = 24;
+
+async function purgeExpiredStories() {
+  await ClubStory.deleteMany({
+    expiresAt: { $lte: new Date() },
+  });
+}
 
 const fallbackClubs = [
   {
@@ -170,7 +178,7 @@ async function resolveChatActor(req: Request): Promise<ChatActor | null> {
       userType: "admin",
       userId: admin.id,
       userKey: `admin:${admin.id}`,
-      displayName: admin.fullName || admin.username,
+      displayName: String(admin.fullName || admin.username || "Admin"),
       role: isUniversityAdmin ? "university_admin" : "club_admin",
       clubId: admin.clubId || undefined,
     };
@@ -325,6 +333,24 @@ function normalizeLocation(location: string) {
   return location.trim().toLowerCase();
 }
 
+function parsePositiveInt(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
+}
+
+function parsePagination(query: Request["query"], defaults = { page: 1, limit: 50, maxLimit: 200 }) {
+  const page = parsePositiveInt(query.page, defaults.page);
+  const limit = Math.min(parsePositiveInt(query.limit, defaults.limit), defaults.maxLimit);
+  const skip = (page - 1) * limit;
+  const requested = query.page !== undefined || query.limit !== undefined;
+  return { page, limit, skip, requested };
+}
+
+function escapeRegexInput(input: string) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function findVenueConflict(params: {
   date: string;
   time: string;
@@ -437,7 +463,12 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   app.get("/api/stories/highlights", async (_req: Request, res: Response) => {
     try {
-      const stories = await ClubStory.find({ isHighlight: true }).sort({ createdAt: -1 });
+      await purgeExpiredStories();
+
+      const stories = await ClubStory.find({
+        isHighlight: true,
+        $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: new Date() } }],
+      }).sort({ createdAt: -1 });
       const clubs = await Club.find({ isFrozen: { $ne: true } }).select("id name logoUrl");
       const clubMap = new Map(clubs.map((club: any) => [club.id, club]));
 
@@ -457,6 +488,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
             clubName: story.clubName,
             clubLogo: club?.logoUrl || "",
             mediaUrl: story.mediaUrl,
+            mediaType: story.mediaType || (story.mediaUrl ? "image" : "text"),
             caption: story.caption || "",
             isHighlight: !!story.isHighlight,
             createdAt: story.createdAt,
@@ -476,7 +508,12 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(403).json({ error: "Only club admins can manage stories" });
       }
 
-      const stories = await ClubStory.find({ clubId: admin.clubId }).sort({ createdAt: -1 });
+      await purgeExpiredStories();
+
+      const stories = await ClubStory.find({
+        clubId: admin.clubId,
+        $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: new Date() } }],
+      }).sort({ createdAt: -1 });
       res.json(stories);
     } catch {
       res.status(500).json({ error: "Failed to fetch stories" });
@@ -496,15 +533,20 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       }
 
       const mediaUrl = String(req.body?.mediaUrl || "").trim();
+      const mediaType = String(req.body?.mediaType || (mediaUrl ? "image" : "text")).trim();
       const caption = String(req.body?.caption || "").trim();
       const isHighlight = !!req.body?.isHighlight;
-      const expiresInHoursRaw = Number(req.body?.expiresInHours ?? 24);
-      const expiresInHours = Number.isFinite(expiresInHoursRaw)
-        ? Math.min(Math.max(expiresInHoursRaw, 1), 168)
-        : 24;
 
-      if (!mediaUrl) {
-        return res.status(400).json({ error: "mediaUrl is required" });
+      if (!mediaUrl && !caption) {
+        return res.status(400).json({ error: "Story text or media is required" });
+      }
+
+      if (!["image", "video", "text"].includes(mediaType)) {
+        return res.status(400).json({ error: "Invalid media type" });
+      }
+
+      if (mediaType !== "text" && !mediaUrl) {
+        return res.status(400).json({ error: "mediaUrl is required for image or video stories" });
       }
 
       const story = await ClubStory.create({
@@ -512,9 +554,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         clubId: admin.clubId,
         clubName: club.name,
         mediaUrl,
+        mediaType,
         caption,
         isHighlight,
-        expiresAt: new Date(Date.now() + expiresInHours * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + STORY_EXPIRY_HOURS * 60 * 60 * 1000),
         createdByAdminId: admin.id,
         createdAt: new Date(),
       });
@@ -531,6 +574,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       if (!admin?.clubId) {
         return res.status(403).json({ error: "Only club admins can update stories" });
       }
+
+      await purgeExpiredStories();
 
       const story = await ClubStory.findOne({ id: req.params.id, clubId: admin.clubId });
       if (!story) {
@@ -557,6 +602,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       if (!admin?.clubId) {
         return res.status(403).json({ error: "Only club admins can delete stories" });
       }
+
+      await purgeExpiredStories();
 
       const deleted = await ClubStory.findOneAndDelete({ id: req.params.id, clubId: admin.clubId });
       if (!deleted) {
@@ -738,9 +785,11 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       // Add actual member counts to clubs
       const clubsWithMemberCounts = clubs.map((club) => {
         const clubObj = club.toObject ? club.toObject() : club;
+        // Use actual membership count if available, otherwise use club's existing memberCount
+        const actualCount = memberCountMap.get(club.id);
         return {
           ...clubObj,
-          memberCount: memberCountMap.get(club.id) || 0
+          memberCount: actualCount !== undefined ? actualCount : (clubObj.memberCount || 0)
         };
       });
 
@@ -2899,7 +2948,41 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(403).json({ error: "Not authorized" });
       }
 
-      const studentPoints = await StudentPoints.find({ clubId }).sort({ points: -1 });
+      const { page, limit, skip, requested } = parsePagination(req.query, {
+        page: 1,
+        limit: 50,
+        maxLimit: 200,
+      });
+
+      const search = String(req.query.search || "").trim();
+      const query: any = { clubId };
+      if (search) {
+        const escaped = escapeRegexInput(search.slice(0, 80));
+        query.$or = [
+          { studentName: { $regex: escaped, $options: "i" } },
+          { studentEmail: { $regex: escaped, $options: "i" } },
+          { enrollmentNumber: { $regex: escaped, $options: "i" } },
+        ];
+      }
+
+      const total = await StudentPoints.countDocuments(query);
+      const studentPoints = await StudentPoints.find(query)
+        .sort({ points: -1, lastUpdated: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      if (requested) {
+        return res.json({
+          items: studentPoints,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
+          },
+        });
+      }
+
       res.json(studentPoints);
     } catch (error) {
       console.error("Failed to fetch student points:", error);
@@ -3090,15 +3173,78 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(403).json({ error: "Not authorized" });
       }
 
+      const { page, limit, skip, requested } = parsePagination(req.query, {
+        page: 1,
+        limit: 100,
+        maxLimit: 500,
+      });
+
+      const status = String(req.query.status || "").trim();
+      const attendanceStatus = String(req.query.attendanceStatus || "").trim();
+      const eventId = String(req.query.eventId || "").trim();
+      const search = String(req.query.search || "").trim();
+
       // Get all events for this club
       const allEvents = await storage.getAllEvents();
       const clubEvents = allEvents.filter(e => e.clubId === clubId);
       const clubEventIds = clubEvents.map(e => e.id);
 
+      if (clubEventIds.length === 0) {
+        if (requested) {
+          return res.json({
+            items: [],
+            pagination: { total: 0, page, limit, totalPages: 0 },
+          });
+        }
+        return res.json([]);
+      }
+
+      const scopedEventIds = eventId ? clubEventIds.filter((id) => id === eventId) : clubEventIds;
+      if (eventId && scopedEventIds.length === 0) {
+        return res.status(403).json({ error: "Event does not belong to this club" });
+      }
+
+      const query: any = {
+        eventId: { $in: scopedEventIds },
+      };
+
+      if (["pending", "approved", "rejected"].includes(status)) {
+        query.status = status;
+      }
+
+      if (["pending", "present", "absent"].includes(attendanceStatus)) {
+        query.attendanceStatus = attendanceStatus;
+      }
+
+      if (search) {
+        const escaped = escapeRegexInput(search.slice(0, 80));
+        query.$or = [
+          { studentName: { $regex: escaped, $options: "i" } },
+          { studentEmail: { $regex: escaped, $options: "i" } },
+          { enrollmentNumber: { $regex: escaped, $options: "i" } },
+          { rollNumber: { $regex: escaped, $options: "i" } },
+        ];
+      }
+
+      const total = await EventRegistration.countDocuments(query);
+
       // Get all registrations for these events
-      const registrations = await EventRegistration.find({ 
-        eventId: { $in: clubEventIds } 
-      }).sort({ registeredAt: -1 });
+      const registrations = await EventRegistration.find(query)
+        .sort({ registeredAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      if (requested) {
+        return res.json({
+          items: registrations,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
+          },
+        });
+      }
 
       res.json(registrations);
     } catch (error) {
@@ -3133,6 +3279,151 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Failed to update attendance:", error);
       res.status(500).json({ error: "Failed to update attendance" });
+    }
+  });
+
+  app.post("/api/admin/event-registrations/batch-attendance", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const updates = Array.isArray(req.body?.updates) ? req.body.updates : [];
+      if (updates.length === 0) {
+        return res.status(400).json({ error: "updates array is required" });
+      }
+
+      if (updates.length > 500) {
+        return res.status(400).json({ error: "Batch limit exceeded (max 500 updates)" });
+      }
+
+      const admin = await storage.getAdmin(req.session.adminId!);
+      if (!admin) {
+        return res.status(401).json({ error: "Admin not found" });
+      }
+
+      const registrationIds = updates
+        .map((item: any) => String(item?.registrationId || "").trim())
+        .filter(Boolean);
+
+      if (registrationIds.length === 0) {
+        return res.status(400).json({ error: "No valid registrationIds provided" });
+      }
+
+      const updateMap = new Map<string, { attended: boolean }>();
+      for (const item of updates) {
+        const registrationId = String(item?.registrationId || "").trim();
+        if (!registrationId) continue;
+        updateMap.set(registrationId, { attended: !!item?.attended });
+      }
+
+      const registrations = await EventRegistration.find({ id: { $in: Array.from(updateMap.keys()) } });
+      if (registrations.length === 0) {
+        return res.status(404).json({ error: "No matching registrations found" });
+      }
+
+      const eventIds = [...new Set(registrations.map((registration: any) => registration.eventId))];
+      const events = await Event.find({ id: { $in: eventIds } }).select("id clubId");
+      const eventClubMap = new Map(events.map((event: any) => [event.id, event.clubId]));
+
+      // University admins can update any club; club admins are scoped to their own club.
+      if (admin.clubId) {
+        const unauthorized = registrations.find((registration: any) => {
+          const clubId = eventClubMap.get(registration.eventId);
+          return clubId !== admin.clubId;
+        });
+
+        if (unauthorized) {
+          return res.status(403).json({ error: "Not authorized to update one or more registrations" });
+        }
+      }
+
+      const now = new Date();
+      const bulkOps: any[] = [];
+      const pointAwards: Array<{
+        clubId: string;
+        studentId: string;
+        studentName: string;
+        studentEmail: string;
+        enrollmentNumber: string;
+      }> = [];
+
+      for (const registration of registrations as any[]) {
+        const target = updateMap.get(registration.id);
+        if (!target) continue;
+
+        const attended = !!target.attended;
+        const attendanceStatus = attended ? "present" : "absent";
+        const eventClubId = eventClubMap.get(registration.eventId);
+
+        if (!eventClubId) continue;
+
+        if (registration.attended !== attended || registration.attendanceStatus !== attendanceStatus) {
+          bulkOps.push({
+            updateOne: {
+              filter: { id: registration.id },
+              update: {
+                $set: {
+                  attended,
+                  attendanceStatus,
+                  attendanceMarkedAt: now,
+                  attendanceMarkedBy: req.session.adminId,
+                },
+              },
+            },
+          });
+        }
+
+        // Award points only when transitioning into present for the first time in this change set.
+        if (attended && !registration.attended) {
+          pointAwards.push({
+            clubId: eventClubId,
+            studentId: registration.studentEmail,
+            studentName: registration.studentName,
+            studentEmail: registration.studentEmail,
+            enrollmentNumber: registration.enrollmentNumber,
+          });
+        }
+      }
+
+      if (bulkOps.length > 0) {
+        await EventRegistration.bulkWrite(bulkOps, { ordered: false });
+      }
+
+      let pointsAwardedCount = 0;
+      for (const award of pointAwards) {
+        const studentPoints = await StudentPoints.findOneAndUpdate(
+          { clubId: award.clubId, studentId: award.studentId },
+          {
+            $inc: { points: 10 },
+            $set: {
+              studentName: award.studentName,
+              studentEmail: award.studentEmail,
+              enrollmentNumber: award.enrollmentNumber,
+              lastUpdated: now,
+            },
+          },
+          { upsert: true, new: true },
+        );
+
+        const badges: string[] = [];
+        if (studentPoints.points >= 50) badges.push("Regular Attendee");
+        if (studentPoints.points >= 100) badges.push("Active Member");
+        if (studentPoints.points >= 200) badges.push("Club Champion");
+
+        if (badges.length > 0) {
+          studentPoints.badges = [...new Set([...(studentPoints.badges || []), ...badges])];
+          await studentPoints.save();
+        }
+
+        pointsAwardedCount += 1;
+      }
+
+      res.json({
+        success: true,
+        requestedCount: updates.length,
+        updatedCount: bulkOps.length,
+        pointsAwardedCount,
+      });
+    } catch (error) {
+      console.error("Failed to batch update attendance:", error);
+      res.status(500).json({ error: "Failed to batch update attendance" });
     }
   });
 
@@ -3216,15 +3507,33 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         ClubMembership.find({ status: 'approved' }).select('joinedAt clubId')
       ]);
 
+      // Create a map of clubId -> member count
+      const memberCountMap = new Map<string, number>();
+      memberships.forEach(membership => {
+        const current = memberCountMap.get(membership.clubId) || 0;
+        memberCountMap.set(membership.clubId, current + 1);
+      });
+
+      // Add actual member counts to clubs
+      const clubsWithMemberCounts = clubs.map((club) => {
+        const clubObj = club.toObject ? club.toObject() : club;
+        // Use actual membership count if available, otherwise use club's existing memberCount
+        const actualCount = memberCountMap.get(club.id);
+        return {
+          ...clubObj,
+          memberCount: actualCount !== undefined ? actualCount : (clubObj.memberCount || 0)
+        };
+      });
+
       const totalStudents = students.length;
       const activeStudents = students.filter(s => !s.isDisabled).length;
-      const totalClubs = clubs.length;
-      const activeClubs = clubs.filter(c => (c.memberCount || 0) > 0).length;
+      const totalClubs = clubsWithMemberCounts.length;
+      const activeClubs = clubsWithMemberCounts.filter(c => (c.memberCount || 0) > 0).length;
       const totalEvents = events.length;
       const upcomingEvents = events.filter(e => new Date(e.date || new Date()) > new Date()).length;
 
       // Club categories distribution
-      const clubCategories = clubs.reduce((acc: Record<string, number>, club) => {
+      const clubCategories = clubsWithMemberCounts.reduce((acc: Record<string, number>, club) => {
         const category = club.category?.toLowerCase() || 'uncategorized';
         acc[category] = (acc[category] || 0) + 1;
         return acc;
@@ -3238,7 +3547,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       }, {});
 
       // Top performing clubs
-      const topClubs = clubs
+      const topClubs = clubsWithMemberCounts
         .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0))
         .slice(0, 5)
         .map(club => ({
@@ -3470,8 +3779,13 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   // Global Points Leaderboard for Club Admins
   app.get("/api/admin/global-points-leaderboard", requireAuth, async (req: Request, res: Response) => {
     try {
-      // Get all students' total points and badges
-      const allStudentPoints = await StudentPoints.aggregate([
+      const { page, limit, skip, requested } = parsePagination(req.query, {
+        page: 1,
+        limit: 20,
+        maxLimit: 100,
+      });
+
+      const pipeline: any[] = [
         {
           $group: {
             _id: "$studentEmail",
@@ -3514,10 +3828,34 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         {
           $sort: { totalPoints: -1 }
         },
-        {
-          $limit: 20
-        }
-      ]);
+      ];
+
+      if (requested) {
+        pipeline.push({ $skip: skip });
+        pipeline.push({ $limit: limit });
+      } else {
+        pipeline.push({ $limit: 20 });
+      }
+
+      // Get all students' total points and badges
+      const allStudentPoints = await StudentPoints.aggregate(pipeline);
+
+      if (requested) {
+        const groupedTotals = await StudentPoints.aggregate([
+          { $group: { _id: "$studentEmail" } },
+          { $count: "total" },
+        ]);
+        const total = groupedTotals[0]?.total || 0;
+        return res.json({
+          items: allStudentPoints,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
+          },
+        });
+      }
 
       res.json(allStudentPoints);
     } catch (error) {
@@ -3574,7 +3912,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   app.get("*", (_req: Request, res: Response) => {
     if (process.env.NODE_ENV === "production") {
       const indexPath = path.join(process.cwd(), "..", "dist", "index.html");
-      res.sendFile(indexPath, (err) => {
+      res.sendFile(indexPath, (err: NodeJS.ErrnoException | undefined) => {
         if (err) {
           console.error("Error sending index.html:", err);
           res.status(404).json({ error: "Not found" });

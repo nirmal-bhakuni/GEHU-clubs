@@ -43,5 +43,7 @@ const studentPointsSchema = new mongoose.Schema({
 
 // Compound index to ensure one record per student per club
 studentPointsSchema.index({ clubId: 1, studentId: 1 }, { unique: true });
+studentPointsSchema.index({ clubId: 1, points: -1 });
+studentPointsSchema.index({ studentEmail: 1 });
 
 export default mongoose.model("StudentPoints", studentPointsSchema);

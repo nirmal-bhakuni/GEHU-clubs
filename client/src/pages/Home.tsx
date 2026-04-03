@@ -414,40 +414,36 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Your Campus Feed - Unified Section */}
-      <section className="py-12 sm:py-16 md:py-20 bg-gradient-to-b from-background via-primary/5 to-background relative overflow-hidden">
-        {/* Animated decorative background elements */}
-        <div className="pointer-events-none absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl opacity-20 animate-pulse-slow" />
-        <div className="pointer-events-none absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl opacity-20 animate-pulse-slow [animation-delay:1s]" />
-        <div className="pointer-events-none absolute top-1/2 right-1/3 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl opacity-20 animate-float" />
+      {/* Your Campus Feed - Instagram style */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-background via-card/20 to-background py-12 sm:py-16 md:py-20">
+        <div className="pointer-events-none absolute -left-20 top-16 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
+        <div className="pointer-events-none absolute -right-20 bottom-20 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
         
         <div className="max-w-7xl mx-auto px-4 md:px-8 relative z-10">
-          {/* Enhanced Section Header with animated badge - Positioned Left */}
           <div className="mb-8 sm:mb-10 md:mb-12 animate-fade-in-up">
-            <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-primary/20 via-primary/15 to-primary/20 backdrop-blur-sm border border-primary/30 mb-3 sm:mb-4 animate-shimmer-border">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 backdrop-blur-sm sm:mb-4 sm:px-4 sm:py-2">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
               </span>
-              <span className="text-xs font-semibold uppercase tracking-wider">Live Updates</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-foreground">Campus Live</span>
             </div>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-3 text-white">
+            <h2 className="mb-2 text-2xl font-bold text-foreground sm:mb-3 sm:text-3xl md:text-4xl">
               Your Campus Feed
             </h2>
-            <p className="text-muted-foreground text-sm sm:text-base md:text-lg max-w-2xl px-0">
-              Stay updated with the latest announcements, events, and activities from all clubs on campus
+            <p className="max-w-2xl px-0 text-sm text-muted-foreground sm:text-base md:text-lg">
+              Stories, posts, and event drops from clubs in one social stream.
             </p>
           </div>
 
-          {/* Story Highlights Section with Enhanced Animations */}
-          <div className="story-section mb-8 sm:mb-10 md:mb-12 max-w-5xl ml-0 px-4 sm:px-0">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="text-base sm:text-lg font-semibold flex items-center gap-1.5 sm:gap-2">
-                <span className="text-xl sm:text-2xl animate-sparkle">✨</span> Story Highlights
-                <span className="text-[10px] sm:text-xs font-normal text-muted-foreground">• {storyClubs.length} clubs</span>
+          <div className="story-section mb-8 ml-0 max-w-5xl rounded-2xl border border-border bg-card/80 p-4 backdrop-blur-md sm:mb-10 md:mb-12 sm:p-5">
+            <div className="mb-3 flex items-center justify-between sm:mb-4">
+              <h3 className="flex items-center gap-2 text-base font-semibold text-foreground sm:text-lg">
+                <span className="text-xl sm:text-2xl">✨</span> Stories
+                <span className="text-[10px] font-normal text-muted-foreground sm:text-xs">• {storyClubs.length} clubs</span>
               </h3>
               <Link href="/clubs">
-                <button className="text-[10px] sm:text-xs text-primary hover:text-primary/80 hover:underline flex items-center gap-0.5 sm:gap-1 transition-colors">
+                <button className="flex items-center gap-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground sm:gap-1 sm:text-xs">
                   See All
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -456,7 +452,7 @@ export default function Home() {
               </Link>
             </div>
             <div className="relative group">
-              <div className="flex gap-3 sm:gap-4 md:gap-6 overflow-x-auto pb-3 sm:pb-4 scrollbar-hide scroll-smooth snap-x">
+              <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto pb-3 sm:gap-4 sm:pb-4 md:gap-5">
                 {storyItems.map(({ club, story }, index) => (
                   <button
                     type="button"
@@ -467,27 +463,27 @@ export default function Home() {
                     onClick={() => openStoryViewer(index)}
                     onPointerUp={() => openStoryViewer(index)}
                   >
-                    <div className="flex flex-col items-center gap-1.5 sm:gap-2 cursor-pointer animate-fade-in-up">
+                    <div className="flex cursor-pointer flex-col items-center gap-1.5 animate-fade-in-up sm:gap-2">
                     <div
-                      className={`relative w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 rounded-full p-[2.5px] sm:p-[3px] transition-all duration-300 hover:scale-110 hover:shadow-lg hover:rotate-6 group-hover/story:animate-pulse-ring ${
+                      className={`relative h-16 w-16 rounded-full p-[2.5px] transition-all duration-300 hover:scale-110 sm:h-18 sm:w-18 sm:p-[3px] md:h-20 md:w-20 ${
                         seenStoryClubIds.has(club.id)
-                          ? 'bg-gradient-to-br from-muted-foreground/40 to-muted-foreground/30'
+                          ? 'bg-gradient-to-br from-muted to-muted/70'
                           : 'bg-gradient-to-br from-primary via-primary/80 to-primary'
                       }`}
                     >
-                      <div className="w-full h-full rounded-full bg-card flex items-center justify-center overflow-hidden border-2 border-background">
+                      <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-full border-2 border-background bg-card">
                         {club.logoUrl ? (
                           <img
                             src={club.logoUrl}
                             alt={club.name}
-                            className="w-full h-full object-cover group-hover/story:scale-110 transition-transform duration-300"
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover/story:scale-110"
                           />
                         ) : (
-                          <span className="text-lg font-bold bg-gradient-to-br from-blue-400 to-purple-500 bg-clip-text text-transparent">{club.name.substring(0, 2).toUpperCase()}</span>
+                          <span className="bg-gradient-to-br from-primary to-primary/70 bg-clip-text text-lg font-bold text-transparent">{club.name.substring(0, 2).toUpperCase()}</span>
                         )}
                       </div>
                     </div>
-                    <p className="text-[10px] sm:text-xs font-medium text-center max-w-[60px] sm:max-w-[70px] md:max-w-[80px] truncate group-hover/story:text-primary transition-colors">
+                    <p className="max-w-[60px] truncate text-center text-[10px] font-medium text-muted-foreground transition-colors group-hover/story:text-foreground sm:max-w-[70px] sm:text-xs md:max-w-[80px]">
                       {club.name}
                     </p>
                     </div>
@@ -495,7 +491,7 @@ export default function Home() {
                 ))}
               </div>
               {storyItems.length === 0 && (
-                <p className="text-sm text-muted-foreground py-2">No story highlights yet. Club admins can upload stories from the Club Admin panel.</p>
+                <p className="py-2 text-sm text-muted-foreground">No active stories yet. Club admins can post image, video, or text stories that auto-expire after 24 hours.</p>
               )}
             </div>
           </div>
@@ -537,11 +533,29 @@ export default function Home() {
                   </div>
                 </div>
 
-                <img
-                  src={activeStory.story?.mediaUrl || activeStory.club.logoUrl || eventPlaceholder}
-                  alt={activeStory.club.name}
-                  className="w-full h-full object-cover"
-                />
+                {activeStory.story?.mediaType === "video" && activeStory.story?.mediaUrl ? (
+                  <video
+                    src={activeStory.story.mediaUrl}
+                    className="w-full h-full object-cover"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                  />
+                ) : activeStory.story?.mediaType === "text" || !activeStory.story?.mediaUrl ? (
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-950 via-neutral-900 to-slate-800 p-6 text-center">
+                    <div className="max-w-xs rounded-2xl border border-white/10 bg-white/10 p-6 text-white backdrop-blur-sm">
+                      <div className="mb-3 text-xs uppercase tracking-[0.25em] text-white/60">Club Story</div>
+                      <p className="whitespace-pre-wrap text-base leading-6">{activeStory.story?.caption || activeStory.club.name}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={activeStory.story?.mediaUrl || activeStory.club.logoUrl || eventPlaceholder}
+                    alt={activeStory.club.name}
+                    className="w-full h-full object-cover"
+                  />
+                )}
 
                 {activeStory.story?.caption && (
                   <div className="absolute bottom-14 left-0 right-0 px-4">
@@ -582,21 +596,20 @@ export default function Home() {
             </div>
           )}
 
-          {/* Activity Feed Swipe Cards with Header */}
-          <div className="mb-10 sm:mb-12 md:mb-16 max-w-5xl ml-0 px-4 sm:px-0">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-0 sm:mb-1">
+          <div className="mb-10 ml-0 max-w-5xl rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md sm:mb-12 md:mb-16 sm:p-6">
+            <div className="mb-3 flex flex-col items-start justify-between gap-3 sm:mb-4 sm:flex-row sm:items-center sm:gap-0">
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg shadow-primary/30">
-                  <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-primary-foreground" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary shadow-lg sm:h-10 sm:w-10">
+                  <Flame className="h-4 w-4 text-primary-foreground sm:h-5 sm:w-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg sm:text-xl font-bold">Activity Feed</h3>
-                  <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">Discover what's happening in your campus</p>
+                  <h3 className="text-lg font-bold text-foreground sm:text-xl">Posts</h3>
+                  <p className="hidden text-xs text-muted-foreground sm:block sm:text-sm">Instagram-style event posts from your campus clubs.</p>
                 </div>
               </div>
               <Link href="/events" className="w-full sm:w-auto">
-                <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 hover:bg-primary/10 w-full sm:w-auto text-xs sm:text-sm">
-                  Swipe to explore →
+                <Button variant="outline" size="sm" className="w-full text-xs sm:w-auto sm:text-sm">
+                  Explore all events
                 </Button>
               </Link>
             </div>
@@ -654,7 +667,7 @@ export default function Home() {
                   <div className="relative z-10 p-4 sm:p-5 md:p-6 flex flex-col h-full">
                     {/* Trending badge for first club */}
                     {index === 0 && (
-                      <div className="absolute top-3 right-3 sm:top-4 sm:right-4 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-gradient-to-r from-orange-500 to-red-500 text-white text-[10px] sm:text-xs font-bold flex items-center gap-0.5 sm:gap-1 shadow-lg animate-bounce-subtle">
+                      <div className="absolute top-3 right-3 sm:top-4 sm:right-4 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full bg-gradient-to-r from-sky-500 to-blue-600 text-white text-[10px] sm:text-xs font-bold flex items-center gap-0.5 sm:gap-1 shadow-lg animate-bounce-subtle">
                         <Flame className="w-3 h-3" />
                         Trending
                       </div>

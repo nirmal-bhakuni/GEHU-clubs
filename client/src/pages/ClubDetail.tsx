@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Calendar, Star, BookOpen, Award, Mail, Phone, Heart, Share2, ExternalLink, Trophy } from "lucide-react";
+import { Users, Calendar, Star, BookOpen, Award, Mail, Phone, Heart, Share2, ExternalLink, Trophy, Megaphone, Clock3 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Club, Event } from "@shared/schema";
 import type { ClubLeadership } from "@shared/schema";
@@ -251,6 +251,60 @@ export default function ClubDetail() {
     },
     enabled: !!id,
   });
+
+  const { data: announcements = [] } = useQuery<any[]>({
+    queryKey: ["/api/announcements", id],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/announcements?limit=50");
+      return res.json();
+    },
+    enabled: !!id,
+  });
+
+  const updatesTimeline = useMemo(() => {
+    const clubAnnouncements = announcements
+      .filter((announcement: any) => announcement?.target === "all" || announcement?.target === id)
+      .map((announcement: any) => ({
+        id: `announcement-${announcement.id || announcement._id}`,
+        type: "announcement" as const,
+        title: announcement.title,
+        description: announcement.content,
+        createdAt: announcement.createdAt || new Date(),
+        pinned: !!announcement.pinned,
+        targetUrl: announcement.target === id ? `/clubs/${id}` : "/events",
+        ctaLabel: "View Details",
+      }));
+
+    const eventUpdates = events.map((event) => ({
+      id: `event-${event.id}`,
+      type: "event" as const,
+      title: event.title,
+      description: event.description,
+      createdAt: event.createdAt || event.date || new Date(),
+      pinned: false,
+      targetUrl: `/events/${event.id}`,
+      ctaLabel: "Go To Event",
+    }));
+
+    return [...clubAnnouncements, ...eventUpdates].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }, [announcements, events, id]);
+
+  const formatTimelineTime = (value: string | Date) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Recently";
+
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.floor(diffMs / (60 * 1000));
+    if (diffMinutes < 1) return "Just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
 
   if (clubLoading) return <div className="p-8">Loading club...</div>;
   if (!club) return <div className="p-8">Club not found.</div>;
@@ -504,7 +558,7 @@ export default function ClubDetail() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="club-info">Club Info</TabsTrigger>
-          <TabsTrigger value="announcements">Announcements</TabsTrigger>
+          <TabsTrigger value="announcements">Updates</TabsTrigger>
           <TabsTrigger value="events">Events</TabsTrigger>
           <TabsTrigger value="leadership">Leadership</TabsTrigger>
         </TabsList>
@@ -586,9 +640,39 @@ export default function ClubDetail() {
 
         <TabsContent value="announcements" className="space-y-6">
           <Card className="p-6">
-            <h3 className="text-xl font-semibold mb-4">Latest Announcements</h3>
-            <p className="text-muted-foreground">Stay updated with the latest news and updates from {club.name}.</p>
-            <p className="text-sm text-muted-foreground mt-2">No announcements at the moment.</p>
+            <h3 className="text-xl font-semibold mb-4">Club Updates Timeline</h3>
+            <p className="text-muted-foreground mb-6">Announcements and event activity from {club.name} in one place.</p>
+
+            {updatesTimeline.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No updates yet. Check back soon for new activity.</p>
+            ) : (
+              <div className="space-y-4">
+                {updatesTimeline.slice(0, 10).map((item) => (
+                  <div key={item.id} className="rounded-lg border border-primary/15 p-4 hover:border-primary/35 transition-colors">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {item.type === "announcement" ? <Megaphone className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
+                        <span className="font-medium">{item.type === "announcement" ? "Announcement" : "Event update"}</span>
+                        {item.pinned && <Badge variant="secondary" className="text-[10px]">Pinned</Badge>}
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock3 className="w-3.5 h-3.5" />
+                        {formatTimelineTime(item.createdAt)}
+                      </span>
+                    </div>
+
+                    <h4 className="font-semibold text-base mb-1">{item.title}</h4>
+                    <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{item.description}</p>
+
+                    <Link href={item.targetUrl}>
+                      <Button size="sm" variant="outline" className="h-10">
+                        {item.ctaLabel}
+                      </Button>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         </TabsContent>
 

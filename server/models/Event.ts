@@ -20,4 +20,7 @@ const eventSchema = new mongoose.Schema({
   createdAt: Date
 });
 
+eventSchema.index({ clubId: 1, createdAt: -1 });
+eventSchema.index({ clubId: 1, date: 1 });
+
 export const Event = mongoose.model("Event", eventSchema);

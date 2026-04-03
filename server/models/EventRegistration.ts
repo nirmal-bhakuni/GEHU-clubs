@@ -24,4 +24,10 @@ const eventRegistrationSchema = new mongoose.Schema({
   registeredAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
+eventRegistrationSchema.index({ eventId: 1, registeredAt: -1 });
+eventRegistrationSchema.index({ eventId: 1, status: 1, registeredAt: -1 });
+eventRegistrationSchema.index({ eventId: 1, attendanceStatus: 1, registeredAt: -1 });
+eventRegistrationSchema.index({ enrollmentNumber: 1 });
+eventRegistrationSchema.index({ studentEmail: 1 });
+
 export const EventRegistration = mongoose.model("EventRegistration", eventRegistrationSchema);

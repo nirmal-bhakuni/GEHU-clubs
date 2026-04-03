@@ -1,7 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { AgGridReact } from "ag-grid-react";
+import type { ColDef, RowClickedEvent } from "ag-grid-community";
+import "ag-grid-community/styles/ag-grid.css";
+import "ag-grid-community/styles/ag-theme-quartz.css";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/components/ThemeProvider";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -78,11 +83,65 @@ interface Recommendation {
   clubId: string;
   clubName: string;
   clubLogo: string;
+}
+
+type ClubsGridRow = {
+  srNo: number;
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  memberCount: number;
+  eventCount: number;
+  status: "Active" | "Frozen";
+};
+
+type EventsGridRow = {
+  srNo: number;
+  id: string;
+  title: string;
+  category: string;
+  date: string;
+  time: string;
+  location: string;
+  clubName: string;
+  status: "Upcoming" | "Past";
+};
+
+type AnnouncementsGridRow = {
+  srNo: number;
+  id: string;
+  title: string;
+  target: string;
+  createdDate: string;
+  pinned: "Pinned" | "-";
   category: string;
   description: string;
   memberCount?: number;
   reason?: string;
   matchPercentage?: number;
+}
+
+type StudentsGridRow = {
+  srNo: number;
+  id: string;
+  name: string;
+  email: string;
+  enrollment: string;
+  phone: string;
+  department: string;
+  status: string;
+  lastLogin: string;
+}
+
+type ClubAdminsGridRow = {
+  srNo: number;
+  id: string;
+  clubName: string;
+  description: string;
+  memberCount: number;
+  eventCount: number;
+  createdAt: string;
 }
 
 // Static data for when API is not available
@@ -250,9 +309,12 @@ export default function Dashboard() {
   const [targetForAnnouncement, setTargetForAnnouncement] = useState<string>("all");
   const [studentSearch, setStudentSearch] = useState("");
   const [clubSearch, setClubSearch] = useState("");
-  const [eventSearch, setEventSearch] = useState("");
-  const [eventFilter, setEventFilter] = useState<'all' | 'upcoming' | 'past'>('all');
-  const [eventSort, setEventSort] = useState<'date-asc' | 'date-desc' | 'title-asc' | 'title-desc' | 'club'>('date-desc');
+  const [clubStatusFilter, setClubStatusFilter] = useState<"all" | "active" | "frozen">("all");
+  const [eventGridSearch, setEventGridSearch] = useState("");
+  const [eventGridStatusFilter, setEventGridStatusFilter] = useState<"all" | "upcoming" | "past">("all");
+  const [studentStatusFilter, setStudentStatusFilter] = useState<"all" | "active" | "disabled">("all");
+  const [clubAdminSearch, setClubAdminSearch] = useState("");
+  const [clubAdminStatusFilter, setClubAdminStatusFilter] = useState<"all" | "active" | "frozen">("all");
   const eligibilityYearOptions = ["1st", "2nd", "3rd", "4th", "5th"];
 
   const { data: events = [] } = useQuery<Event[]>({
@@ -342,6 +404,12 @@ export default function Dashboard() {
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState<any | null>(null);
+  const [selectedClubGridId, setSelectedClubGridId] = useState<string | null>(null);
+  const [selectedEventGridId, setSelectedEventGridId] = useState<string | null>(null);
+  const [selectedAnnouncementGridId, setSelectedAnnouncementGridId] = useState<string | null>(null);
+  const [selectedStudentGridId, setSelectedStudentGridId] = useState<string | null>(null);
+  const [selectedClubAdminGridId, setSelectedClubAdminGridId] = useState<string | null>(null);
+  const { theme } = useTheme();
 
   const deleteAnnouncementMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -865,14 +933,6 @@ export default function Dashboard() {
     },
   });
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground font-body">Loading...</p>
-      </div>
-    );
-  }
-
   const sidebarItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "clubs", label: "Clubs Management", icon: Building2 },
@@ -912,6 +972,210 @@ export default function Dashboard() {
       color: "text-orange-500",
     },
   ];
+
+  // Grid theme class
+  const gridThemeClass = theme === "dark" ? "ag-theme-quartz-dark" : "ag-theme-quartz";
+
+  // Clubs Grid - memoized data and columns
+  const clubsGridRows = useMemo<ClubsGridRow[]>(() => {
+    return clubs
+      .filter((club) => {
+        if (!clubSearch) return true;
+        const searchLower = clubSearch.toLowerCase();
+        return (
+          club.name.toLowerCase().includes(searchLower) ||
+          club.category?.toLowerCase().includes(searchLower) ||
+          club.facultyAssigned?.toLowerCase().includes(searchLower)
+        );
+      })
+      .filter((club) => {
+        if (clubStatusFilter === "all") return true;
+        if (clubStatusFilter === "active") return !club.isFrozen;
+        return !!club.isFrozen;
+      })
+      .map((club, index) => ({
+        srNo: index + 1,
+        id: club.id,
+        name: club.name,
+        category: club.category || "",
+        description: club.description || "",
+        memberCount: club.memberCount || 0,
+        eventCount: events.filter((e) => e.clubId === club.id).length,
+        status: club.isFrozen ? "Frozen" : "Active",
+      }));
+  }, [clubs, clubSearch, clubStatusFilter, events]);
+
+  const clubsGridColumns = useMemo<ColDef<ClubsGridRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "name", headerName: "Club Name", flex: 1.2, minWidth: 200 },
+    { field: "category", headerName: "Category", minWidth: 140 },
+    { field: "memberCount", headerName: "Members", minWidth: 120 },
+    { field: "eventCount", headerName: "Events", minWidth: 110 },
+    { field: "status", headerName: "Status", minWidth: 110 },
+  ], []);
+
+  const selectedClubFromGrid = useMemo(
+    () => clubs.find((club) => club.id === selectedClubGridId) || null,
+    [clubs, selectedClubGridId],
+  );
+
+  // Events Grid - memoized data and columns
+  const eventsGridRows = useMemo<EventsGridRow[]>(() => {
+    return events
+      .filter((event) => {
+        const club = clubs.find((c) => c.id === event.clubId);
+        const status = new Date(event.date || new Date()) > new Date() ? "upcoming" : "past";
+
+        const matchesSearch = !eventGridSearch || [
+          event.title,
+          event.category,
+          event.location,
+          club?.name,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(eventGridSearch.toLowerCase()));
+
+        const matchesStatus = eventGridStatusFilter === "all" || status === eventGridStatusFilter;
+        return matchesSearch && matchesStatus;
+      })
+      .map((event, index) => {
+        const club = clubs.find((c) => c.id === event.clubId);
+        return {
+          srNo: index + 1,
+          id: event.id,
+          title: event.title,
+          category: event.category || "",
+          date: new Date(event.date || new Date()).toLocaleDateString(),
+          time: event.time || "TBA",
+          location: event.location || "TBA",
+          clubName: club?.name || "Unknown",
+          status: new Date(event.date || new Date()) > new Date() ? "Upcoming" : "Past",
+        };
+      });
+  }, [events, clubs, eventGridSearch, eventGridStatusFilter]);
+
+  const eventsGridColumns = useMemo<ColDef<EventsGridRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "title", headerName: "Event", flex: 1.2, minWidth: 200 },
+    { field: "category", headerName: "Category", minWidth: 140 },
+    { field: "date", headerName: "Date", minWidth: 120 },
+    { field: "time", headerName: "Time", minWidth: 110 },
+    { field: "clubName", headerName: "Club", minWidth: 140 },
+    { field: "status", headerName: "Status", minWidth: 110 },
+  ], []);
+
+  const selectedEventFromGrid = useMemo(
+    () => events.find((event) => event.id === selectedEventGridId) || null,
+    [events, selectedEventGridId],
+  );
+
+  // Announcements Grid - memoized data and columns
+  const announcementsGridRows = useMemo<AnnouncementsGridRow[]>(() => {
+    return [...announcements]
+      .sort((a: any, b: any) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      })
+      .map((announcement: any, index: number) => ({
+        srNo: index + 1,
+        id: announcement.id,
+        title: announcement.title,
+        target: announcement.target || "all",
+        createdDate: new Date(announcement.createdAt).toLocaleDateString(),
+        pinned: announcement.pinned ? "Pinned" : "-",
+      }));
+  }, [announcements]);
+
+  const announcementsGridColumns = useMemo<ColDef<AnnouncementsGridRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "title", headerName: "Title", flex: 1.4, minWidth: 250 },
+    { field: "target", headerName: "Target", minWidth: 140 },
+    { field: "pinned", headerName: "Pinned", minWidth: 110 },
+    { field: "createdDate", headerName: "Date", minWidth: 130 },
+  ], []);
+
+  const selectedAnnouncementFromGrid = useMemo(
+    () => announcements.find((announcement: any) => announcement.id === selectedAnnouncementGridId) || null,
+    [announcements, selectedAnnouncementGridId],
+  );
+
+  // Students Grid - memoized data and columns
+  const studentsGridRows = useMemo<StudentsGridRow[]>(() => {
+    return filteredStudents
+      .filter((student: any) => {
+        if (studentStatusFilter === "all") return true;
+        if (studentStatusFilter === "active") return !student.isDisabled;
+        return !!student.isDisabled;
+      })
+      .map((student: any, index: number) => ({
+        srNo: index + 1,
+        id: student.id || student._id,
+        name: student.name || "",
+        email: student.email || "",
+        enrollment: student.enrollment || "",
+        phone: student.phone || "—",
+        department: student.department || student.branch || "—",
+        status: student.isDisabled ? "Disabled" : "Active",
+        lastLogin: student.lastLogin ? new Date(student.lastLogin).toLocaleString() : "—",
+      }));
+  }, [filteredStudents, studentStatusFilter]);
+
+  const studentsGridColumns = useMemo<ColDef<StudentsGridRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "name", headerName: "Name", flex: 1.2, minWidth: 180 },
+    { field: "email", headerName: "Email", flex: 1.3, minWidth: 220 },
+    { field: "enrollment", headerName: "Enrollment", minWidth: 140 },
+    { field: "phone", headerName: "Phone", minWidth: 130 },
+    { field: "department", headerName: "Department", minWidth: 150 },
+    { field: "status", headerName: "Status", minWidth: 110 },
+    { field: "lastLogin", headerName: "Last Active", flex: 1.2, minWidth: 180 },
+  ], []);
+
+  const selectedStudentFromGrid = useMemo(
+    () => studentsGridRows.find((student) => student.id === selectedStudentGridId) || null,
+    [studentsGridRows, selectedStudentGridId],
+  );
+
+  // Club Admins Grid - memoized data and columns
+  const clubAdminsGridRows = useMemo<ClubAdminsGridRow[]>(() => {
+    return clubs
+      .filter((club: any) => {
+        const matchesSearch = !clubAdminSearch || [club.name, club.description]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(clubAdminSearch.toLowerCase()));
+
+        const matchesStatus =
+          clubAdminStatusFilter === "all" ||
+          (clubAdminStatusFilter === "active" && !club.isFrozen) ||
+          (clubAdminStatusFilter === "frozen" && !!club.isFrozen);
+
+        return matchesSearch && matchesStatus;
+      })
+      .map((club: any, index: number) => ({
+        srNo: index + 1,
+        id: club.id,
+        clubName: club.name,
+        description: club.description || "",
+        memberCount: club.memberCount || 0,
+        eventCount: events.filter((e: any) => e.clubId === club.id).length,
+        createdAt: club.createdAt ? new Date(club.createdAt).toLocaleDateString() : "",
+      }));
+  }, [clubs, events, clubAdminSearch, clubAdminStatusFilter]);
+
+  const clubAdminsGridColumns = useMemo<ColDef<ClubAdminsGridRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "clubName", headerName: "Club Name", flex: 1.3, minWidth: 200 },
+    { field: "description", headerName: "Description", flex: 1.5, minWidth: 250 },
+    { field: "memberCount", headerName: "Members", minWidth: 120, type: "numericColumn" },
+    { field: "eventCount", headerName: "Events", minWidth: 110, type: "numericColumn" },
+    { field: "createdAt", headerName: "Created", minWidth: 130 },
+  ], []);
+
+  const selectedClubAdminFromGrid = useMemo(
+    () => clubs.find((club: any) => club.id === selectedClubAdminGridId) || null,
+    [clubs, selectedClubAdminGridId],
+  );
 
   const renderMainContent = () => {
     switch (activeTab) {
@@ -1175,8 +1439,8 @@ export default function Dashboard() {
             </div>
 
             {/* Search Bar */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-center">
+              <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
                   type="text"
@@ -1186,6 +1450,16 @@ export default function Dashboard() {
                   className="pl-10"
                 />
               </div>
+              <Select value={clubStatusFilter} onValueChange={(value: any) => setClubStatusFilter(value)}>
+                <SelectTrigger className="w-full md:w-[220px]">
+                  <SelectValue placeholder="Club status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="frozen">Frozen</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Create/Edit Club Modal */}
@@ -1445,131 +1719,136 @@ export default function Dashboard() {
             )}
 
             {/* Clubs List */}
-            <div className="grid gap-4">
-              {clubs
-                .filter((club) => {
-                  if (!clubSearch) return true;
-                  const searchLower = clubSearch.toLowerCase();
-                  return (
-                    club.name.toLowerCase().includes(searchLower) ||
-                    club.category?.toLowerCase().includes(searchLower) ||
-                    club.facultyAssigned?.toLowerCase().includes(searchLower)
-                  );
-                })
-                .map((club) => (
-                <Card key={club.id} className={`p-6 transition-all duration-300 ${club.isFrozen ? 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20' : ''}`}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold">{club.name}</h3>
-                        <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full">
-                          {club.category}
-                        </span>
-                        {club.isFrozen && (
-                          <span className="px-2 py-1 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs rounded-full flex items-center gap-1 animate-in fade-in duration-300">
-                            <AlertCircle className="w-3 h-3" />
-                            Frozen
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-muted-foreground mb-3">{club.description}</p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Members: {club.memberCount || 0}</span>
-                        <span>Events: {events.filter(e => e.clubId === club.id).length}</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant={club.isFrozen ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => {
-                          const action = club.isFrozen ? "unfreeze" : "freeze";
-                          const confirmed = confirm(
-                            club.isFrozen
-                              ? `Unfreeze "${club.name}"? Club admin will be able to perform operations again.`
-                              : `Freeze "${club.name}"? This will prevent the club admin from creating events, approving members, and making changes.`
-                          );
-                          if (confirmed) {
-                            toggleFreezeClubMutation.mutate({
-                              clubId: club.id,
-                              freeze: !club.isFrozen,
-                            });
-                          }
-                        }}
-                        disabled={toggleFreezeClubMutation.isPending}
-                        className={`
-                          transition-all duration-200
-                          ${club.isFrozen 
-                            ? 'bg-green-600 hover:bg-green-700 text-white' 
-                            : 'border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400'
-                          }
-                          ${toggleFreezeClubMutation.isPending ? 'opacity-50 cursor-not-allowed' : ''}
-                        `}
-                      >
-                        {toggleFreezeClubMutation.isPending ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            {club.isFrozen ? (
-                              <><CheckCircle className="w-4 h-4 mr-1" /> Unfreeze</>
-                            ) : (
-                              <><AlertCircle className="w-4 h-4 mr-1" /> Freeze</>
-                            )}
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setEditingClub(club);
-                          setClubForm({
-                            name: club.name,
-                            description: club.description || "",
-                            category: club.category || "",
-                            facultyAssigned: club.facultyAssigned || "",
-                            phone: club.phone || "",
-                            email: club.email || "",
-                            eligibility: club.eligibility || "",
-                            eligibilityYears: club.eligibilityYears || [],
-                          });
-                        }}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to delete "${club.name}"?`)) {
-                            deleteClubMutation.mutate(club.id);
-                          }
-                        }}
-                        disabled={deleteClubMutation.isPending}
-                      >
-                        Delete
-                      </Button>
-                    </div>
+            {clubsGridRows.length > 0 ? (
+              <>
+                <Card className="p-4 border border-border/70 bg-card/80">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold">Clubs Grid</h3>
+                    <span className="text-xs text-muted-foreground">Click a row to open club details and actions</span>
+                  </div>
+                  <div className={`${gridThemeClass}`} style={{ height: 360, width: "100%" }}>
+                    <AgGridReact<ClubsGridRow>
+                      rowData={clubsGridRows}
+                      columnDefs={clubsGridColumns}
+                      defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                      animateRows
+                      rowSelection="single"
+                      pagination
+                      paginationPageSize={8}
+                      onRowClicked={(event: RowClickedEvent<ClubsGridRow>) => {
+                        if (event.data?.id) {
+                          setSelectedClubGridId(event.data.id);
+                        }
+                      }}
+                    />
                   </div>
                 </Card>
-              ))}
-            </div>
 
-            {clubs.filter((club) => {
-              if (!clubSearch) return true;
-              const searchLower = clubSearch.toLowerCase();
-              return (
-                club.name.toLowerCase().includes(searchLower) ||
-                club.category?.toLowerCase().includes(searchLower) ||
-                club.facultyAssigned?.toLowerCase().includes(searchLower)
-              );
-            }).length === 0 && clubs.length > 0 && (
-              <Card className="p-6">
-                <p className="text-muted-foreground text-center">No clubs match your search criteria.</p>
-              </Card>
-            )}
-
-            {clubs.length === 0 && (
+                {selectedClubFromGrid && (
+                  <Card
+                    className={`p-6 transition-all duration-300 ${selectedClubFromGrid.isFrozen ? 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20' : ''}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="text-lg font-semibold">{selectedClubFromGrid.name}</h3>
+                          <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full">
+                            {selectedClubFromGrid.category}
+                          </span>
+                          {selectedClubFromGrid.isFrozen && (
+                            <span className="px-2 py-1 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs rounded-full flex items-center gap-1 animate-in fade-in duration-300">
+                              <AlertCircle className="w-3 h-3" />
+                              Frozen
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-muted-foreground mb-3">{selectedClubFromGrid.description}</p>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span>Members: {selectedClubFromGrid.memberCount || 0}</span>
+                          <span>Events: {events.filter((e) => e.clubId === selectedClubFromGrid.id).length}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant={selectedClubFromGrid.isFrozen ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            const action = selectedClubFromGrid.isFrozen ? "unfreeze" : "freeze";
+                            const confirmed = confirm(
+                              selectedClubFromGrid.isFrozen
+                                ? `Unfreeze "${selectedClubFromGrid.name}"? Club admin will be able to perform operations again.`
+                                : `Freeze "${selectedClubFromGrid.name}"? This will prevent the club admin from creating events, approving members, and making changes.`,
+                            );
+                            if (confirmed) {
+                              toggleFreezeClubMutation.mutate({
+                                clubId: selectedClubFromGrid.id,
+                                freeze: !selectedClubFromGrid.isFrozen,
+                              });
+                            }
+                          }}
+                          disabled={toggleFreezeClubMutation.isPending}
+                          className={`
+                            transition-all duration-200
+                            ${selectedClubFromGrid.isFrozen
+                              ? "bg-green-600 hover:bg-green-700 text-white"
+                              : "border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400"
+                            }
+                            ${toggleFreezeClubMutation.isPending ? "opacity-50 cursor-not-allowed" : ""}
+                          `}
+                        >
+                          {toggleFreezeClubMutation.isPending ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              {selectedClubFromGrid.isFrozen ? (
+                                <>
+                                  <CheckCircle className="w-4 h-4 mr-1" /> Unfreeze
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className="w-4 h-4 mr-1" /> Freeze
+                                </>
+                              )}
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingClub(selectedClubFromGrid);
+                            setClubForm({
+                              name: selectedClubFromGrid.name,
+                              description: selectedClubFromGrid.description || "",
+                              category: selectedClubFromGrid.category || "",
+                              facultyAssigned: selectedClubFromGrid.facultyAssigned || "",
+                              phone: selectedClubFromGrid.phone || "",
+                              email: selectedClubFromGrid.email || "",
+                              eligibility: selectedClubFromGrid.eligibility || "",
+                              eligibilityYears: selectedClubFromGrid.eligibilityYears || [],
+                            });
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm(`Are you sure you want to delete "${selectedClubFromGrid.name}"?`)) {
+                              deleteClubMutation.mutate(selectedClubFromGrid.id);
+                            }
+                          }}
+                          disabled={deleteClubMutation.isPending}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+              </>
+            ) : (
               <Card className="p-6">
                 <p className="text-muted-foreground text-center">No clubs found. Create your first club to get started.</p>
               </Card>
@@ -1587,63 +1866,6 @@ export default function Dashboard() {
                 Create Event
               </Button>
             </div>
-
-            {/* Search, Filters, and Sort */}
-            {!showCreateEvent && !editingEvent && (
-              <Card className="p-4">
-                <div className="flex flex-col gap-4">
-                  {/* Search Bar and Sort */}
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1">
-                      <Input
-                        placeholder="Search events by title, description, location, or club..."
-                        value={eventSearch}
-                        onChange={(e) => setEventSearch(e.target.value)}
-                        className="w-full"
-                      />
-                    </div>
-                    <Select value={eventSort} onValueChange={(value: any) => setEventSort(value)}>
-                      <SelectTrigger className="w-full sm:w-[200px]">
-                        <SelectValue placeholder="Sort by" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="date-desc">Newest First</SelectItem>
-                        <SelectItem value="date-asc">Oldest First</SelectItem>
-                        <SelectItem value="title-asc">Title (A-Z)</SelectItem>
-                        <SelectItem value="title-desc">Title (Z-A)</SelectItem>
-                        <SelectItem value="club">By Club</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  {/* Filter Buttons */}
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      variant={eventFilter === 'all' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setEventFilter('all')}
-                    >
-                      <Calendar className="w-4 h-4 mr-2" />
-                      All ({events.length})
-                    </Button>
-                    <Button
-                      variant={eventFilter === 'upcoming' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setEventFilter('upcoming')}
-                    >
-                      Upcoming ({events.filter(e => new Date(e.date || new Date()) > new Date()).length})
-                    </Button>
-                    <Button
-                      variant={eventFilter === 'past' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setEventFilter('past')}
-                    >
-                      Past ({events.filter(e => new Date(e.date || new Date()) <= new Date()).length})
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            )}
 
             {/* Create/Edit Event Modal */}
             {(showCreateEvent || editingEvent) && (
@@ -1850,70 +2072,68 @@ export default function Dashboard() {
             )}
 
             {/* Events List */}
-            <div className="grid gap-4">
-              {events
-                .filter(event => {
-                  // Apply search filter
-                  if (eventSearch) {
-                    const searchLower = eventSearch.toLowerCase();
-                    const club = clubs.find(c => c.id === event.clubId);
-                    return event.title.toLowerCase().includes(searchLower) ||
-                           event.description?.toLowerCase().includes(searchLower) ||
-                           event.location?.toLowerCase().includes(searchLower) ||
-                           club?.name.toLowerCase().includes(searchLower);
-                  }
-                  return true;
-                })
-                .filter(event => {
-                  // Apply status filter
-                  const eventDate = new Date(event.date || new Date());
-                  const now = new Date();
-                  switch (eventFilter) {
-                    case 'upcoming':
-                      return eventDate > now;
-                    case 'past':
-                      return eventDate <= now;
-                    default:
-                      return true;
-                  }
-                })
-                .sort((a, b) => {
-                  // Apply sorting
-                  switch (eventSort) {
-                    case 'date-asc':
-                      return new Date(a.date || new Date()).getTime() - new Date(b.date || new Date()).getTime();
-                    case 'date-desc':
-                      return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
-                    case 'title-asc':
-                      return a.title.localeCompare(b.title);
-                    case 'title-desc':
-                      return b.title.localeCompare(a.title);
-                    case 'club':
-                      const clubA = clubs.find(c => c.id === a.clubId)?.name || '';
-                      const clubB = clubs.find(c => c.id === b.clubId)?.name || '';
-                      return clubA.localeCompare(clubB);
-                    default:
-                      return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
-                  }
-                })
-                .map((event) => {
-                const club = clubs.find(c => c.id === event.clubId);
-                return (
-                  <Card key={event.id} className="p-6">
+            {eventsGridRows.length > 0 ? (
+              <>
+                <Card className="p-4 border border-border/70 bg-card/80">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold">Events Grid</h3>
+                    <span className="text-xs text-muted-foreground">Click a row to open event details and actions</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-center mb-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search events by title, category, location, or club..."
+                        value={eventGridSearch}
+                        onChange={(e) => setEventGridSearch(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                    <Select value={eventGridStatusFilter} onValueChange={(value: any) => setEventGridStatusFilter(value)}>
+                      <SelectTrigger className="w-full md:w-[220px]">
+                        <SelectValue placeholder="Event status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="upcoming">Upcoming</SelectItem>
+                        <SelectItem value="past">Past</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className={`${gridThemeClass}`} style={{ height: 360, width: "100%" }}>
+                    <AgGridReact<EventsGridRow>
+                      rowData={eventsGridRows}
+                      columnDefs={eventsGridColumns}
+                      defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                      animateRows
+                      rowSelection="single"
+                      pagination
+                      paginationPageSize={8}
+                      onRowClicked={(event: RowClickedEvent<EventsGridRow>) => {
+                        if (event.data?.id) {
+                          setSelectedEventGridId(event.data.id);
+                        }
+                      }}
+                    />
+                  </div>
+                </Card>
+
+                {selectedEventFromGrid && (
+                  <Card className="p-6">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold">{event.title}</h3>
+                          <h3 className="text-lg font-semibold">{selectedEventFromGrid.title}</h3>
                           <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs rounded-full">
-                            {event.category}
+                            {selectedEventFromGrid.category}
                           </span>
                         </div>
-                        <p className="text-muted-foreground mb-3">{event.description}</p>
+                        <p className="text-muted-foreground mb-3">{selectedEventFromGrid.description}</p>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>📅 {new Date(event.date).toLocaleDateString()}</span>
-                          <span>🕐 {event.time}</span>
-                          <span>📍 {event.location}</span>
-                          <span>🏛️ {club?.name || 'Unknown Club'}</span>
+                          <span>📅 {new Date(selectedEventFromGrid.date).toLocaleDateString()}</span>
+                          <span>🕐 {selectedEventFromGrid.time}</span>
+                          <span>📍 {selectedEventFromGrid.location}</span>
+                          <span>🏛️ {selectedEventFromGrid.clubName || "Unknown Club"}</span>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -1921,16 +2141,16 @@ export default function Dashboard() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setEditingEvent(event);
+                            setEditingEvent(selectedEventFromGrid);
                             setEventForm({
-                              title: event.title,
-                              description: event.description || "",
-                              date: event.date,
-                              time: event.time,
-                              durationMinutes: String(event.durationMinutes ?? 120),
-                              location: event.location,
-                              category: event.category || "",
-                              clubId: event.clubId,
+                              title: selectedEventFromGrid.title,
+                              description: selectedEventFromGrid.description || "",
+                              date: selectedEventFromGrid.date,
+                              time: selectedEventFromGrid.time,
+                              durationMinutes: String(selectedEventFromGrid.durationMinutes ?? 120),
+                              location: selectedEventFromGrid.location,
+                              category: selectedEventFromGrid.category || "",
+                              clubId: selectedEventFromGrid.clubId,
                             });
                           }}
                         >
@@ -1940,54 +2160,52 @@ export default function Dashboard() {
                           variant="destructive"
                           size="sm"
                           onClick={() => {
-                            if (confirm(`Are you sure you want to delete "${event.title}"?`)) {
-                              deleteEventMutation.mutate(event.id);
+                            if (confirm(`Are you sure you want to delete "${selectedEventFromGrid.title}"?`)) {
+                              deleteEventMutation.mutate(selectedEventFromGrid.id);
                             }
                           }}
                           disabled={deleteEventMutation.isPending}
                         >
                           Delete
                         </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                              if (confirm("This will delete all messages in the chat. This action cannot be undone.")) {
-                                // Query chat groups to find the one for this event
-                                apiRequest("GET", "/api/chat/groups")
-                                  .then((response: any) => {
-                                    const eventChat = response.sections?.events?.find((g: any) => g.eventId === event.id);
-                                    if (eventChat) {
-                                      deleteChatGroupMutation.mutate(eventChat.id);
-                                    } else {
-                                      toast({
-                                        title: "Not Found",
-                                        description: "No chat group found for this event.",
-                                        variant: "destructive",
-                                      });
-                                    }
-                                  })
-                                  .catch(() => {
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm("This will delete all messages in the chat. This action cannot be undone.")) {
+                              // Query chat groups to find the one for this event
+                              apiRequest("GET", "/api/chat/groups")
+                                .then((response: any) => {
+                                  const eventChat = response.sections?.events?.find((g: any) => g.eventId === selectedEventFromGrid.id);
+                                  if (eventChat) {
+                                    deleteChatGroupMutation.mutate(eventChat.id);
+                                  } else {
                                     toast({
-                                      title: "Error",
-                                      description: "Failed to fetch chat groups.",
+                                      title: "Not Found",
+                                      description: "No chat group found for this event.",
                                       variant: "destructive",
                                     });
+                                  }
+                                })
+                                .catch(() => {
+                                  toast({
+                                    title: "Error",
+                                    description: "Failed to fetch chat groups.",
+                                    variant: "destructive",
                                   });
-                              }
-                            }}
-                            disabled={deleteChatGroupMutation.isPending}
-                          >
-                            Delete Chat
-                          </Button>
+                                });
+                            }
+                          }}
+                          disabled={deleteChatGroupMutation.isPending}
+                        >
+                          Delete Chat
+                        </Button>
                       </div>
                     </div>
                   </Card>
-                );
-              })}
-            </div>
-
-            {events.length === 0 && (
+                )}
+              </>
+            ) : (
               <Card className="p-6">
                 <p className="text-muted-foreground text-center">No events found. Create your first event to get started.</p>
               </Card>
@@ -2021,67 +2239,120 @@ export default function Dashboard() {
 
             {/* Students Section */}
             <div>
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
-                <h3 className="text-xl font-semibold">Students</h3>
-                <div className="relative w-full md:max-w-xs">
-                  <Input
-                    placeholder="Search by name or student ID..."
-                    value={studentSearch}
-                    onChange={(e) => setStudentSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <div className="mb-4">
+                <h3 className="text-xl font-semibold mb-3">Students ({studentsGridRows.length})</h3>
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-center">
+                  <div className="relative">
+                    <Input
+                      placeholder="Search by name or student ID..."
+                      value={studentSearch}
+                      onChange={(e) => setStudentSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <Select value={studentStatusFilter} onValueChange={(value: any) => setStudentStatusFilter(value)}>
+                    <SelectTrigger className="w-full md:w-[220px]">
+                      <SelectValue placeholder="Student status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="disabled">Disabled</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <div className="grid gap-4">
-                {filteredStudents.length === 0 ? (
-                  <Card className="p-6">
-                    <p className="text-muted-foreground text-center">No students found.</p>
+              
+              {studentsGridRows.length === 0 ? (
+                <Card className="p-6">
+                  <p className="text-muted-foreground text-center">No students found.</p>
+                </Card>
+              ) : (
+                <>
+                  <Card className="p-4 border border-border/70 bg-card/80">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold">Students Grid</h3>
+                      <span className="text-xs text-muted-foreground">Click a row to view student details</span>
+                    </div>
+                    <div className={`${gridThemeClass}`} style={{ height: 400, width: "100%" }}>
+                      <AgGridReact<StudentsGridRow>
+                        rowData={studentsGridRows}
+                        columnDefs={studentsGridColumns}
+                        defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                        animateRows
+                        rowSelection="single"
+                        pagination
+                        paginationPageSize={10}
+                        onRowClicked={(event: RowClickedEvent<StudentsGridRow>) => {
+                          if (event.data?.id) {
+                            setSelectedStudentGridId(event.data.id);
+                          }
+                        }}
+                      />
+                    </div>
                   </Card>
-                ) : (
-                  filteredStudents.map((s) => (
-                    <Card key={s.id || s._id} className="p-4">
-                      <div className="flex items-center justify-between">
+
+                  {selectedStudentFromGrid && (
+                    <Card className="p-6 mt-4">
+                      <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-semibold">{s.name}</h4>
-                            {s.isDisabled && (
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="text-lg font-semibold">{selectedStudentFromGrid.name}</h3>
+                            {selectedStudentFromGrid.status === "Disabled" && (
                               <Badge variant="destructive" className="text-xs">
-                                Disabled
+                                {selectedStudentFromGrid.status}
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground">{s.email}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Phone: {s.phone || "—"}</p>
-                          <p className="text-xs text-muted-foreground mt-1">Enrollment: {s.enrollment}</p>
-                          <p className="text-xs text-muted-foreground">Branch: {s.department || s.branch || "—"}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{s.lastLogin ? `Last active: ${new Date(s.lastLogin).toLocaleString()}` : "Last active: —"}</p>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <p className="text-muted-foreground">Email:</p>
+                              <p className="font-medium">{selectedStudentFromGrid.email}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Enrollment:</p>
+                              <p className="font-medium">{selectedStudentFromGrid.enrollment}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Phone:</p>
+                              <p className="font-medium">{selectedStudentFromGrid.phone}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Department:</p>
+                              <p className="font-medium">{selectedStudentFromGrid.department}</p>
+                            </div>
+                            <div className="col-span-2">
+                              <p className="text-muted-foreground">Last Active:</p>
+                              <p className="font-medium">{selectedStudentFromGrid.lastLogin}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-2">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              setSelectedStudent(s);
+                              setSelectedStudent(selectedStudentFromGrid);
                               setIsStudentProfileOpen(true);
                             }}
                           >
                             View
                           </Button>
                           <Button
-                            variant={s.isDisabled ? "default" : "destructive"}
+                            variant={selectedStudentFromGrid.status === "Disabled" ? "default" : "destructive"}
                             size="sm"
-                            onClick={() => toggleStudentStatusMutation.mutate(s.id)}
+                            onClick={() => toggleStudentStatusMutation.mutate(selectedStudentFromGrid.id)}
                             disabled={toggleStudentStatusMutation.isPending}
                           >
-                            {s.isDisabled ? "Enable" : "Disable"}
+                            {selectedStudentFromGrid.status === "Disabled" ? "Enable" : "Disable"}
                           </Button>
                           <Button
                             variant="destructive"
                             size="sm"
                             onClick={() => {
-                              if (confirm(`Are you sure you want to permanently delete ${s.name}? This action cannot be undone.`)) {
-                                deleteStudentMutation.mutate(s.id);
+                              if (confirm(`Are you sure you want to permanently delete ${selectedStudentFromGrid.name}? This action cannot be undone.`)) {
+                                deleteStudentMutation.mutate(selectedStudentFromGrid.id);
                               }
                             }}
                             disabled={deleteStudentMutation.isPending}
@@ -2091,57 +2362,119 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </Card>
-                  ))
-                )}
-              </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Club Admins Section */}
             <div>
-              <h3 className="text-xl font-semibold mb-4">Club Administrators</h3>
-              <div className="grid gap-4">
-                {clubs.map((club) => (
-                  <Card key={club.id} className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-semibold">{club.name}</h4>
-                        <p className="text-sm text-muted-foreground">{club.description}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Members: {club.memberCount || 0} | Events: {events.filter(e => e.clubId === club.id).length}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedAdmin(club);
-                            setIsAdminProfileOpen(true);
-                          }}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Admin
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedAdmin(club);
-                            setIsResetPasswordOpen(true);
-                          }}
-                        >
-                          <KeyRound className="w-4 h-4 mr-2" />
-                          Reset Password
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+              <div className="mb-4">
+                <h3 className="text-xl font-semibold mb-3">Club Administrators ({clubAdminsGridRows.length})</h3>
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-center">
+                  <div className="relative">
+                    <Input
+                      placeholder="Search by club name or description..."
+                      value={clubAdminSearch}
+                      onChange={(e) => setClubAdminSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <Select value={clubAdminStatusFilter} onValueChange={(value: any) => setClubAdminStatusFilter(value)}>
+                    <SelectTrigger className="w-full md:w-[220px]">
+                      <SelectValue placeholder="Club status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="frozen">Frozen</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              {clubs.length === 0 && (
+              
+              {clubAdminsGridRows.length === 0 ? (
                 <Card className="p-6">
                   <p className="text-muted-foreground text-center">No clubs found.</p>
                 </Card>
+              ) : (
+                <>
+                  <Card className="p-4 border border-border/70 bg-card/80">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold">Club Administrators Grid</h3>
+                      <span className="text-xs text-muted-foreground">Click a row to view club details</span>
+                    </div>
+                    <div className={`${gridThemeClass}`} style={{ height: 380, width: "100%" }}>
+                      <AgGridReact<ClubAdminsGridRow>
+                        rowData={clubAdminsGridRows}
+                        columnDefs={clubAdminsGridColumns}
+                        defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                        animateRows
+                        rowSelection="single"
+                        pagination
+                        paginationPageSize={7}
+                        onRowClicked={(event: RowClickedEvent<ClubAdminsGridRow>) => {
+                          if (event.data?.id) {
+                            setSelectedClubAdminGridId(event.data.id);
+                          }
+                        }}
+                      />
+                    </div>
+                  </Card>
+
+                  {selectedClubAdminFromGrid && (
+                    <Card className="p-6 mt-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold mb-3">{selectedClubAdminFromGrid.name}</h3>
+                          <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+                            <div>
+                              <p className="text-muted-foreground">Description:</p>
+                              <p className="font-medium">{selectedClubAdminFromGrid.description}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Members:</p>
+                              <p className="font-medium text-lg">{selectedClubAdminFromGrid.memberCount || 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Events:</p>
+                              <p className="font-medium text-lg">{events.filter(e => e.clubId === selectedClubAdminFromGrid.id).length}</p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Created:</p>
+                              <p className="font-medium">{selectedClubAdminFromGrid.createdAt ? new Date(selectedClubAdminFromGrid.createdAt).toLocaleDateString() : "—"}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedAdmin(selectedClubAdminFromGrid);
+                              setIsAdminProfileOpen(true);
+                            }}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Admin
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedAdmin(selectedClubAdminFromGrid);
+                              setIsResetPasswordOpen(true);
+                            }}
+                          >
+                            <KeyRound className="w-4 h-4 mr-2" />
+                            Reset Password
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -2487,7 +2820,7 @@ export default function Dashboard() {
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold">System Announcements</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-6">
               <Card className="p-6">
                 <h3 className="font-semibold mb-4">Create New Announcement</h3>
                 <form
@@ -2548,39 +2881,61 @@ export default function Dashboard() {
               </Card>
 
               <Card className="p-6">
-                <h3 className="font-semibold mb-4">Recent Announcements</h3>
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Recent Announcements</h3>
+                    <span className="text-xs text-muted-foreground">{announcements.length} total</span>
+                  </div>
+                  
                   {announcements.length === 0 ? (
                     <div className="p-4 border rounded-lg text-center text-muted-foreground">No announcements yet.</div>
                   ) : (
-                    announcements.map((a: any) => (
-                      <div key={a.id} className="p-4 border rounded-lg">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h4 className="font-semibold">{a.title} {a.pinned && <Badge variant="secondary">Pinned</Badge>}</h4>
-                            <p className="text-sm text-muted-foreground mt-2">{a.content}</p>
-                            <p className="text-xs text-muted-foreground mt-2">{a.createdAt ? new Date(a.createdAt).toLocaleString() : ''}</p>
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            {admin && (
-                              <>
-                                <Button size="sm" variant="outline" onClick={() => { setEditingAnnouncement(a); setIsEditOpen(true); }}>
-                                  Edit
-                                </Button>
-                                <Button size="sm" variant="destructive" onClick={() => { if (confirm('Delete this announcement?')) deleteAnnouncementMutation.mutate(a.id); }} disabled={deleteAnnouncementMutation.isPending}>
-                                  Delete
-                                </Button>
-                                <Button size="sm" variant="ghost" onClick={() => { editAnnouncementMutation.mutate({ id: a.id, pinned: !a.pinned }); }}>
-                                  {a.pinned ? 'Unpin' : 'Pin'}
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))
+                    <div className={`${gridThemeClass}`} style={{ height: 320, width: "100%" }}>
+                      <AgGridReact<AnnouncementsGridRow>
+                        rowData={announcementsGridRows}
+                        columnDefs={announcementsGridColumns}
+                        defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                        animateRows
+                        rowSelection="single"
+                        pagination
+                        paginationPageSize={5}
+                        onRowClicked={(event: RowClickedEvent<AnnouncementsGridRow>) => {
+                          if (event.data?.id) {
+                            setSelectedAnnouncementGridId(event.data.id);
+                          }
+                        }}
+                      />
+                    </div>
                   )}
                 </div>
+                
+                {/* Selected Announcement Actions */}
+                {selectedAnnouncementFromGrid && (
+                  <div className="mt-4 p-4 border rounded-lg bg-muted/30">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="font-semibold text-sm">{selectedAnnouncementFromGrid.title}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{selectedAnnouncementFromGrid.content}</p>
+                      </div>
+                      <div className="flex flex-col gap-2 ml-3">
+                        {admin && (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => { setEditingAnnouncement(selectedAnnouncementFromGrid); setIsEditOpen(true); }}>
+                              Edit
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => { if (confirm('Delete this announcement?')) deleteAnnouncementMutation.mutate(selectedAnnouncementFromGrid.id); }} disabled={deleteAnnouncementMutation.isPending}>
+                              Delete
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => { editAnnouncementMutation.mutate({ id: selectedAnnouncementFromGrid.id, pinned: !selectedAnnouncementFromGrid.pinned }); }}>
+                              {selectedAnnouncementFromGrid.pinned === "Pinned" ? 'Unpin' : 'Pin'}
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Edit Announcement Dialog */}
                 <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
                   <DialogContent className="max-w-2xl">

@@ -382,3 +382,34 @@
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
+
+/* Attendance AG Grid theme alignment */
+.attendance-ag-grid {
+  --ag-font-family: var(--font-body);
+  --ag-font-size: 13px;
+  --ag-border-color: hsl(var(--border));
+  --ag-background-color: hsl(var(--card));
+  --ag-foreground-color: hsl(var(--foreground));
+  --ag-header-background-color: hsl(var(--muted));
+  --ag-header-foreground-color: hsl(var(--foreground));
+  --ag-odd-row-background-color: color-mix(in srgb, hsl(var(--card)) 92%, hsl(var(--muted)) 8%);
+  --ag-row-hover-color: color-mix(in srgb, hsl(var(--primary)) 8%, transparent);
+  --ag-selected-row-background-color: color-mix(in srgb, hsl(var(--primary)) 16%, transparent);
+  --ag-input-focus-border-color: hsl(var(--ring));
+  --ag-range-selection-border-color: hsl(var(--primary));
+  --ag-wrapper-border-radius: 10px;
+  --ag-row-border-color: hsl(var(--border));
+}
+
+.dark .attendance-ag-grid {
+  --ag-background-color: hsl(var(--card));
+  --ag-foreground-color: hsl(var(--foreground));
+  --ag-header-background-color: color-mix(in srgb, hsl(var(--card)) 78%, hsl(var(--muted)) 22%);
+  --ag-header-foreground-color: hsl(var(--foreground));
+  --ag-border-color: hsl(var(--border));
+  --ag-odd-row-background-color: color-mix(in srgb, hsl(var(--card)) 85%, black 15%);
+  --ag-row-hover-color: color-mix(in srgb, hsl(var(--primary)) 14%, transparent);
+  --ag-selected-row-background-color: color-mix(in srgb, hsl(var(--primary)) 24%, transparent);
+  --ag-row-border-color: hsl(var(--border));
+  --ag-input-focus-border-color: hsl(var(--ring));
+}

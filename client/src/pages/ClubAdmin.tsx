@@ -1,7 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { AgGridReact } from "ag-grid-react";
+import type { ColDef, RowClickedEvent, SelectionChangedEvent } from "ag-grid-community";
+import "ag-grid-community/styles/ag-grid.css";
+import "ag-grid-community/styles/ag-theme-quartz.css";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/components/ThemeProvider";
 import EditEventForm from "@/components/EditEventForm";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +38,77 @@ import type { Achievement } from "@shared/schema";
 import type { ClubLeadership } from "@shared/schema";
 import type { StudentPoints } from "@shared/schema";
 import type { Message } from "@shared/schema";
+
+type AttendanceEventRow = {
+  srNo: number;
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  registrations: number;
+  attended: number;
+  attendanceRate: number;
+};
+
+type EventsGridRow = {
+  srNo: number;
+  id: string;
+  title: string;
+  date: string;
+  time: string;
+  location: string;
+  status: "Upcoming" | "Past";
+  registrations: number;
+  attended: number;
+  attendanceRate: number;
+};
+
+type MembersGridRow = {
+  srNo: number;
+  id: string;
+  studentName: string;
+  enrollmentNumber: string;
+  studentEmail: string;
+  department: string;
+  status: "pending" | "approved" | "rejected";
+  joinedAt: string;
+};
+
+type MessagesGridRow = {
+  srNo: number;
+  id: string;
+  senderName: string;
+  senderEmail: string;
+  enrollmentNumber: string;
+  subject: string;
+  sentDate: string;
+  sentTime: string;
+  status: "Unread" | "Read";
+};
+
+type AnnouncementsGridRow = {
+  srNo: number;
+  id: string;
+  title: string;
+  authorName: string;
+  target: string;
+  createdDate: string;
+  status: "Unread" | "Read";
+  pinned: "Pinned" | "-";
+};
+
+type AttendanceRegistrationGridRow = {
+  srNo: number;
+  id: string;
+  studentName: string;
+  enrollmentNumber: string;
+  department: string;
+  studentEmail: string;
+  totalPoints: number;
+  attendance: "Present (+10)" | "Not Marked";
+  attended: boolean;
+};
 
 // Static data for when API is not available
 const staticClubs: Club[] = [
@@ -154,13 +230,25 @@ export default function ClubAdmin() {
   const [storyCaption, setStoryCaption] = useState("");
   const [storyFile, setStoryFile] = useState<File | null>(null);
   const [storyPreview, setStoryPreview] = useState<string | null>(null);
+  const [storyPreviewType, setStoryPreviewType] = useState<"image" | "video" | "text" | null>(null);
   const [storyAsHighlight, setStoryAsHighlight] = useState(true);
   const [unreadMessages, setUnreadMessages] = useState<number>(0);
   const [unreadAnnouncements, setUnreadAnnouncements] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+  const [attendancePage, setAttendancePage] = useState(1);
+  const [attendanceSearch, setAttendanceSearch] = useState("");
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  const [attendanceMarkFilter, setAttendanceMarkFilter] = useState<"all" | "pending" | "present" | "absent">("all");
+  const [selectedAttendanceIds, setSelectedAttendanceIds] = useState<string[]>([]);
+  const [selectedEventGridId, setSelectedEventGridId] = useState<string | null>(null);
+  const [selectedMemberGridId, setSelectedMemberGridId] = useState<string | null>(null);
+  const [selectedMessageGridId, setSelectedMessageGridId] = useState<string | null>(null);
+  const [selectedAnnouncementGridId, setSelectedAnnouncementGridId] = useState<string | null>(null);
+  const adminSectionsRef = useRef<HTMLDivElement | null>(null);
   const prevPendingRegCount = useRef<number | null>(null);
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { theme } = useTheme();
   const { toast } = useToast();
 
   // Authorization check: Only club admins can access this page
@@ -217,6 +305,24 @@ export default function ClubAdmin() {
     "Community Service",
     "Other"
   ];
+
+  const navigateToSection = (tab: string, options?: { startEditingClub?: boolean; openCreateEvent?: boolean }) => {
+    if (club?.isFrozen) return;
+
+    setActiveTab(tab);
+
+    if (options?.startEditingClub) {
+      setEditingClub(true);
+    }
+
+    if (options?.openCreateEvent) {
+      setCreatingEvent(true);
+    }
+
+    requestAnimationFrame(() => {
+      adminSectionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   const { data: club, isLoading: clubLoading, error: clubError } = useQuery<Club | null>({
     queryKey: ["/api/clubs", admin?.clubId],
@@ -318,6 +424,61 @@ export default function ClubAdmin() {
     enabled: !!admin?.clubId && isAuthenticated && !authLoading,
   });
 
+  const { data: pagedEventRegistrations, isLoading: pagedEventRegistrationsLoading } = useQuery<{
+    items: any[];
+    pagination?: { total: number; page: number; limit: number; totalPages: number };
+  }>({
+    queryKey: [
+      "/api/admin/event-registrations/paged",
+      admin?.clubId,
+      expandedEventId,
+      attendancePage,
+      attendanceSearch,
+      attendanceStatusFilter,
+      attendanceMarkFilter,
+      activeTab,
+    ],
+    queryFn: async () => {
+      if (!admin?.clubId || !expandedEventId) {
+        return { items: [], pagination: { total: 0, page: 1, limit: 50, totalPages: 0 } };
+      }
+
+      const params = new URLSearchParams({
+        eventId: expandedEventId,
+        page: String(attendancePage),
+        limit: "50",
+      });
+
+      if (attendanceSearch.trim()) {
+        params.set("search", attendanceSearch.trim());
+      }
+      if (attendanceStatusFilter !== "all") {
+        params.set("status", attendanceStatusFilter);
+      }
+      if (attendanceMarkFilter !== "all") {
+        params.set("attendanceStatus", attendanceMarkFilter);
+      }
+
+      const res = await apiRequest("GET", `/api/admin/event-registrations/${admin.clubId}?${params.toString()}`);
+      const data = await res.json();
+      return data?.items ? data : { items: [], pagination: { total: 0, page: 1, limit: 50, totalPages: 0 } };
+    },
+    enabled: !!admin?.clubId && !!expandedEventId && activeTab === "attendance" && isAuthenticated && !authLoading,
+  });
+
+  const currentEventRegistrations = pagedEventRegistrations?.items || [];
+  const currentEventRegistrationsPagination = pagedEventRegistrations?.pagination || {
+    total: 0,
+    page: attendancePage,
+    limit: 50,
+    totalPages: 0,
+  };
+
+  useEffect(() => {
+    setAttendancePage(1);
+    setSelectedAttendanceIds([]);
+  }, [expandedEventId, attendanceSearch, attendanceStatusFilter, attendanceMarkFilter]);
+
   const { data: announcements = [] } = useQuery<any[]>({
     queryKey: ["/api/admin/announcements"],
     queryFn: async () => {
@@ -406,13 +567,23 @@ export default function ClubAdmin() {
     const file = event.target.files?.[0];
     if (file) {
       setStoryFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setStoryPreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+      setStoryPreview((previous) => {
+        if (previous?.startsWith("blob:")) {
+          URL.revokeObjectURL(previous);
+        }
+        return URL.createObjectURL(file);
+      });
+      setStoryPreviewType(file.type.startsWith("video/") ? "video" : "image");
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (storyPreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(storyPreview);
+      }
+    };
+  }, [storyPreview]);
 
   // Bulk actions for members
   const handleBulkApprove = () => {
@@ -537,34 +708,15 @@ export default function ClubAdmin() {
   });
 
   const updateAttendanceMutation = useMutation({
-    mutationFn: async ({ registrationId, attended, studentData }: { registrationId: string; attended: boolean; studentData?: any }) => {
-      const attendanceStatus = attended ? 'present' : 'absent';
-      const res = await apiRequest("PATCH", `/api/admin/event-registrations/${registrationId}/attendance`, { 
-        attended,
-        attendanceStatus 
+    mutationFn: async ({ registrationId, attended }: { registrationId: string; attended: boolean }) => {
+      const res = await apiRequest("POST", "/api/admin/event-registrations/batch-attendance", {
+        updates: [{ registrationId, attended }],
       });
-      const registration = await res.json();
-
-      // If marking as attended, award points
-      if (attended && studentData && admin?.clubId) {
-        try {
-          await apiRequest("POST", "/api/admin/student-points/award-attendance", {
-            clubId: admin.clubId,
-            studentId: studentData.studentId || registration.studentEmail, // fallback to email as ID
-            studentName: studentData.studentName || registration.studentName,
-            studentEmail: studentData.studentEmail || registration.studentEmail,
-            enrollmentNumber: studentData.enrollmentNumber || registration.enrollmentNumber,
-            eventId: registration.eventId
-          });
-        } catch (error) {
-          console.error("Failed to award attendance points:", error);
-        }
-      }
-
-      return registration;
+      return res.json();
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/event-registrations", admin?.clubId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/event-registrations/paged", admin?.clubId] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/student-points", admin?.clubId] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/global-points-leaderboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/events"] });
@@ -572,7 +724,7 @@ export default function ClubAdmin() {
       toast({
         title: "Attendance updated",
         description: variables.attended
-          ? "Attendance marked as present and points awarded!"
+          ? "Attendance marked as present and points awarded."
           : "Attendance marked as absent.",
       });
     },
@@ -580,6 +732,33 @@ export default function ClubAdmin() {
       toast({
         title: "Update failed",
         description: "Failed to update attendance status.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const batchAttendanceMutation = useMutation({
+    mutationFn: async ({ attended, registrationIds }: { attended: boolean; registrationIds: string[] }) => {
+      const res = await apiRequest("POST", "/api/admin/event-registrations/batch-attendance", {
+        updates: registrationIds.map((registrationId) => ({ registrationId, attended })),
+      });
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      setSelectedAttendanceIds([]);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/event-registrations", admin?.clubId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/event-registrations/paged", admin?.clubId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/student-points", admin?.clubId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/global-points-leaderboard"] });
+      toast({
+        title: "Batch attendance updated",
+        description: `${variables.registrationIds.length} registrations marked as ${variables.attended ? "present" : "absent"}.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Batch update failed",
+        description: "Failed to update attendance for selected students.",
         variant: "destructive",
       });
     },
@@ -902,16 +1081,24 @@ export default function ClubAdmin() {
   });
 
   const createStoryMutation = useMutation({
-    mutationFn: async (payload: { caption: string; isHighlight: boolean; file: File }) => {
-      const formData = new FormData();
-      formData.append("file", payload.file);
-      formData.append("type", "club-story");
+    mutationFn: async (payload: { caption: string; isHighlight: boolean; file?: File | null }) => {
+      let mediaUrl = "";
+      let mediaType: "image" | "video" | "text" = "text";
 
-      const uploadRes = await apiRequest("POST", "/api/upload", formData);
-      const uploadData = await uploadRes.json();
+      if (payload.file) {
+        const formData = new FormData();
+        formData.append("file", payload.file);
+        formData.append("type", "club-story");
+
+        const uploadRes = await apiRequest("POST", "/api/upload", formData);
+        const uploadData = await uploadRes.json();
+        mediaUrl = uploadData.url;
+        mediaType = payload.file.type.startsWith("video/") ? "video" : "image";
+      }
 
       const res = await apiRequest("POST", "/api/admin/stories", {
-        mediaUrl: uploadData.url,
+        mediaUrl,
+        mediaType,
         caption: payload.caption,
         isHighlight: payload.isHighlight,
       });
@@ -923,10 +1110,11 @@ export default function ClubAdmin() {
       setStoryCaption("");
       setStoryFile(null);
       setStoryPreview(null);
+      setStoryPreviewType(null);
       setStoryAsHighlight(true);
       toast({
         title: "Story uploaded",
-        description: "Your story is now live.",
+        description: "Your story is now live for 24 hours.",
       });
     },
     onError: (error: any) => {
@@ -1166,6 +1354,413 @@ export default function ClubAdmin() {
     prevPendingRegCount.current = pendingCount;
   }, [eventRegistrations, toast]);
 
+  const attendanceRegistrationsGridRows = useMemo<AttendanceRegistrationGridRow[]>(() => {
+    return currentEventRegistrations.map((registration: any, index: number) => {
+      const studentGlobalData = globalLeaderboard.find((sp) => sp.studentEmail === registration.studentEmail);
+      return {
+        srNo: index + 1,
+        id: registration.id,
+        studentName: registration.studentName,
+        enrollmentNumber: registration.enrollmentNumber,
+        department: registration.department,
+        studentEmail: registration.studentEmail,
+        totalPoints: studentGlobalData?.totalPoints || 0,
+        attendance: registration.attended ? "Present (+10)" : "Not Marked",
+        attended: !!registration.attended,
+      };
+    });
+  }, [currentEventRegistrations, globalLeaderboard]);
+
+  const attendanceRegistrationsGridColumns = useMemo<ColDef<AttendanceRegistrationGridRow>[]>(() => [
+    {
+      colId: "select",
+      headerName: "",
+      checkboxSelection: true,
+      headerCheckboxSelection: true,
+      width: 60,
+      pinned: "left",
+    },
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "studentName", headerName: "Student", flex: 1.1, minWidth: 180 },
+    { field: "enrollmentNumber", headerName: "Enrollment", minWidth: 150 },
+    { field: "department", headerName: "Department", minWidth: 160 },
+    { field: "studentEmail", headerName: "Email", flex: 1.2, minWidth: 220 },
+    {
+      field: "totalPoints",
+      headerName: "Total Points",
+      minWidth: 130,
+      valueFormatter: (params) => `${params.value ?? 0} pts`,
+    },
+    {
+      field: "attendance",
+      headerName: "Attendance",
+      minWidth: 130,
+      cellClass: (params) => (params.data?.attended ? "text-green-600 dark:text-green-400 font-medium" : "text-muted-foreground"),
+    },
+    {
+      field: "attended",
+      headerName: "Action",
+      minWidth: 140,
+      sortable: false,
+      filter: false,
+      cellRenderer: (params: any) => {
+        const row = params.data as AttendanceRegistrationGridRow;
+        const disabled = updateAttendanceMutation.isPending || batchAttendanceMutation.isPending;
+        const label = row?.attended ? "Mark Absent" : "Mark Present";
+        const className = row?.attended
+          ? "px-3 py-1 text-xs rounded-md bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+          : "px-3 py-1 text-xs rounded-md bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50";
+
+        return (
+          <button
+            type="button"
+            className={className}
+            disabled={disabled}
+            onClick={() =>
+              updateAttendanceMutation.mutate({
+                registrationId: row.id,
+                attended: !row.attended,
+              })
+            }
+          >
+            {label}
+          </button>
+        );
+      },
+    },
+  ], [batchAttendanceMutation.isPending, updateAttendanceMutation]);
+
+  const eventRegistrationStats = useMemo(() => {
+    const stats = new Map<string, { registrations: number; attended: number }>();
+    for (const registration of eventRegistrations) {
+      const current = stats.get(registration.eventId) || { registrations: 0, attended: 0 };
+      current.registrations += 1;
+      if (registration.attended) current.attended += 1;
+      stats.set(registration.eventId, current);
+    }
+    return stats;
+  }, [eventRegistrations]);
+
+  const attendanceEventRows = useMemo<AttendanceEventRow[]>(() => {
+    return clubEvents.map((event, index) => {
+      const stats = eventRegistrationStats.get(event.id) || { registrations: 0, attended: 0 };
+      const attendanceRate = stats.registrations > 0
+        ? Math.round((stats.attended / stats.registrations) * 100)
+        : 0;
+
+      return {
+        srNo: index + 1,
+        id: event.id,
+        title: event.title,
+        date: formatDate(event.date),
+        time: event.time || "Time TBA",
+        location: event.location || "Location TBA",
+        registrations: stats.registrations,
+        attended: stats.attended,
+        attendanceRate,
+      };
+    });
+  }, [clubEvents, eventRegistrationStats]);
+
+  const attendanceGridColumns = useMemo<ColDef<AttendanceEventRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "title", headerName: "Event", flex: 1.4, minWidth: 220 },
+    { field: "date", headerName: "Date", minWidth: 120 },
+    { field: "time", headerName: "Time", minWidth: 130 },
+    { field: "location", headerName: "Location", flex: 1, minWidth: 180 },
+    { field: "registrations", headerName: "Registered", minWidth: 120 },
+    { field: "attended", headerName: "Attended", minWidth: 110 },
+    {
+      field: "attendanceRate",
+      headerName: "Rate",
+      minWidth: 100,
+      valueFormatter: (params) => `${params.value ?? 0}%`,
+    },
+  ], []);
+
+  const selectedAttendanceEvent = useMemo(
+    () => clubEvents.find((event) => event.id === expandedEventId) || null,
+    [clubEvents, expandedEventId],
+  );
+
+  const filteredSortedEvents = useMemo(() => {
+    return clubEvents
+      .filter((event) => {
+        if (eventSearch) {
+          const searchLower = eventSearch.toLowerCase();
+          return (
+            event.title.toLowerCase().includes(searchLower) ||
+            event.description?.toLowerCase().includes(searchLower) ||
+            event.location?.toLowerCase().includes(searchLower)
+          );
+        }
+        return true;
+      })
+      .filter((event) => {
+        const eventDate = new Date(event.date || new Date());
+        const now = new Date();
+        switch (eventFilter) {
+          case "upcoming":
+            return eventDate > now;
+          case "past":
+            return eventDate <= now;
+          default:
+            return true;
+        }
+      })
+      .sort((a, b) => {
+        switch (eventSort) {
+          case "date-asc":
+            return new Date(a.date || new Date()).getTime() - new Date(b.date || new Date()).getTime();
+          case "date-desc":
+            return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
+          case "title-asc":
+            return a.title.localeCompare(b.title);
+          case "title-desc":
+            return b.title.localeCompare(a.title);
+          case "registrations-desc": {
+            const aRegs = eventRegistrations.filter((registration) => registration.eventId === a.id).length;
+            const bRegs = eventRegistrations.filter((registration) => registration.eventId === b.id).length;
+            return bRegs - aRegs;
+          }
+          default:
+            return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
+        }
+      });
+  }, [clubEvents, eventFilter, eventRegistrations, eventSearch, eventSort]);
+
+  const eventsGridRows = useMemo<EventsGridRow[]>(() => {
+    return filteredSortedEvents.map((event, index) => {
+      const eventRegs = eventRegistrations.filter((registration) => registration.eventId === event.id);
+      const attended = eventRegs.filter((registration) => registration.attended).length;
+      const isUpcoming = new Date(event.date || new Date()) > new Date();
+
+      return {
+        srNo: index + 1,
+        id: event.id,
+        title: event.title,
+        date: formatDate(event.date),
+        time: event.time || "Time TBA",
+        location: event.location || "Location TBA",
+        status: isUpcoming ? "Upcoming" : "Past",
+        registrations: eventRegs.length,
+        attended,
+        attendanceRate: eventRegs.length > 0 ? Math.round((attended / eventRegs.length) * 100) : 0,
+      };
+    });
+  }, [filteredSortedEvents, eventRegistrations]);
+
+  const eventsGridColumns = useMemo<ColDef<EventsGridRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "title", headerName: "Event", flex: 1.4, minWidth: 220 },
+    { field: "date", headerName: "Date", minWidth: 120 },
+    { field: "time", headerName: "Time", minWidth: 120 },
+    { field: "location", headerName: "Location", flex: 1, minWidth: 180 },
+    { field: "status", headerName: "Status", minWidth: 110 },
+    { field: "registrations", headerName: "Registered", minWidth: 120 },
+    {
+      field: "attendanceRate",
+      headerName: "Attendance",
+      minWidth: 120,
+      valueFormatter: (params) => `${params.value ?? 0}%`,
+    },
+  ], []);
+
+  const filteredMembers = useMemo(() => {
+    return memberships
+      .filter((membership) => {
+        if (memberSearch) {
+          const searchLower = memberSearch.toLowerCase();
+          return (
+            membership.studentName.toLowerCase().includes(searchLower) ||
+            membership.studentEmail.toLowerCase().includes(searchLower) ||
+            membership.enrollmentNumber.toLowerCase().includes(searchLower) ||
+            membership.department.toLowerCase().includes(searchLower)
+          );
+        }
+        return true;
+      })
+      .filter((membership) => memberFilter === "all" || membership.status === memberFilter)
+      .sort((a, b) => {
+        if (a.status === "pending" && b.status !== "pending") return -1;
+        if (a.status !== "pending" && b.status === "pending") return 1;
+        return new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime();
+      });
+  }, [memberFilter, memberSearch, memberships]);
+
+  const membersGridRows = useMemo<MembersGridRow[]>(() => {
+    return filteredMembers.map((membership, index) => ({
+      srNo: index + 1,
+      id: membership.id,
+      studentName: membership.studentName,
+      enrollmentNumber: membership.enrollmentNumber,
+      studentEmail: membership.studentEmail,
+      department: membership.department,
+      status: membership.status,
+      joinedAt: formatDate(membership.joinedAt),
+    }));
+  }, [filteredMembers]);
+
+  const membersGridColumns = useMemo<ColDef<MembersGridRow>[]>(() => [
+    {
+      colId: "select",
+      headerName: "",
+      checkboxSelection: true,
+      headerCheckboxSelection: true,
+      width: 60,
+      pinned: "left",
+    },
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "studentName", headerName: "Name", flex: 1.2, minWidth: 180 },
+    { field: "enrollmentNumber", headerName: "Enrollment", minWidth: 140 },
+    { field: "studentEmail", headerName: "Email", flex: 1.2, minWidth: 220 },
+    { field: "department", headerName: "Department", minWidth: 160 },
+    { field: "status", headerName: "Status", minWidth: 120 },
+    { field: "joinedAt", headerName: "Joined", minWidth: 120 },
+  ], []);
+
+  const selectedEventFromGrid = useMemo(
+    () => filteredSortedEvents.find((event) => event.id === selectedEventGridId) || null,
+    [filteredSortedEvents, selectedEventGridId],
+  );
+
+  const selectedMemberFromGrid = useMemo(
+    () => filteredMembers.find((membership) => membership.id === selectedMemberGridId) || null,
+    [filteredMembers, selectedMemberGridId],
+  );
+
+  const messagesGridRows = useMemo<MessagesGridRow[]>(() => {
+    return [...messages]
+      .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
+      .map((message, index) => ({
+        srNo: index + 1,
+        id: message.id,
+        senderName: message.senderName,
+        senderEmail: message.senderEmail,
+        enrollmentNumber: message.enrollmentNumber,
+        subject: message.subject,
+        sentDate: formatDate(message.sentAt),
+        sentTime: new Date(message.sentAt).toLocaleTimeString(),
+        status: message.read ? "Read" : "Unread",
+      }));
+  }, [messages]);
+
+  const messagesGridColumns = useMemo<ColDef<MessagesGridRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "senderName", headerName: "Student", flex: 1.1, minWidth: 170 },
+    { field: "subject", headerName: "Subject", flex: 1.2, minWidth: 220 },
+    { field: "senderEmail", headerName: "Email", flex: 1.2, minWidth: 220 },
+    { field: "enrollmentNumber", headerName: "Enrollment", minWidth: 140 },
+    { field: "sentDate", headerName: "Date", minWidth: 120 },
+    { field: "sentTime", headerName: "Time", minWidth: 120 },
+    { field: "status", headerName: "Status", minWidth: 110 },
+  ], []);
+
+  const selectedMessageFromGrid = useMemo(
+    () => messages.find((message) => message.id === selectedMessageGridId) || null,
+    [messages, selectedMessageGridId],
+  );
+
+  const sortedAnnouncements = useMemo(() => {
+    return [...announcements].sort((a: any, b: any) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [announcements]);
+
+  const announcementsGridRows = useMemo<AnnouncementsGridRow[]>(() => {
+    return sortedAnnouncements.map((announcement: any, index: number) => ({
+      srNo: index + 1,
+      id: announcement.id,
+      title: announcement.title,
+      authorName: announcement.authorName,
+      target: announcement.target || "all",
+      createdDate: formatDate(announcement.createdAt),
+      status: announcement.isRead ? "Read" : "Unread",
+      pinned: announcement.pinned ? "Pinned" : "-",
+    }));
+  }, [sortedAnnouncements]);
+
+  const announcementsGridColumns = useMemo<ColDef<AnnouncementsGridRow>[]>(() => [
+    { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
+    { field: "title", headerName: "Title", flex: 1.5, minWidth: 260 },
+    { field: "authorName", headerName: "Author", minWidth: 150 },
+    { field: "target", headerName: "Target", minWidth: 110 },
+    { field: "pinned", headerName: "Pinned", minWidth: 95 },
+    { field: "status", headerName: "Status", minWidth: 110 },
+    { field: "createdDate", headerName: "Date", minWidth: 120 },
+  ], []);
+
+  const selectedAnnouncementFromGrid = useMemo(
+    () => sortedAnnouncements.find((announcement: any) => announcement.id === selectedAnnouncementGridId) || null,
+    [selectedAnnouncementGridId, sortedAnnouncements],
+  );
+
+  const leadershipPositions = useMemo(
+    () => [
+      { key: "president", title: "President", description: "Overall club leadership and representation" },
+      { key: "vice-president", title: "Vice President", description: "Supports president and handles operations" },
+      { key: "secretary", title: "Secretary", description: "Manages communications and records" },
+      { key: "treasurer", title: "Treasurer", description: "Handles financial matters and budgeting" },
+      { key: "event-coordinator", title: "Event Coordinator", description: "Organizes and manages club events" },
+      { key: "public-relations", title: "Public Relations", description: "Manages publicity and member outreach" },
+      { key: "member", title: "Member Representative", description: "Represents member interests and feedback" },
+    ],
+    [],
+  );
+
+  const leadershipByRole = useMemo(() => {
+    const normalizeLeadershipRoleKey = (role: string) => {
+      const normalized = role.trim().toLowerCase().replace(/\s+/g, "-");
+      if (normalized === "member-representative") return "member";
+      return normalized;
+    };
+
+    const map = new Map<string, ClubLeadership[]>();
+    leadership.forEach((leader) => {
+      const roleKey = normalizeLeadershipRoleKey(leader.role || "");
+      if (!roleKey) return;
+      const existing = map.get(roleKey) || [];
+      existing.push(leader);
+      map.set(roleKey, existing);
+    });
+    return map;
+  }, [leadership]);
+
+  const activeLeadersCount = useMemo(() => {
+    return new Set(leadership.map((leader) => leader.studentEmail || `${leader.studentName}-${leader.role}`)).size;
+  }, [leadership]);
+
+  useEffect(() => {
+    if (selectedEventGridId && !filteredSortedEvents.some((event) => event.id === selectedEventGridId)) {
+      setSelectedEventGridId(null);
+    }
+  }, [filteredSortedEvents, selectedEventGridId]);
+
+  useEffect(() => {
+    if (selectedMemberGridId && !filteredMembers.some((membership) => membership.id === selectedMemberGridId)) {
+      setSelectedMemberGridId(null);
+    }
+  }, [filteredMembers, selectedMemberGridId]);
+
+  useEffect(() => {
+    if (selectedMessageGridId && !messages.some((message) => message.id === selectedMessageGridId)) {
+      setSelectedMessageGridId(null);
+    }
+  }, [messages, selectedMessageGridId]);
+
+  useEffect(() => {
+    if (
+      selectedAnnouncementGridId &&
+      !sortedAnnouncements.some((announcement: any) => announcement.id === selectedAnnouncementGridId)
+    ) {
+      setSelectedAnnouncementGridId(null);
+    }
+  }, [selectedAnnouncementGridId, sortedAnnouncements]);
+
+  const attendanceGridThemeClass = theme === "dark" ? "ag-theme-quartz-dark" : "ag-theme-quartz";
+
   return (
     <div className="min-h-screen py-16 md:py-20 bg-background">
       {showAuthLoading && (
@@ -1342,8 +1937,8 @@ export default function ClubAdmin() {
             <h3 className="font-semibold mb-4">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-3">
               <Button
-                onClick={() => !club?.isFrozen && setCreatingEvent(true)}
-                className="h-auto p-4 flex flex-col items-center gap-2 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                onClick={() => navigateToSection("events", { openCreateEvent: true })}
+                className="h-auto p-4 flex flex-col items-center gap-2 border-border/80 bg-card hover:bg-blue-500/10 hover:border-blue-500/40 transition-colors disabled:bg-card disabled:border-border/60"
                 variant="outline"
                 disabled={club?.isFrozen}
                 title={club?.isFrozen ? "Cannot create events - club is frozen" : "Create a new event"}
@@ -1353,34 +1948,33 @@ export default function ClubAdmin() {
               </Button>
               <Button
                 onClick={() => {
-                  setActiveTab("settings");
-                  setEditingClub(true);
+                  navigateToSection("settings", { startEditingClub: true });
                 }}
-                className="h-auto p-4 flex flex-col items-center gap-2 hover:bg-green-50 hover:border-green-200 transition-colors"
+                className="h-auto p-4 flex flex-col items-center gap-2 border-border/80 bg-card hover:bg-emerald-500/10 hover:border-emerald-500/40 transition-colors"
                 variant="outline"
               >
                 <Edit className="w-6 h-6 text-green-600" />
                 <span className="text-sm font-medium">Edit Club</span>
               </Button>
               <Button
-                onClick={() => setActiveTab("members")}
-                className="h-auto p-4 flex flex-col items-center gap-2 hover:bg-purple-50 hover:border-purple-200 transition-colors"
+                onClick={() => navigateToSection("members")}
+                className="h-auto p-4 flex flex-col items-center gap-2 border-border/80 bg-card hover:bg-violet-500/10 hover:border-violet-500/40 transition-colors"
                 variant="outline"
               >
                 <Users className="w-6 h-6 text-purple-600" />
                 <span className="text-sm font-medium">Manage Members</span>
               </Button>
               <Button
-                onClick={() => setActiveTab("attendance")}
-                className="h-auto p-4 flex flex-col items-center gap-2 hover:bg-orange-50 hover:border-orange-200 transition-colors"
+                onClick={() => navigateToSection("attendance")}
+                className="h-auto p-4 flex flex-col items-center gap-2 border-border/80 bg-card hover:bg-orange-500/10 hover:border-orange-500/40 transition-colors"
                 variant="outline"
               >
                 <CheckSquare className="w-6 h-6 text-orange-600" />
                 <span className="text-sm font-medium">Track Attendance</span>
               </Button>
               <Button
-                onClick={() => setActiveTab("stories")}
-                className="h-auto p-4 flex flex-col items-center gap-2 hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+                onClick={() => navigateToSection("stories")}
+                className="h-auto p-4 flex flex-col items-center gap-2 border-border/80 bg-card hover:bg-indigo-500/10 hover:border-indigo-500/40 transition-colors disabled:bg-card disabled:border-border/60"
                 variant="outline"
                 disabled={club?.isFrozen}
                 title={club?.isFrozen ? "Cannot upload stories - club is frozen" : "Upload club stories"}
@@ -1423,6 +2017,7 @@ export default function ClubAdmin() {
           </div>
         </Card>
 
+        <div ref={adminSectionsRef}>
         <Tabs value={activeTab} onValueChange={club?.isFrozen ? undefined : setActiveTab} className="space-y-6">
           <TabsList className={`grid w-full grid-cols-11 relative transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <TabsTrigger value="dashboard" disabled={club?.isFrozen}>Dashboard</TabsTrigger>
@@ -1670,203 +2265,141 @@ export default function ClubAdmin() {
               </div>
             </Card>
 
-            <div className="grid gap-4">
-              {clubEvents
-                .filter(event => {
-                  // Apply search filter
-                  if (eventSearch) {
-                    const searchLower = eventSearch.toLowerCase();
-                    return event.title.toLowerCase().includes(searchLower) ||
-                           event.description?.toLowerCase().includes(searchLower) ||
-                           event.location?.toLowerCase().includes(searchLower);
-                  }
-                  return true;
-                })
-                .filter(event => {
-                  // Apply status filter
-                  const eventDate = new Date(event.date || new Date());
-                  const now = new Date();
-                  switch (eventFilter) {
-                    case 'upcoming':
-                      return eventDate > now;
-                    case 'past':
-                      return eventDate <= now;
-                    default:
-                      return true;
-                  }
-                })
-                .sort((a, b) => {
-                  // Apply sorting
-                  switch (eventSort) {
-                    case 'date-asc':
-                      return new Date(a.date || new Date()).getTime() - new Date(b.date || new Date()).getTime();
-                    case 'date-desc':
-                      return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
-                    case 'title-asc':
-                      return a.title.localeCompare(b.title);
-                    case 'title-desc':
-                      return b.title.localeCompare(a.title);
-                    case 'registrations-desc':
-                      const aRegs = eventRegistrations.filter(r => r.eventId === a.id).length;
-                      const bRegs = eventRegistrations.filter(r => r.eventId === b.id).length;
-                      return bRegs - aRegs;
-                    default:
-                      return new Date(b.date || new Date()).getTime() - new Date(a.date || new Date()).getTime();
-                  }
-                })
-                .map((event) => {
-                  const eventRegs = eventRegistrations.filter(r => r.eventId === event.id);
-                  const pendingRegs = eventRegs.filter(r => !r.status || r.status === 'pending');
-                  const attendedCount = eventRegs.filter(r => r.attended).length;
-                  const isUpcoming = new Date(event.date || new Date()) > new Date();
+            <Card className="p-4 border border-border/70 bg-card/80">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold">Events Grid</h3>
+                <span className="text-xs text-muted-foreground">Click a row to open event details and actions</span>
+              </div>
+              <div className={`${attendanceGridThemeClass} attendance-ag-grid`} style={{ height: 360, width: "100%" }}>
+                <AgGridReact<EventsGridRow>
+                  rowData={eventsGridRows}
+                  columnDefs={eventsGridColumns}
+                  defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                  animateRows
+                  rowSelection="single"
+                  pagination
+                  paginationPageSize={8}
+                  onRowClicked={(event: RowClickedEvent<EventsGridRow>) => {
+                    if (event.data?.id) {
+                      setSelectedEventGridId(event.data.id);
+                    }
+                  }}
+                />
+              </div>
+            </Card>
 
-                  return (
-                    <Card key={event.id} className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="font-semibold text-lg">{event.title}</h3>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={isUpcoming ? "default" : "secondary"}>
-                                {isUpcoming ? 'Upcoming' : 'Past'}
-                              </Badge>
-                              {event.imageUrl && (
-                                <Badge variant="outline" className="text-xs">
-                                  <Image className="w-3 h-3 mr-1" />
-                                  Media
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                            <div>
-                              <p className="text-sm text-muted-foreground">
-                                <Calendar className="w-4 h-4 inline mr-1" />
-                                {formatDate(event.date)} at {event.time}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                <MapPin className="w-4 h-4 inline mr-1" />
-                                {event.location}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-muted-foreground">
-                                <Users className="w-4 h-4 inline mr-1" />
-                                {eventRegs.length} registered
-                              </p>
-                              {!isUpcoming && (
-                                <p className="text-sm text-muted-foreground">
-                                  <CheckCircle className="w-4 h-4 inline mr-1" />
-                                  {attendedCount} attended ({eventRegs.length > 0 ? Math.round((attendedCount / eventRegs.length) * 100) : 0}%)
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          {event.description && (
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                              {event.description}
-                            </p>
-                          )}
-                          <div className="mt-3 pt-3 border-t border-border">
-                            <p className="text-xs font-medium text-muted-foreground mb-2">Registration Requests</p>
-                            {pendingRegs.length === 0 ? (
-                              <p className="text-xs text-muted-foreground">No pending requests for this event.</p>
-                            ) : (
-                              <ul className="space-y-2">
-                                {pendingRegs.map((registration) => (
-                                  <li key={registration.id} className="flex items-center justify-between text-sm">
-                                    <div>
-                                      <span className="font-medium">{registration.studentName}</span>
-                                      <span className="text-muted-foreground"> G�� {registration.enrollmentNumber}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="secondary">Pending</Badge>
-                                      <Button
-                                        size="sm"
-                                        onClick={() => updateRegistrationStatusMutation.mutate({
-                                          registrationId: registration.id,
-                                          status: 'approved'
-                                        })}
-                                        disabled={updateRegistrationStatusMutation.isPending}
-                                      >
-                                        Approve
-                                      </Button>
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex gap-2 ml-4">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEditingEventId(event.id)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => deleteMutation.mutate(event.id)}
-                            disabled={deleteMutation.isPending}
-                          >
-                            Delete
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                              if (confirm("This will permanently delete the event chat and all its messages. Continue?")) {
-                                deleteEventChatMutation.mutate(event.id);
-                              }
-                            }}
-                            disabled={deleteEventChatMutation.isPending}
-                          >
-                            Delete Chat
-                          </Button>
-                        </div>
+            {selectedEventFromGrid && (() => {
+              const eventRegs = eventRegistrations.filter((registration) => registration.eventId === selectedEventFromGrid.id);
+              const pendingRegs = eventRegs.filter((registration) => !registration.status || registration.status === "pending");
+              const attendedCount = eventRegs.filter((registration) => registration.attended).length;
+              const isUpcoming = new Date(selectedEventFromGrid.date || new Date()) > new Date();
+
+              return (
+                <Card className="p-5 border border-border/80 bg-card/90">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-semibold">{selectedEventFromGrid.title}</h3>
+                        <Badge variant={isUpcoming ? "default" : "secondary"}>{isUpcoming ? "Upcoming" : "Past"}</Badge>
+                        {selectedEventFromGrid.imageUrl && <Badge variant="outline">Media</Badge>}
                       </div>
-                    </Card>
-                  );
-                })}
-              {clubEvents.filter(event => {
-                if (eventSearch) {
-                  const searchLower = eventSearch.toLowerCase();
-                  return event.title.toLowerCase().includes(searchLower) ||
-                         event.description?.toLowerCase().includes(searchLower) ||
-                         event.location?.toLowerCase().includes(searchLower);
-                }
-                return true;
-              }).filter(event => {
-                const eventDate = new Date(event.date || new Date());
-                const now = new Date();
-                switch (eventFilter) {
-                  case 'upcoming':
-                    return eventDate > now;
-                  case 'past':
-                    return eventDate <= now;
-                  default:
-                    return true;
-                }
-              }).length === 0 && (
-                <Card className="p-8 text-center">
-                  <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    {eventSearch ? 'No events match your search.' : 'No events found for the selected filter.'}
-                  </p>
-                  {!eventSearch && (
-                    <Button
-                      className="mt-4"
-                      onClick={() => setCreatingEvent(true)}
-                    >
-                      Create Your First Event
-                    </Button>
-                  )}
+                      <p className="text-sm text-muted-foreground">
+                        <Calendar className="w-4 h-4 inline mr-1" />
+                        {formatDate(selectedEventFromGrid.date)} at {selectedEventFromGrid.time || "Time TBA"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4 inline mr-1" />
+                        {selectedEventFromGrid.location || "Location TBA"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        <Users className="w-4 h-4 inline mr-1" />
+                        {eventRegs.length} registered{!isUpcoming ? `, ${attendedCount} attended (${eventRegs.length > 0 ? Math.round((attendedCount / eventRegs.length) * 100) : 0}%)` : ""}
+                      </p>
+                      {selectedEventFromGrid.description && (
+                        <p className="text-sm text-muted-foreground leading-relaxed">{selectedEventFromGrid.description}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setEditingEventId(selectedEventFromGrid.id)}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm(`Are you sure you want to delete "${selectedEventFromGrid.title}"?`)) {
+                            deleteMutation.mutate(selectedEventFromGrid.id);
+                          }
+                        }}
+                        disabled={deleteMutation.isPending}
+                      >
+                        Delete
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm("This will permanently delete the event chat and all its messages. Continue?")) {
+                            deleteEventChatMutation.mutate(selectedEventFromGrid.id);
+                          }
+                        }}
+                        disabled={deleteEventChatMutation.isPending}
+                      >
+                        Delete Chat
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-border">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Registration Requests</p>
+                    {pendingRegs.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No pending requests for this event.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {pendingRegs.map((registration) => (
+                          <li key={registration.id} className="flex items-center justify-between text-sm">
+                            <div>
+                              <span className="font-medium">{registration.studentName}</span>
+                              <span className="text-muted-foreground"> · {registration.enrollmentNumber}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary">Pending</Badge>
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  updateRegistrationStatusMutation.mutate({
+                                    registrationId: registration.id,
+                                    status: "approved",
+                                  })
+                                }
+                                disabled={updateRegistrationStatusMutation.isPending}
+                              >
+                                Approve
+                              </Button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </Card>
-              )}
-            </div>
+              );
+            })()}
+
+            {eventsGridRows.length === 0 && (
+              <Card className="p-8 text-center">
+                <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">
+                  {eventSearch ? "No events match your search." : "No events found for the selected filter."}
+                </p>
+                {!eventSearch && (
+                  <Button className="mt-4" onClick={() => setCreatingEvent(true)}>
+                    Create Your First Event
+                  </Button>
+                )}
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="attendance" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -1879,30 +2412,36 @@ export default function ClubAdmin() {
               </div>
             </div>
 
-            {/* Points and Badges Leaderboard */}
-            <Card className="p-6">
+            <Card className="p-6 border border-border/70 bg-card/80">
               <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Award className="w-5 h-5" />
+                <Award className="w-5 h-5 text-primary" />
                 Global Points & Badges Leaderboard
               </h3>
               {globalLeaderboard.length > 0 ? (
                 <div className="space-y-3">
                   {globalLeaderboard.slice(0, 10).map((student, index) => (
-                    <div key={student.studentEmail} className="flex items-center justify-between p-3 border border-border rounded-lg">
+                    <div
+                      key={student.studentEmail}
+                      className="flex items-center justify-between p-3 rounded-lg border border-border/70 bg-muted/15 hover:bg-muted/30 transition-colors"
+                    >
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-sm">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/15 text-primary font-bold text-sm dark:bg-primary/25">
                           {index + 1}
                         </div>
                         <div>
                           <p className="font-medium">{student.studentName}</p>
                           <p className="text-sm text-muted-foreground">
-                            {student.enrollmentNumber} G�� {student.totalPoints} total points
+                            {student.enrollmentNumber} · {student.totalPoints} total points
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {student.badges?.map((badge: string, badgeIndex: number) => (
-                          <Badge key={badgeIndex} variant="outline" className="text-xs">
+                          <Badge
+                            key={badgeIndex}
+                            variant="outline"
+                            className="text-xs border-primary/25 bg-primary/10 text-foreground dark:border-primary/35 dark:bg-primary/20"
+                          >
                             {badge}
                           </Badge>
                         ))}
@@ -1915,118 +2454,172 @@ export default function ClubAdmin() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No students have earned points yet. Points will appear here when students start attending events!
+                  No students have earned points yet. Points will appear here when students start attending events.
                 </p>
               )}
             </Card>
 
             <div className="space-y-4">
-              {clubEvents.map((event) => {
-                const eventRegs = eventRegistrations.filter(r => r.eventId === event.id);
-                
-                return (
-                  <Card key={event.id} className="p-4">
-                    <div 
-                      className="flex justify-between items-start mb-4 cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
-                      onClick={() => setExpandedEventId(expandedEventId === event.id ? null : event.id)}
-                    >
-                      <div className="flex-1">
-                        <h3 className="font-semibold">{event.title}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(event.date)} at {event.time}
-                        </p>
-                        <p className="text-sm text-muted-foreground">{event.location}</p>
-                      </div>
-                      <div className="text-right">
-                        <Badge variant="secondary">
-                          {eventRegs.length} registered
-                        </Badge>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {expandedEventId === event.id ? "G�+ Hide" : "G�� Show"} registrations
-                        </p>
-                      </div>
+              <Card className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold">Events Grid</h3>
+                  <span className="text-xs text-muted-foreground">Click any row to open attendance details</span>
+                </div>
+                <div className={`${attendanceGridThemeClass} attendance-ag-grid`} style={{ height: 340, width: "100%" }}>
+                  <AgGridReact<AttendanceEventRow>
+                    rowData={attendanceEventRows}
+                    columnDefs={attendanceGridColumns}
+                    pagination
+                    paginationPageSize={10}
+                    rowSelection="single"
+                    animateRows
+                    onRowClicked={(event: RowClickedEvent<AttendanceEventRow>) => {
+                      const selectedId = event.data?.id;
+                      if (!selectedId) return;
+                      setExpandedEventId(selectedId);
+                      setAttendancePage(1);
+                      setAttendanceSearch("");
+                      setAttendanceStatusFilter("all");
+                      setAttendanceMarkFilter("all");
+                      setSelectedAttendanceIds([]);
+                    }}
+                  />
+                </div>
+              </Card>
+
+              {selectedAttendanceEvent && (
+                <Card className="p-4">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <h3 className="font-semibold">{selectedAttendanceEvent.title}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(selectedAttendanceEvent.date)} at {selectedAttendanceEvent.time} · {selectedAttendanceEvent.location}
+                      </p>
+                    </div>
+                    <Badge variant="secondary">
+                      {currentEventRegistrationsPagination.total} registered
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-3 mt-4 pt-4 border-t border-border">
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                      <Input
+                        placeholder="Search by name, email, enrollment"
+                        value={attendanceSearch}
+                        onChange={(e) => setAttendanceSearch(e.target.value)}
+                        className="lg:col-span-2"
+                      />
+                      <Select value={attendanceStatusFilter} onValueChange={(value: any) => setAttendanceStatusFilter(value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Registration status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All registration statuses</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="approved">Approved</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={attendanceMarkFilter} onValueChange={(value: any) => setAttendanceMarkFilter(value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Attendance status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All attendance statuses</SelectItem>
+                          <SelectItem value="pending">Not marked</SelectItem>
+                          <SelectItem value="present">Present</SelectItem>
+                          <SelectItem value="absent">Absent</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
 
-                    {expandedEventId === event.id && eventRegs.length > 0 && (
-                      <div className="space-y-2 mt-4 pt-4 border-t border-border">
-                        {eventRegs.map((registration) => {
-                          const studentGlobalData = globalLeaderboard.find(sp => sp.studentEmail === registration.studentEmail);
-                          return (
-                            <div key={registration.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-3">
-                                  <div>
-                                    <p className="font-medium">{registration.studentName}</p>
-                                    <p className="text-sm text-muted-foreground">
-                                      {registration.enrollmentNumber} G�� {registration.department}
-                                    </p>
-                                  </div>
-                                  {studentGlobalData && (
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" className="text-xs">
-                                        {studentGlobalData.totalPoints} total pts
-                                      </Badge>
-                                      {studentGlobalData.badges?.slice(0, 2).map((badge: string, badgeIndex: number) => (
-                                        <Badge key={badgeIndex} variant="secondary" className="text-xs">
-                                          {badge}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm">
-                                  {registration.attended ? (
-                                    <Badge variant="default" className="bg-green-500">Present (+10 pts)</Badge>
-                                  ) : (
-                                    <Badge variant="secondary">Not Marked</Badge>
-                                  )}
-                                </span>
-                                <Button
-                                  variant={registration.attended ? "destructive" : "default"}
-                                  size="sm"
-                                  onClick={() => updateAttendanceMutation.mutate({
-                                    registrationId: registration.id,
-                                    attended: !registration.attended,
-                                    studentData: {
-                                      studentId: registration.studentEmail,
-                                      studentName: registration.studentName,
-                                      studentEmail: registration.studentEmail,
-                                      enrollmentNumber: registration.enrollmentNumber
-                                    }
-                                  })}
-                                  disabled={updateAttendanceMutation.isPending}
-                                >
-                                  {registration.attended ? "Mark Absent" : "Mark Present"}
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    toast({
-                                      title: "Registration approved",
-                                      description: `${registration.studentName} has been approved for ${event.title}`
-                                    });
-                                  }}
-                                >
-                                  Approve
-                                </Button>
-                              </div>
-                            </div>
-                          );
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={selectedAttendanceIds.length === 0 || batchAttendanceMutation.isPending}
+                        onClick={() => batchAttendanceMutation.mutate({
+                          registrationIds: selectedAttendanceIds,
+                          attended: true,
                         })}
-                      </div>
-                    )}
-                    
-                    {expandedEventId === event.id && eventRegs.length === 0 && (
+                      >
+                        Mark Selected Present
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={selectedAttendanceIds.length === 0 || batchAttendanceMutation.isPending}
+                        onClick={() => batchAttendanceMutation.mutate({
+                          registrationIds: selectedAttendanceIds,
+                          attended: false,
+                        })}
+                      >
+                        Mark Selected Absent
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {selectedAttendanceIds.length} selected
+                      </span>
+                    </div>
+
+                    {pagedEventRegistrationsLoading ? (
+                      <div className="py-8 text-center text-sm text-muted-foreground">Loading registrations...</div>
+                    ) : currentEventRegistrations.length > 0 ? (
+                      <>
+                        <div className={`${attendanceGridThemeClass} attendance-ag-grid`} style={{ height: 420, width: "100%" }}>
+                          <AgGridReact<AttendanceRegistrationGridRow>
+                            rowData={attendanceRegistrationsGridRows}
+                            columnDefs={attendanceRegistrationsGridColumns}
+                            defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                            animateRows
+                            rowSelection="multiple"
+                            onSelectionChanged={(event: SelectionChangedEvent<AttendanceRegistrationGridRow>) => {
+                              const selectedIds = event.api.getSelectedRows().map((row) => row.id);
+                              setSelectedAttendanceIds(selectedIds);
+                            }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs text-muted-foreground">Use the checkbox column to select rows.</div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setAttendancePage((prev) => Math.max(1, prev - 1))}
+                              disabled={attendancePage <= 1 || pagedEventRegistrationsLoading}
+                            >
+                              Previous
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                              Page {currentEventRegistrationsPagination.page} of {Math.max(1, currentEventRegistrationsPagination.totalPages)}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                setAttendancePage((prev) =>
+                                  Math.min(Math.max(1, currentEventRegistrationsPagination.totalPages), prev + 1),
+                                )
+                              }
+                              disabled={
+                                pagedEventRegistrationsLoading ||
+                                attendancePage >= Math.max(1, currentEventRegistrationsPagination.totalPages)
+                              }
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
                       <p className="text-sm text-muted-foreground text-center py-4">
-                        No registrations for this event yet
+                        No registrations match this filter.
                       </p>
                     )}
-                  </Card>
-                );
-              })}
+                  </div>
+                </Card>
+              )}
             </div>
           </TabsContent>
 
@@ -2036,45 +2629,51 @@ export default function ClubAdmin() {
               <Badge variant="secondary">{announcements.length} announcements</Badge>
             </div>
 
-            <div className="space-y-4">
-              {announcements.length > 0 ? (
-                [...announcements]
-                  .sort((a, b) => {
-                    // Pinned announcements first
-                    if (a.pinned && !b.pinned) return -1;
-                    if (!a.pinned && b.pinned) return 1;
-                    // Then by date (newest first)
-                    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                  })
-                  .map((announcement: any) => (
-                  <Card key={announcement.id} className={`p-4 ${!announcement.isRead ? 'border-l-4 border-l-primary' : ''} ${announcement.pinned ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20' : ''}`}>
+            {announcements.length > 0 ? (
+              <>
+                <Card className="p-4 border border-border/70 bg-card/80">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold">Announcements Grid</h3>
+                    <span className="text-xs text-muted-foreground">Click a row to open full announcement details</span>
+                  </div>
+                  <div className={`${attendanceGridThemeClass} attendance-ag-grid`} style={{ height: 360, width: "100%" }}>
+                    <AgGridReact<AnnouncementsGridRow>
+                      rowData={announcementsGridRows}
+                      columnDefs={announcementsGridColumns}
+                      defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                      animateRows
+                      rowSelection="single"
+                      pagination
+                      paginationPageSize={8}
+                      onRowClicked={(event: RowClickedEvent<AnnouncementsGridRow>) => {
+                        if (event.data?.id) {
+                          setSelectedAnnouncementGridId(event.data.id);
+                        }
+                      }}
+                    />
+                  </div>
+                </Card>
+
+                {selectedAnnouncementFromGrid && (
+                  <Card
+                    className={`p-4 ${!selectedAnnouncementFromGrid.isRead ? 'border-l-4 border-l-primary' : ''} ${selectedAnnouncementFromGrid.pinned ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20' : ''}`}
+                  >
                     <div className="flex items-start gap-3">
-                      <Bell className={`w-5 h-5 mt-0.5 flex-shrink-0 ${announcement.pinned ? 'text-yellow-500' : 'text-blue-500'}`} />
+                      <Bell className={`w-5 h-5 mt-0.5 flex-shrink-0 ${selectedAnnouncementFromGrid.pinned ? 'text-yellow-500' : 'text-blue-500'}`} />
                       <div className="flex-1">
                         <div className="flex items-start justify-between">
                           <div>
                             <div className="flex items-center gap-2 mb-2">
-                              <h4 className="font-semibold text-lg">{announcement.title}</h4>
-                              {!announcement.isRead && (
+                              <h4 className="font-semibold text-lg">{selectedAnnouncementFromGrid.title}</h4>
+                              {!selectedAnnouncementFromGrid.isRead && (
                                 <Badge variant="default" className="text-xs">New</Badge>
                               )}
                             </div>
                             <p className="text-sm text-muted-foreground">
-                              By {announcement.authorName} G�� {(() => {
-                                const now = new Date();
-                                const announcementDate = new Date(announcement.createdAt);
-                                const diffInHours = Math.floor((now.getTime() - announcementDate.getTime()) / (1000 * 60 * 60));
-
-                                if (diffInHours < 24) {
-                                  return diffInHours <= 1 ? 'Just now' : `${diffInHours} hours ago`;
-                                } else {
-                                  const diffInDays = Math.floor(diffInHours / 24);
-                                  return diffInDays === 1 ? 'Yesterday' : `${diffInDays} days ago`;
-                                }
-                              })()}
+                              By {selectedAnnouncementFromGrid.authorName} · {formatDate(selectedAnnouncementFromGrid.createdAt)}
                             </p>
                           </div>
-                          {announcement.pinned && (
+                          {selectedAnnouncementFromGrid.pinned && (
                             <Badge variant="default" className="bg-yellow-500">
                               Pinned
                             </Badge>
@@ -2082,19 +2681,19 @@ export default function ClubAdmin() {
                         </div>
                         <div className="mt-3">
                           <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                            {announcement.content}
+                            {selectedAnnouncementFromGrid.content}
                           </p>
                         </div>
                         <div className="mt-3 flex items-center gap-2">
                           <Badge variant="outline" className="text-xs">
-                            Target: {announcement.target || 'all'}
+                            Target: {selectedAnnouncementFromGrid.target || 'all'}
                           </Badge>
                         </div>
-                        {!announcement.isRead && (
+                        {!selectedAnnouncementFromGrid.isRead && (
                           <div className="mt-3 flex justify-end">
                             <Button
                               size="sm"
-                              onClick={() => markAnnouncementAsReadMutation.mutate(announcement.id)}
+                              onClick={() => markAnnouncementAsReadMutation.mutate(selectedAnnouncementFromGrid.id)}
                               disabled={markAnnouncementAsReadMutation.isPending}
                             >
                               {markAnnouncementAsReadMutation.isPending ? (
@@ -2114,17 +2713,17 @@ export default function ClubAdmin() {
                       </div>
                     </div>
                   </Card>
-                ))
-              ) : (
-                <Card className="p-8 text-center">
-                  <Bell className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No announcements available</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    University announcements will appear here when posted by administrators.
-                  </p>
-                </Card>
-              )}
-            </div>
+                )}
+              </>
+            ) : (
+              <Card className="p-8 text-center">
+                <Bell className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">No announcements available</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  University announcements will appear here when posted by administrators.
+                </p>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="uploads" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -2307,234 +2906,184 @@ export default function ClubAdmin() {
                 </div>
               </div>
 
-              {/* Bulk Selection for Pending Members */}
-              {memberFilter === 'pending' && memberships.filter(m => m.status === 'pending').length > 0 && (
-                <div className="mt-4 pt-4 border-t flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="select-all"
-                    checked={selectedMembers.length === memberships.filter(m => m.status === 'pending').length && memberships.filter(m => m.status === 'pending').length > 0}
-                    onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="rounded border-gray-300"
-                  />
-                  <label htmlFor="select-all" className="text-sm font-medium">
-                    Select all pending members ({memberships.filter(m => m.status === 'pending').length})
-                  </label>
-                  {selectedMembers.length > 0 && (
-                    <span className="text-sm text-muted-foreground ml-auto">
-                      {selectedMembers.length} selected
-                    </span>
-                  )}
+              {memberFilter === 'pending' && memberships.filter((m) => m.status === 'pending').length > 0 && (
+                <div className="mt-4 pt-4 border-t text-sm text-muted-foreground">
+                  Use the checkbox column in the grid below to select pending members for bulk approval or rejection.
                 </div>
               )}
             </Card>
 
-            <div className="space-y-4">
-              {memberships
-                .filter(membership => {
-                  // Apply search filter
-                  if (memberSearch) {
-                    const searchLower = memberSearch.toLowerCase();
-                    return membership.studentName.toLowerCase().includes(searchLower) ||
-                           membership.studentEmail.toLowerCase().includes(searchLower) ||
-                           membership.enrollmentNumber.toLowerCase().includes(searchLower) ||
-                           membership.department.toLowerCase().includes(searchLower);
-                  }
-                  return true;
-                })
-                .filter(membership => {
-                  // Apply status filter
-                  return memberFilter === 'all' || membership.status === memberFilter;
-                })
-                .sort((a, b) => {
-                  // Sort by status (pending first), then by date
-                  if (a.status === 'pending' && b.status !== 'pending') return -1;
-                  if (a.status !== 'pending' && b.status === 'pending') return 1;
-                  return new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime();
-                })
-                .map((membership) => (
-                  <Card key={membership.id} className={`p-4 transition-all hover:shadow-md ${selectedMembers.includes(membership.id) ? 'ring-2 ring-blue-500 bg-blue-50/50' : ''}`}>
-                    <div className="flex justify-between items-start">
-                      {/* Checkbox for bulk selection (only for pending members) */}
-                      {membership.status === 'pending' && (
-                        <div className="mr-3 mt-1">
-                          <input
-                            type="checkbox"
-                            checked={selectedMembers.includes(membership.id)}
-                            onChange={(e) => handleSelectMember(membership.id, e.target.checked)}
-                            className="rounded border-gray-300"
-                          />
-                        </div>
-                      )}
+            <Card className="p-4 border border-border/70 bg-card/80">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold">Members Grid</h3>
+                <span className="text-xs text-muted-foreground">Select rows for bulk actions and click any row for details</span>
+              </div>
+              <div className={`${attendanceGridThemeClass} attendance-ag-grid`} style={{ height: 420, width: "100%" }}>
+                <AgGridReact<MembersGridRow>
+                  rowData={membersGridRows}
+                  columnDefs={membersGridColumns}
+                  defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                  animateRows
+                  rowSelection="multiple"
+                  pagination
+                  paginationPageSize={10}
+                  onSelectionChanged={(event: SelectionChangedEvent<MembersGridRow>) => {
+                    const pendingSelected = event.api
+                      .getSelectedRows()
+                      .filter((row) => row.status === "pending")
+                      .map((row) => row.id);
+                    setSelectedMembers(pendingSelected);
+                  }}
+                  onRowClicked={(event: RowClickedEvent<MembersGridRow>) => {
+                    if (event.data?.id) {
+                      setSelectedMemberGridId(event.data.id);
+                    }
+                  }}
+                />
+              </div>
+            </Card>
 
-                      <div className="space-y-3 flex-1">
-                        {/* Header with name and status */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                              {membership.studentName.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-lg">{membership.studentName}</h3>
-                              <p className="text-sm text-muted-foreground">{membership.enrollmentNumber}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={
-                              membership.status === 'approved' ? 'default' :
-                              membership.status === 'rejected' ? 'destructive' : 'secondary'
-                            } className="flex items-center gap-1">
-                              {membership.status === 'approved' && <CheckCircle className="w-3 h-3" />}
-                              {membership.status === 'pending' && <Clock className="w-3 h-3" />}
-                              {membership.status === 'rejected' && <AlertCircle className="w-3 h-3" />}
-                              {membership.status.charAt(0).toUpperCase() + membership.status.slice(1)}
-                            </Badge>
-                            {membership.isFallback && (
-                              <Badge variant="outline" className="text-xs">
-                                Offline
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Member Details Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm">
-                              <Mail className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-muted-foreground">Email:</span>
-                              <span className="font-medium">{membership.studentEmail}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                              <UserCheck className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-muted-foreground">Department:</span>
-                              <span className="font-medium">{membership.department}</span>
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm">
-                              <Calendar className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-muted-foreground">Joined:</span>
-                              <span className="font-medium">{formatDate(membership.joinedAt)}</span>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                              <Clock className="w-4 h-4 text-muted-foreground" />
-                              <span className="text-muted-foreground">Applied:</span>
-                              <span className="font-medium">{formatDate(membership.joinedAt)}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Reason for joining */}
-                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
-                          <p className="text-sm font-medium text-muted-foreground mb-1">Reason for joining:</p>
-                          <p className="text-sm leading-relaxed">{membership.reason}</p>
-                        </div>
+            {selectedMemberFromGrid && (
+              <Card className="p-5 border border-border/80 bg-card/90">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-3 flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                        {selectedMemberFromGrid.studentName.charAt(0).toUpperCase()}
                       </div>
+                      <div>
+                        <h3 className="font-semibold text-lg">{selectedMemberFromGrid.studentName}</h3>
+                        <p className="text-sm text-muted-foreground">{selectedMemberFromGrid.enrollmentNumber}</p>
+                      </div>
+                      <Badge
+                        variant={
+                          selectedMemberFromGrid.status === "approved"
+                            ? "default"
+                            : selectedMemberFromGrid.status === "rejected"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                      >
+                        {selectedMemberFromGrid.status.charAt(0).toUpperCase() + selectedMemberFromGrid.status.slice(1)}
+                      </Badge>
+                      {selectedMemberFromGrid.isFallback && <Badge variant="outline">Offline</Badge>}
+                    </div>
 
-                      {/* Action buttons */}
-                      <div className="flex flex-col gap-2 ml-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                      <p><Mail className="w-4 h-4 inline mr-1 text-muted-foreground" />{selectedMemberFromGrid.studentEmail}</p>
+                      <p><UserCheck className="w-4 h-4 inline mr-1 text-muted-foreground" />{selectedMemberFromGrid.department}</p>
+                      <p><Calendar className="w-4 h-4 inline mr-1 text-muted-foreground" />Joined {formatDate(selectedMemberFromGrid.joinedAt)}</p>
+                    </div>
+
+                    {selectedMemberFromGrid.reason && (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Reason for joining</p>
+                        <p className="text-sm leading-relaxed">{selectedMemberFromGrid.reason}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 lg:w-[260px] lg:justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowMemberDetails(selectedMemberFromGrid.id)}
+                      className="flex items-center gap-2"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View Profile
+                    </Button>
+
+                    {selectedMemberFromGrid.status === "approved" && (
+                      <>
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => setShowMemberDetails(membership.id)}
+                          onClick={() => {
+                            setSelectedStudentForPoints(selectedMemberFromGrid);
+                            setShowPointsModal(true);
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
+                        >
+                          <Award className="w-4 h-4" />
+                          Award Points
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedStudentForCertificate(selectedMemberFromGrid);
+                            setShowCertificateModal(true);
+                          }}
+                          className="bg-green-600 hover:bg-green-700 flex items-center gap-2"
+                        >
+                          <FileText className="w-4 h-4" />
+                          Add Certificate
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Are you sure you want to remove ${selectedMemberFromGrid.studentName} from the club?`,
+                              )
+                            ) {
+                              deleteMembershipMutation.mutate(selectedMemberFromGrid.id);
+                            }
+                          }}
+                          disabled={deleteMembershipMutation.isPending}
                           className="flex items-center gap-2"
                         >
-                          <Eye className="w-4 h-4" />
-                          View Profile
+                          <Trash2 className="w-4 h-4" />
+                          Remove
                         </Button>
-                        {membership.status === 'approved' && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedStudentForPoints(membership);
-                                setShowPointsModal(true);
-                              }}
-                              className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
-                            >
-                              <Award className="w-4 h-4" />
-                              Award Points
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedStudentForCertificate(membership);
-                                setShowCertificateModal(true);
-                              }}
-                              className="bg-green-600 hover:bg-green-700 flex items-center gap-2"
-                            >
-                              <FileText className="w-4 h-4" />
-                              Add Certificate
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to remove ${membership.studentName} from the club?`)) {
-                                  deleteMembershipMutation.mutate(membership.id);
-                                }
-                              }}
-                              disabled={deleteMembershipMutation.isPending}
-                              className="flex items-center gap-2"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Remove
-                            </Button>
-                          </>
-                        )}
-                        {membership.status === 'pending' && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => updateMembershipStatusMutation.mutate({
-                                membershipId: membership.id,
-                                status: 'approved'
-                              })}
-                              disabled={updateMembershipStatusMutation.isPending}
-                              className="bg-green-600 hover:bg-green-700"
-                            >
-                              <CheckCircle className="w-4 h-4 mr-2" />
-                              Approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => updateMembershipStatusMutation.mutate({
-                                membershipId: membership.id,
-                                status: 'rejected'
-                              })}
-                              disabled={updateMembershipStatusMutation.isPending}
-                            >
-                              <AlertCircle className="w-4 h-4 mr-2" />
-                              Reject
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              {memberships.filter(membership => {
-                if (memberSearch) {
-                  const searchLower = memberSearch.toLowerCase();
-                  return membership.studentName.toLowerCase().includes(searchLower) ||
-                         membership.studentEmail.toLowerCase().includes(searchLower) ||
-                         membership.enrollmentNumber.toLowerCase().includes(searchLower) ||
-                         membership.department.toLowerCase().includes(searchLower);
-                }
-                return true;
-              }).filter(membership => {
-                return memberFilter === 'all' || membership.status === memberFilter;
-              }).length === 0 && (
-                <Card className="p-8 text-center">
-                  <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    {memberSearch ? 'No members match your search.' : 'No members found for the selected filter.'}
-                  </p>
-                </Card>
-              )}
-            </div>
+                      </>
+                    )}
+
+                    {selectedMemberFromGrid.status === "pending" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            updateMembershipStatusMutation.mutate({
+                              membershipId: selectedMemberFromGrid.id,
+                              status: "approved",
+                            })
+                          }
+                          disabled={updateMembershipStatusMutation.isPending}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() =>
+                            updateMembershipStatusMutation.mutate({
+                              membershipId: selectedMemberFromGrid.id,
+                              status: "rejected",
+                            })
+                          }
+                          disabled={updateMembershipStatusMutation.isPending}
+                        >
+                          <AlertCircle className="w-4 h-4 mr-2" />
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {membersGridRows.length === 0 && (
+              <Card className="p-8 text-center">
+                <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">
+                  {memberSearch ? 'No members match your search.' : 'No members found for the selected filter.'}
+                </p>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="leadership" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -2640,7 +3189,7 @@ export default function ClubAdmin() {
                     <CheckCircle className="w-5 h-5 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold">0</p>
+                    <p className="text-2xl font-bold">{activeLeadersCount}</p>
                     <p className="text-sm text-muted-foreground">Active Leaders</p>
                   </div>
                 </div>
@@ -2651,23 +3200,26 @@ export default function ClubAdmin() {
             <Card className="p-6">
               <h3 className="font-semibold mb-4">Available Leadership Positions</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  { title: "President", description: "Overall club leadership and representation" },
-                  { title: "Vice President", description: "Supports president and handles operations" },
-                  { title: "Secretary", description: "Manages communications and records" },
-                  { title: "Treasurer", description: "Handles financial matters and budgeting" },
-                  { title: "Event Coordinator", description: "Organizes and manages club events" },
-                  { title: "Public Relations", description: "Manages publicity and member outreach" },
-                  { title: "Member Representative", description: "Represents member interests and feedback" }
-                ].map((position, index) => (
-                  <div key={index} className="p-4 border border-border rounded-lg">
+                {leadershipPositions.map((position) => {
+                  const roleLeaders = leadershipByRole.get(position.key) || [];
+                  const isOccupied = roleLeaders.length > 0;
+                  return (
+                  <div key={position.key} className="p-4 border border-border rounded-lg">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-medium">{position.title}</h4>
-                      <Badge variant="outline" className="text-xs">Vacant</Badge>
+                      <Badge variant={isOccupied ? "default" : "outline"} className="text-xs">
+                        {isOccupied ? "Occupied" : "Vacant"}
+                      </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">{position.description}</p>
+                    {isOccupied && (
+                      <p className="text-xs text-primary mt-2 font-medium">
+                        {roleLeaders[0].studentName}
+                        {roleLeaders.length > 1 ? ` +${roleLeaders.length - 1} more` : ""}
+                      </p>
+                    )}
                   </div>
-                ))}
+                );})}
               </div>
             </Card>
           </TabsContent>
@@ -2825,47 +3377,70 @@ export default function ClubAdmin() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              {messages.length === 0 ? (
-                <Card className="p-12 text-center">
-                  <Mail className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">No Messages Yet</h3>
-                  <p className="text-muted-foreground">
-                    Messages from students will appear here.
-                  </p>
+            {messages.length === 0 ? (
+              <Card className="p-12 text-center">
+                <Mail className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No Messages Yet</h3>
+                <p className="text-muted-foreground">
+                  Messages from students will appear here.
+                </p>
+              </Card>
+            ) : (
+              <>
+                <Card className="p-4 border border-border/70 bg-card/80">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold">Messages Grid</h3>
+                    <span className="text-xs text-muted-foreground">Click a row to open full message details</span>
+                  </div>
+                  <div className={`${attendanceGridThemeClass} attendance-ag-grid`} style={{ height: 360, width: "100%" }}>
+                    <AgGridReact<MessagesGridRow>
+                      rowData={messagesGridRows}
+                      columnDefs={messagesGridColumns}
+                      defaultColDef={{ sortable: true, filter: true, resizable: true }}
+                      animateRows
+                      rowSelection="single"
+                      pagination
+                      paginationPageSize={8}
+                      onRowClicked={(event: RowClickedEvent<MessagesGridRow>) => {
+                        if (event.data?.id) {
+                          setSelectedMessageGridId(event.data.id);
+                        }
+                      }}
+                    />
+                  </div>
                 </Card>
-              ) : (
-                messages.map((message) => (
-                  <Card key={message.id} className={`p-6 ${!message.read ? 'border-l-4 border-l-primary' : ''}`}>
+
+                {selectedMessageFromGrid && (
+                  <Card className={`p-6 border border-border/80 bg-card/90 ${!selectedMessageFromGrid.read ? 'border-l-4 border-l-primary' : ''}`}>
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold">{message.senderName}</h3>
-                          {!message.read && (
+                          <h3 className="font-semibold">{selectedMessageFromGrid.senderName}</h3>
+                          {!selectedMessageFromGrid.read && (
                             <Badge variant="default" className="text-xs">New</Badge>
                           )}
                         </div>
                         <div className="text-sm text-muted-foreground space-y-1">
-                          <p><strong>Email:</strong> {message.senderEmail}</p>
-                          <p><strong>Enrollment:</strong> {message.enrollmentNumber}</p>
-                          <p><strong>Subject:</strong> {message.subject}</p>
+                          <p><strong>Email:</strong> {selectedMessageFromGrid.senderEmail}</p>
+                          <p><strong>Enrollment:</strong> {selectedMessageFromGrid.enrollmentNumber}</p>
+                          <p><strong>Subject:</strong> {selectedMessageFromGrid.subject}</p>
                         </div>
                       </div>
                       <div className="text-right text-sm text-muted-foreground">
-                        <p>{formatDate(message.sentAt)}</p>
-                        <p>{new Date(message.sentAt).toLocaleTimeString()}</p>
+                        <p>{formatDate(selectedMessageFromGrid.sentAt)}</p>
+                        <p>{new Date(selectedMessageFromGrid.sentAt).toLocaleTimeString()}</p>
                       </div>
                     </div>
 
                     <div className="bg-muted/50 p-4 rounded-lg mb-4">
-                      <p className="text-sm whitespace-pre-wrap">{message.message}</p>
+                      <p className="text-sm whitespace-pre-wrap">{selectedMessageFromGrid.message}</p>
                     </div>
 
-                    {!message.read && (
+                    {!selectedMessageFromGrid.read && (
                       <div className="flex justify-end">
                         <Button
                           size="sm"
-                          onClick={() => markMessageAsReadMutation.mutate(message.id)}
+                          onClick={() => markMessageAsReadMutation.mutate(selectedMessageFromGrid.id)}
                           disabled={markMessageAsReadMutation.isPending}
                         >
                           {markMessageAsReadMutation.isPending ? (
@@ -2883,9 +3458,9 @@ export default function ClubAdmin() {
                       </div>
                     )}
                   </Card>
-                ))
-              )}
-            </div>
+                )}
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="stories" className={`space-y-6 transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -2897,35 +3472,41 @@ export default function ClubAdmin() {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">Upload Club Story</h3>
-                <span className="text-xs text-muted-foreground">Instagram-style highlights</span>
+                <span className="text-xs text-muted-foreground">24-hour image, video, or text story</span>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="storyFile">Story Media</Label>
+                  <Label htmlFor="storyFile">Story Media (optional)</Label>
                   <input
                     id="storyFile"
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/*"
                     onChange={handleStoryFileSelect}
                     className="block w-full text-sm mt-2"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">Optional for text-only updates.</p>
                 </div>
 
                 {storyPreview && (
                   <div className="rounded-lg border p-2 inline-block">
-                    <img src={storyPreview} alt="Story preview" className="h-24 w-24 object-cover rounded" />
+                    {storyPreviewType === "video" ? (
+                      <video src={storyPreview} controls muted className="h-24 w-24 object-cover rounded" />
+                    ) : storyPreviewType === "image" ? (
+                      <img src={storyPreview} alt="Story preview" className="h-24 w-24 object-cover rounded" />
+                    ) : null}
                   </div>
                 )}
 
                 <div>
-                  <Label htmlFor="storyCaption">Caption</Label>
-                  <Input
+                  <Label htmlFor="storyCaption">Story text / caption</Label>
+                  <Textarea
                     id="storyCaption"
                     value={storyCaption}
                     onChange={(e) => setStoryCaption(e.target.value)}
-                    placeholder="Add a short caption"
-                    maxLength={120}
+                    placeholder="Share club updates, reminders, event info, or a caption"
+                    maxLength={500}
+                    rows={4}
                   />
                 </div>
 
@@ -2940,9 +3521,8 @@ export default function ClubAdmin() {
 
                 <Button
                   type="button"
-                  disabled={!storyFile || createStoryMutation.isPending}
+                  disabled={createStoryMutation.isPending || (!storyFile && !storyCaption.trim())}
                   onClick={() => {
-                    if (!storyFile) return;
                     createStoryMutation.mutate({
                       file: storyFile,
                       caption: storyCaption.trim(),
@@ -2959,17 +3539,25 @@ export default function ClubAdmin() {
               <h3 className="text-lg font-semibold mb-4">Your Recent Stories</h3>
               <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                 {myStories.length === 0 && (
-                  <p className="text-sm text-muted-foreground">No stories uploaded yet.</p>
+                  <p className="text-sm text-muted-foreground">No stories uploaded yet. Add a video, image, or text update for 24 hours of visibility.</p>
                 )}
 
                 {myStories.map((story: any) => (
                   <div key={story.id} className="flex items-center justify-between gap-3 border rounded-lg p-2">
                     <div className="flex items-center gap-3 min-w-0">
-                      <img src={story.mediaUrl} alt="Story" className="h-12 w-12 rounded object-cover" />
+                      {story.mediaType === "video" && story.mediaUrl ? (
+                        <video src={story.mediaUrl} className="h-12 w-12 rounded object-cover" muted />
+                      ) : story.mediaType === "text" || !story.mediaUrl ? (
+                        <div className="flex h-12 w-12 items-center justify-center rounded bg-muted text-[10px] font-semibold uppercase text-muted-foreground">
+                          Text
+                        </div>
+                      ) : (
+                        <img src={story.mediaUrl} alt="Story" className="h-12 w-12 rounded object-cover" />
+                      )}
                       <div className="min-w-0">
-                        <p className="text-sm truncate">{story.caption || "(No caption)"}</p>
+                        <p className="text-sm truncate">{story.caption || "(No text)"}</p>
                         <p className="text-xs text-muted-foreground">
-                          {story.isHighlight ? "In Highlights" : "Story only"}
+                          {story.isHighlight ? "In Highlights" : "Story only"} · 24h auto-delete
                         </p>
                       </div>
                     </div>
@@ -3197,35 +3785,41 @@ export default function ClubAdmin() {
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold">Story Studio</h3>
-                    <span className="text-xs text-muted-foreground">Instagram-style highlights</span>
+                    <span className="text-xs text-muted-foreground">24-hour image, video, or text story</span>
                   </div>
 
                   <div className="space-y-4">
                     <div>
-                      <Label htmlFor="storyFile">Story Media</Label>
+                      <Label htmlFor="storyFile">Story Media (optional)</Label>
                       <input
                         id="storyFile"
                         type="file"
-                        accept="image/*"
+                        accept="image/*,video/*"
                         onChange={handleStoryFileSelect}
                         className="block w-full text-sm mt-2"
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">Optional for text-only updates.</p>
                     </div>
 
                     {storyPreview && (
                       <div className="rounded-lg border p-2 inline-block">
-                        <img src={storyPreview} alt="Story preview" className="h-24 w-24 object-cover rounded" />
+                        {storyPreviewType === "video" ? (
+                          <video src={storyPreview} controls muted className="h-24 w-24 object-cover rounded" />
+                        ) : storyPreviewType === "image" ? (
+                          <img src={storyPreview} alt="Story preview" className="h-24 w-24 object-cover rounded" />
+                        ) : null}
                       </div>
                     )}
 
                     <div>
-                      <Label htmlFor="storyCaption">Caption</Label>
-                      <Input
+                      <Label htmlFor="storyCaption">Story text / caption</Label>
+                      <Textarea
                         id="storyCaption"
                         value={storyCaption}
                         onChange={(e) => setStoryCaption(e.target.value)}
-                        placeholder="Add a short caption"
-                        maxLength={120}
+                        placeholder="Share club updates, reminders, event info, or a caption"
+                        maxLength={500}
+                        rows={4}
                       />
                     </div>
 
@@ -3240,9 +3834,8 @@ export default function ClubAdmin() {
 
                     <Button
                       type="button"
-                      disabled={!storyFile || createStoryMutation.isPending}
+                      disabled={createStoryMutation.isPending || (!storyFile && !storyCaption.trim())}
                       onClick={() => {
-                        if (!storyFile) return;
                         createStoryMutation.mutate({
                           file: storyFile,
                           caption: storyCaption.trim(),
@@ -3258,17 +3851,25 @@ export default function ClubAdmin() {
                     <h4 className="text-sm font-medium mb-3">Your Recent Stories</h4>
                     <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
                       {myStories.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No stories uploaded yet.</p>
+                        <p className="text-sm text-muted-foreground">No stories uploaded yet. Add a video, image, or text update for 24 hours of visibility.</p>
                       )}
 
                       {myStories.map((story: any) => (
                         <div key={story.id} className="flex items-center justify-between gap-3 border rounded-lg p-2">
                           <div className="flex items-center gap-3 min-w-0">
-                            <img src={story.mediaUrl} alt="Story" className="h-12 w-12 rounded object-cover" />
+                            {story.mediaType === "video" && story.mediaUrl ? (
+                              <video src={story.mediaUrl} className="h-12 w-12 rounded object-cover" muted />
+                            ) : story.mediaType === "text" || !story.mediaUrl ? (
+                              <div className="flex h-12 w-12 items-center justify-center rounded bg-muted text-[10px] font-semibold uppercase text-muted-foreground">
+                                Text
+                              </div>
+                            ) : (
+                              <img src={story.mediaUrl} alt="Story" className="h-12 w-12 rounded object-cover" />
+                            )}
                             <div className="min-w-0">
-                              <p className="text-sm truncate">{story.caption || "(No caption)"}</p>
+                              <p className="text-sm truncate">{story.caption || "(No text)"}</p>
                               <p className="text-xs text-muted-foreground">
-                                {story.isHighlight ? "In Highlights" : "Story only"}
+                                {story.isHighlight ? "In Highlights" : "Story only"} · 24h auto-delete
                               </p>
                             </div>
                           </div>
@@ -3590,6 +4191,7 @@ export default function ClubAdmin() {
             )}
           </TabsContent>
         </Tabs>
+        </div>
 
         {/* Member Profile Dialog */}
         <Dialog open={!!showMemberDetails} onOpenChange={() => setShowMemberDetails(null)}>

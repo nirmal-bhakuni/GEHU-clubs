@@ -166,7 +166,8 @@ export interface ClubStory {
   clubId: string;
   clubName: string;
   clubLogo?: string;
-  mediaUrl: string;
+  mediaUrl?: string;
+  mediaType?: "image" | "video" | "text";
   caption?: string;
   isHighlight?: boolean;
   expiresAt?: string | Date;

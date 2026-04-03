@@ -119,7 +119,7 @@ export default function EventCard({
         </div>
         <Link href={`/events/${id}`} className="mt-auto">
           <Button className={`
-            w-full transition-all duration-300
+            w-full h-11 md:h-10 text-sm font-semibold transition-all duration-300
             hover:scale-105 hover:shadow-lg active:scale-95
           `} variant="default" data-testid={`button-register-${id}`}>
             Register Now
