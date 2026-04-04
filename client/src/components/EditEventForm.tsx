@@ -44,6 +44,10 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
     queryKey: ["/api/clubs"],
   });
 
+  const { data: events = [] } = useQuery<Event[]>({
+    queryKey: ["/api/events"],
+  });
+
   const updateEventMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const formDataToSend = new FormData();
@@ -107,6 +111,26 @@ export default function EditEventForm({ event, clubId, onClose, onSuccess }: Edi
       toast({
         title: "Validation Error",
         description: "Duration must be at least 15 minutes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const normalizedLocation = formData.location.trim().toLowerCase();
+    const conflict = events.find((existingEvent) => {
+      if (event && existingEvent.id === event.id) return false;
+      const existingLocation = String(existingEvent.location || "").trim().toLowerCase();
+      return (
+        existingEvent.date === formData.date &&
+        String(existingEvent.time || "") === formData.time &&
+        existingLocation === normalizedLocation
+      );
+    });
+
+    if (conflict) {
+      toast({
+        title: "Venue conflict",
+        description: `"${conflict.title}" is already scheduled at this venue and time.`,
         variant: "destructive",
       });
       return;

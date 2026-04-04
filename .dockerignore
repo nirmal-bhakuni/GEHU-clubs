@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log*
+.git
+.gitignore
+.vscode
+.local
+attached_assets
+client/node_modules
+server/node_modules
+dist
+*.log
+.env
+.env.*

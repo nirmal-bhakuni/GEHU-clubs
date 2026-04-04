@@ -1084,6 +1084,8 @@ export default function Dashboard() {
         target: announcement.target || "all",
         createdDate: new Date(announcement.createdAt).toLocaleDateString(),
         pinned: announcement.pinned ? "Pinned" : "-",
+        category: announcement.category || "General",
+        description: announcement.description || "",
       }));
   }, [announcements]);
 

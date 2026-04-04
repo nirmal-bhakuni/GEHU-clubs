@@ -6,6 +6,7 @@ export interface UserProfile {
   studentId: string;
   phone?: string;
   major?: string;
+  yearOfCourse?: number;
   bio?: string;
   joinedDate: string;
   ranking: number;

@@ -26,7 +26,12 @@ import { ChatMessage } from "./models/ChatMessage";
 import { ChatReadState } from "./models/ChatReadState";
 import { notifyAnnouncement, notifyNewEvent } from "./services/emailService";
 
-const uploadsDir = path.join(process.cwd(), "..", "uploads");
+const uploadsDirCandidates = [
+  path.join(process.cwd(), "uploads"),
+  path.join(process.cwd(), "..", "uploads"),
+];
+
+const uploadsDir = uploadsDirCandidates.find((candidate) => fs.existsSync(candidate)) || uploadsDirCandidates[0];
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -44,6 +49,36 @@ const upload = multer({
   storage: storage_multer,
   limits: { fileSize: 25 * 1024 * 1024 }
 });
+
+const DEFAULT_CLUB_LOGO = "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&h=200&fit=crop";
+
+function hasLocalUploadFile(uploadUrl?: string | null): boolean {
+  if (!uploadUrl || typeof uploadUrl !== "string" || !uploadUrl.startsWith("/uploads/")) {
+    return false;
+  }
+
+  const fileName = uploadUrl.replace("/uploads/", "");
+  if (!fileName) {
+    return false;
+  }
+
+  const decodedFileName = decodeURIComponent(fileName);
+  return fs.existsSync(path.join(uploadsDir, decodedFileName));
+}
+
+function normalizeClubMedia<T extends { logoUrl?: string | null; coverImageUrl?: string | null }>(club: T): T {
+  const next = { ...club };
+
+  if (!next.logoUrl || (next.logoUrl.startsWith("/uploads/") && !hasLocalUploadFile(next.logoUrl))) {
+    next.logoUrl = DEFAULT_CLUB_LOGO;
+  }
+
+  if (next.coverImageUrl && next.coverImageUrl.startsWith("/uploads/") && !hasLocalUploadFile(next.coverImageUrl)) {
+    next.coverImageUrl = null;
+  }
+
+  return next;
+}
 
 const STORY_EXPIRY_HOURS = 24;
 
@@ -368,8 +403,6 @@ async function findVenueConflict(params: {
     return { error: "Event duration must be at least 15 minutes" as const };
   }
 
-  const requestedEnd = new Date(requestedStart.getTime() + requestedDuration * 60 * 1000);
-  const cooldownMs = 30 * 60 * 1000;
   const normalizedLocation = normalizeLocation(location);
 
   const sameDateEvents = await Event.find({
@@ -383,17 +416,11 @@ async function findVenueConflict(params: {
     }
 
     const existingStart = parseLocalDateTime(existing.date, existing.time);
-    if (!existingStart) return false;
+    if (!existingStart) {
+      return String(existing.time || "").trim() === String(time || "").trim();
+    }
 
-    const existingDuration = Number(existing.durationMinutes ?? 120);
-    const safeExistingDuration =
-      Number.isFinite(existingDuration) && existingDuration > 0 ? existingDuration : 120;
-    const existingEnd = new Date(existingStart.getTime() + safeExistingDuration * 60 * 1000);
-
-    return (
-      requestedStart.getTime() < existingEnd.getTime() + cooldownMs &&
-      existingStart.getTime() < requestedEnd.getTime() + cooldownMs
-    );
+    return existingStart.getTime() === requestedStart.getTime();
   });
 
   return { conflict: conflictingEvent };
@@ -403,7 +430,11 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   app.use("/uploads", express.static(uploadsDir));
 
   // Serve static files from the client build
-  const distPath = path.join(process.cwd(), "..", "dist");
+  const distPathCandidates = [
+    path.join(process.cwd(), "dist"),
+    path.join(process.cwd(), "..", "dist"),
+  ];
+  const distPath = distPathCandidates.find((candidate) => fs.existsSync(candidate)) || distPathCandidates[0];
   app.use(express.static(distPath));
 
   // General file upload endpoint
@@ -787,10 +818,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         const clubObj = club.toObject ? club.toObject() : club;
         // Use actual membership count if available, otherwise use club's existing memberCount
         const actualCount = memberCountMap.get(club.id);
-        return {
+        return normalizeClubMedia({
           ...clubObj,
           memberCount: actualCount !== undefined ? actualCount : (clubObj.memberCount || 0)
-        };
+        });
       });
 
       let filteredClubs = clubsWithMemberCounts;
@@ -820,10 +851,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const actualMemberCount = await storage.getClubMemberCount(club.id);
       const clubObj = club.toObject ? club.toObject() : club;
       
-      res.json({
+      res.json(normalizeClubMedia({
         ...clubObj,
         memberCount: actualMemberCount
-      });
+      }));
     } catch (error) {
       console.error("Error fetching club:", error);
       res.status(500).json({ error: "Failed to fetch club" });
@@ -1016,7 +1047,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       if (conflictCheck.conflict) {
         return res.status(409).json({
-          error: `Venue conflict: "${conflictCheck.conflict.title}" is already scheduled at ${conflictCheck.conflict.location} on ${conflictCheck.conflict.date} ${conflictCheck.conflict.time}. Keep at least 30 minutes gap after an event ends before scheduling another at the same venue.`,
+          error: `Venue conflict: "${conflictCheck.conflict.title}" is already scheduled at ${conflictCheck.conflict.location} on ${conflictCheck.conflict.date} ${conflictCheck.conflict.time}. Same venue and same time are not allowed.`,
         });
       }
 
@@ -1086,7 +1117,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       if (conflictCheck.conflict) {
         return res.status(409).json({
-          error: `Venue conflict: "${conflictCheck.conflict.title}" is already scheduled at ${conflictCheck.conflict.location} on ${conflictCheck.conflict.date} ${conflictCheck.conflict.time}. Keep at least 30 minutes gap after an event ends before scheduling another at the same venue.`,
+          error: `Venue conflict: "${conflictCheck.conflict.title}" is already scheduled at ${conflictCheck.conflict.location} on ${conflictCheck.conflict.date} ${conflictCheck.conflict.time}. Same venue and same time are not allowed.`,
         });
       }
 

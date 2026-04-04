@@ -18,7 +18,7 @@ import { Upload, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 import { useToast } from "@/hooks/use-toast";
-import type { Club } from "@shared/schema";
+import type { Club, Event } from "@shared/schema";
 
 export default function UploadForm() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -39,6 +39,10 @@ export default function UploadForm() {
 
   const { data: clubs = [] } = useQuery<Club[]>({
     queryKey: ["/api/clubs"],
+  });
+
+  const { data: events = [] } = useQuery<Event[]>({
+    queryKey: ["/api/events"],
   });
 
   const createEventMutation = useMutation({
@@ -122,6 +126,25 @@ export default function UploadForm() {
     }
 
     const selectedClub = clubs.find((c) => c.id === formData.clubId);
+
+    const normalizedLocation = formData.location.trim().toLowerCase();
+    const conflict = events.find((existingEvent) => {
+      const existingLocation = String(existingEvent.location || "").trim().toLowerCase();
+      return (
+        existingEvent.date === formData.date &&
+        String(existingEvent.time || "") === formData.time &&
+        existingLocation === normalizedLocation
+      );
+    });
+
+    if (conflict) {
+      toast({
+        title: "Venue conflict",
+        description: `"${conflict.title}" is already scheduled at this venue and time.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     const dataToSubmit = {
       ...formData,
@@ -351,6 +374,7 @@ export default function UploadForm() {
                 description: "",
                 date: "",
                 time: "",
+                durationMinutes: "120",
                 location: "",
                 category: "",
                 clubId: "",

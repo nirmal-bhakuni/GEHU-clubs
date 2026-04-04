@@ -1,5 +1,5 @@
 import { Switch, Route, useLocation } from "wouter";
-import { useEffect, useState, Component, type ReactNode } from "react";
+import { useEffect, useState, Component, Suspense, lazy, type ReactNode } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,23 +9,32 @@ import { initializeSampleUsers } from "@/lib/userManager";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Sidebar from "@/components/Sidebar";
-import FloatingChat from "@/components/FloatingChat";
-import Home from "@/pages/Home";
-import Clubs from "@/pages/Clubs";
-import ClubDetail from "@/pages/ClubDetail";
-import Events from "@/pages/Events";
-import EventDetail from "@/pages/EventDetail";
-import Dashboard from "@/pages/Dashboard";
-import ClubAdmin from "@/pages/ClubAdmin";
-import ClubAdminLogin from "@/pages/ClubAdminLogin";
-import Login from "@/pages/Login";
-import StudentLogin from "@/pages/StudentLogin";
-import StudentSignup from "@/pages/StudentSignup";
-import StudentDashboard from "@/pages/StudentDashboard";
-import StudentProfile from "@/pages/StudentProfile";
-import NotFound from "@/pages/not-found";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { useAuth } from "@/hooks/useAuth";
+
+const FloatingChat = lazy(() => import("@/components/FloatingChat"));
+const Home = lazy(() => import("@/pages/Home"));
+const Clubs = lazy(() => import("@/pages/Clubs"));
+const ClubDetail = lazy(() => import("@/pages/ClubDetail"));
+const Events = lazy(() => import("@/pages/Events"));
+const EventDetail = lazy(() => import("@/pages/EventDetail"));
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const ClubAdmin = lazy(() => import("@/pages/ClubAdmin"));
+const ClubAdminLogin = lazy(() => import("@/pages/ClubAdminLogin"));
+const Login = lazy(() => import("@/pages/Login"));
+const StudentLogin = lazy(() => import("@/pages/StudentLogin"));
+const StudentSignup = lazy(() => import("@/pages/StudentSignup"));
+const StudentDashboard = lazy(() => import("@/pages/StudentDashboard"));
+const StudentProfile = lazy(() => import("@/pages/StudentProfile"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+
+function RouteFallback() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center text-sm text-muted-foreground">
+      Loading...
+    </div>
+  );
+}
 
 function Router() {
   return (
@@ -200,12 +209,16 @@ function AppShell() {
             <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
             <main className="flex-1">
               <ErrorBoundary>
-                <Router />
+                <Suspense fallback={<RouteFallback />}>
+                  <Router />
+                </Suspense>
               </ErrorBoundary>
             </main>
           </div>
           <Footer />
-          <FloatingChat />
+          <Suspense fallback={null}>
+            <FloatingChat />
+          </Suspense>
         </div>
         <Toaster />
       </ThemeProvider>

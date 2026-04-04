@@ -18,7 +18,7 @@ A modern, cloud-powered college club website that enables students to discover c
 - **Forms**: React Hook Form with Zod validation
 - **File Uploads**: Multer (local storage, ready for cloud integration)
 - **Authentication**: Express session with bcrypt password hashing
-- **Database**: In-memory storage (MemStorage)
+- **Database**: MongoDB with Mongoose
 
 ## Project Architecture
 
@@ -136,13 +136,16 @@ docker-compose down
 ```
 
 ### Environment Variables
-Create a `.env` file with:
+Copy `.env.example` to `.env` and set values:
 ```env
 NODE_ENV=production
 PORT=12346
 MONGO_URI=your_mongodb_connection_string
 SESSION_SECRET=your_secure_random_secret
+CORS_ORIGINS=https://your-frontend-domain.com
 ```
+
+`CORS_ORIGINS` accepts a comma-separated list for multi-domain deployments.
 
 ### Email Notifications (Events + Announcements)
 The backend automatically sends emails to all active students when:
@@ -186,6 +189,13 @@ DISABLE_EMAIL_NOTIFICATIONS=false
 - MongoDB database
 - 512MB RAM minimum
 - 1GB storage for uploads
+
+### Quick Deploy Checklist
+1. Set production environment variables from `.env.example`
+2. Set `CORS_ORIGINS` to your real frontend domain(s)
+3. Run `npm run build`
+4. Run `npm start`
+5. Verify health routes: `/api/clubs`, `/api/events`
 
 ## Next Steps / Future Enhancements
 - Cloud storage integration (AWS S3, Cloudinary)

@@ -15,6 +15,19 @@ import { startUpcomingEventReminderScheduler } from "./services/emailService";
 
 const app = express();
 
+const configuredCorsOrigins = String(process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = configuredCorsOrigins.length
+  ? configuredCorsOrigins
+  : [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "https://gehu-clubs.onrender.com",
+    ];
+
 app.set("trust proxy", 1);
 
 app.use(express.json());
@@ -22,11 +35,7 @@ app.use(express.urlencoded({ extended: false }));
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-      "https://gehu-clubs.onrender.com"
-    ],
+    origin: allowedOrigins,
     credentials: true
   })
 );

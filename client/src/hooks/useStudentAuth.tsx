@@ -9,6 +9,8 @@ interface Student {
   rollNumber?: string;
   enrollment: string;
   department?: string;
+  branch?: string;
+  profilePicture?: string;
   yearOfAdmission?: number;
   yearOfCourse?: number;
 }
