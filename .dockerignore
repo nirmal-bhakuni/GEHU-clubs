@@ -4,7 +4,6 @@ npm-debug.log*
 .gitignore
 .vscode
 .local
-attached_assets
 client/node_modules
 server/node_modules
 dist
