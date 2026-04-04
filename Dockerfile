@@ -20,4 +20,4 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/uploads ./uploads
 
 EXPOSE 12346
-CMD ["npm", "start"]
+CMD ["node", "dist/index.js"]
