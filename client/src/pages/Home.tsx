@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Calendar, Users, Flame, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import type { Event, Club, ClubStory } from "@shared/schema";
-import eventPlaceholder from "@assets/stock_images/student_club_meeting_08b2a880.jpg";
+
+const eventPlaceholder = "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&q=80";
 
 const demoEvents: Event[] = [
   {
