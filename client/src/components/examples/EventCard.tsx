@@ -1,6 +1,6 @@
 import EventCard from '../EventCard'
 
-import eventImage from '@assets/stock_images/tech_bootcamp_coding_5dbe6dd9.jpg'
+const eventImage = 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&q=80'
 
 export default function EventCardExample() {
   return (

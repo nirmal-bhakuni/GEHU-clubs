@@ -3932,11 +3932,17 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     });
   }
 
+  // Catch-all route for debugging
+  app.use("/api/clubs/:clubId/join", (req: Request, res: Response, next: NextFunction) => {
+    console.log("Catch-all hit for join route:", req.method, req.path, req.params);
+    next();
+  });
+
   // Fallback route for SPA - serve index.html for all non-API routes
   // In production, serve from dist folder. In development, redirect to frontend server
   app.get("*", (_req: Request, res: Response) => {
     if (process.env.NODE_ENV === "production") {
-      const indexPath = path.join(process.cwd(), "dist", "index.html");
+      const indexPath = path.join(process.cwd(), "..", "dist", "index.html");
       res.sendFile(indexPath, (err: NodeJS.ErrnoException | undefined) => {
         if (err) {
           console.error("Error sending index.html:", err);
