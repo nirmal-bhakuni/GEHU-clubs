@@ -3942,7 +3942,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   // In production, serve from dist folder. In development, redirect to frontend server
   app.get("*", (_req: Request, res: Response) => {
     if (process.env.NODE_ENV === "production") {
-      const indexPath = path.join(process.cwd(), "..", "dist", "index.html");
+      const indexPath = path.join(process.cwd(), "dist", "index.html");
       res.sendFile(indexPath, (err: NodeJS.ErrnoException | undefined) => {
         if (err) {
           console.error("Error sending index.html:", err);
