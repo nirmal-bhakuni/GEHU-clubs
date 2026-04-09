@@ -5,11 +5,9 @@ services:
     plan: free
     autoDeploy: true
     buildCommand: npm run build
-    startCommand: npm start
+    startCommand: NODE_ENV=production npm start
     healthCheckPath: /api/clubs
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: HOST
         value: 0.0.0.0
       - key: PORT
