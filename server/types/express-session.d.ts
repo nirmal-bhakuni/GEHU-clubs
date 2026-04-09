@@ -5,6 +5,5 @@ declare module "express-session" {
     adminId?: string;
     studentId?: string;
     studentEmail?: string;
-    teacherId?: string;
   }
 }

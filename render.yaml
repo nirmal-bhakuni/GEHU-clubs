@@ -30,27 +30,7 @@ services:
         value: "6"
       - key: EMAIL_BATCH_SIZE
         value: "50"
-      - key: ERP_SYNC_URL
-        sync: false
-      - key: ERP_SYNC_TOKEN
-        sync: false
       - key: SMTP_URL
         sync: false
       - key: SMTP_FROM
         sync: false
-      - key: TEACHER_USERNAME
-        value: teacher
-      - key: TEACHER_PASSWORD
-        sync: false
-      - key: TEACHER_PROOF_ID
-        sync: false
-      - key: TEACHER_FULLNAME
-        value: Faculty ERP Coordinator
-      - key: TEACHER_EMAIL
-        sync: false
-      - key: TEACHER_DEPARTMENT
-        value: Computer Science
-      - key: TEACHER_DESIGNATION
-        value: Assistant Professor
-      - key: TEACHER_SECTIONS
-        value: A1,B1
