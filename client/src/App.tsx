@@ -9,6 +9,7 @@ import { initializeSampleUsers } from "@/lib/userManager";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Sidebar from "@/components/Sidebar";
+import ScrollToTopButton from "@/components/ScrollToTopButton";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -26,6 +27,8 @@ const StudentLogin = lazy(() => import("@/pages/StudentLogin"));
 const StudentSignup = lazy(() => import("@/pages/StudentSignup"));
 const StudentDashboard = lazy(() => import("@/pages/StudentDashboard"));
 const StudentProfile = lazy(() => import("@/pages/StudentProfile"));
+const TeacherLogin = lazy(() => import("@/pages/TeacherLogin"));
+const TeacherERP = lazy(() => import("@/pages/TeacherERP"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 function RouteFallback() {
@@ -47,6 +50,8 @@ function Router() {
       <Route path="/student/signup" component={StudentSignup} />
       <Route path="/student-dashboard" component={StudentDashboard} />
       <Route path="/student/dashboard" component={StudentDashboard} />
+      <Route path="/teacher/login" component={TeacherLogin} />
+      <Route path="/teacher/erp" component={TeacherERP} />
       <Route path="/admin/login" component={Login} />
       <Route path="/club-admin/login" component={ClubAdminLogin} />
       <Route path="/dashboard" component={Dashboard} />
@@ -216,6 +221,7 @@ function AppShell() {
             </main>
           </div>
           <Footer />
+          <ScrollToTopButton />
           <Suspense fallback={null}>
             <FloatingChat />
           </Suspense>

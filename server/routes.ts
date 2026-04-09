@@ -11,6 +11,8 @@ import fs from "fs";
 import mongoose from "mongoose";
 import { Student } from "./models/Student";
 import { Admin } from "./models/Admin";
+import { Teacher } from "./models/Teacher";
+import { TeacherAttendance } from "./models/TeacherAttendance";
 import { EventRegistration } from "./models/EventRegistration";
 import { ClubMembership } from "./models/ClubMembership";
 import { Achievement } from "./models/Achievement";
@@ -185,6 +187,84 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+function getTeacherSection(record: {
+  department?: string | null;
+  year?: string | null;
+  yearOfAdmission?: number | null;
+  enrollment?: string | null;
+}) {
+  const department = String(record.department || "General").trim() || "General";
+  const normalizedDepartment = department.toLowerCase();
+
+  const departmentSectionMap: Record<string, string> = {
+    "computer science": "A",
+    "computer science engineering": "A",
+    cse: "A",
+    "information technology": "B",
+    it: "B",
+    "electronics and communication": "C",
+    ece: "C",
+    "electrical engineering": "D",
+    eee: "D",
+    "mechanical engineering": "E",
+    mech: "E",
+    "civil engineering": "F",
+    civil: "F",
+    management: "G",
+    pharmacy: "H",
+    agriculture: "I",
+    general: "J",
+  };
+
+  const sectionPrefix =
+    departmentSectionMap[normalizedDepartment] ||
+    (normalizedDepartment.charAt(0).match(/[a-z]/i) ? normalizedDepartment.charAt(0).toUpperCase() : "A");
+
+  let yearNumber = 1;
+
+  if (record.year) {
+    const fromYearText = String(record.year).match(/\d+/);
+    if (fromYearText) {
+      yearNumber = Math.max(1, Math.min(4, Number(fromYearText[0])));
+    }
+  } else if (record.yearOfAdmission) {
+    const currentYear = new Date().getFullYear();
+    yearNumber = Math.max(1, Math.min(4, currentYear - Number(record.yearOfAdmission) + 1));
+  }
+
+  return `${sectionPrefix}${yearNumber}`;
+}
+
+function isCompactSectionCode(value: unknown) {
+  return /^[A-Z][1-4]$/i.test(String(value || "").trim());
+}
+
+function getTeacherCourse(department?: string | null) {
+  const value = String(department || "").trim();
+  return value || "General Studies";
+}
+
+async function ensureDefaultTeacher() {
+  const defaultUsername = process.env.TEACHER_USERNAME || "teacher";
+  const defaultPassword = process.env.TEACHER_PASSWORD || "teacher123";
+  const defaultName = process.env.TEACHER_FULLNAME || "Faculty ERP Coordinator";
+
+  const existing = await Teacher.findOne({ username: defaultUsername });
+  if (existing) return existing;
+
+  const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+  return Teacher.create({
+    id: randomUUID(),
+    username: defaultUsername,
+    password: hashedPassword,
+    fullName: defaultName,
+    email: process.env.TEACHER_EMAIL || "teacher.erp@gehu.ac.in",
+    department: process.env.TEACHER_DEPARTMENT || "Computer Science",
+    designation: process.env.TEACHER_DESIGNATION || "Assistant Professor",
+    isActive: true,
+  });
+}
+
 function requireAnyAuth(req: Request, res: Response, next: NextFunction) {
   if (!req.session.adminId && !req.session.studentId) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -319,6 +399,25 @@ async function requireStudentAuth(req: Request, res: Response, next: NextFunctio
     next();
   } catch (error) {
     console.error("Student auth check error:", error);
+    res.status(500).json({ error: "Authorization check failed" });
+  }
+}
+
+async function requireTeacherAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.teacherId) {
+    return res.status(401).json({ error: "Teacher not authenticated" });
+  }
+
+  try {
+    const teacher = await Teacher.findOne({ id: req.session.teacherId });
+    if (!teacher || !teacher.isActive) {
+      req.session.teacherId = undefined;
+      return res.status(401).json({ error: "Teacher session expired" });
+    }
+
+    next();
+  } catch (error) {
+    console.error("Teacher auth check error:", error);
     res.status(500).json({ error: "Authorization check failed" });
   }
 }
@@ -1437,6 +1536,449 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       yearOfCourse,
       profilePicture: student.profilePicture || null
     });
+  });
+
+  const teacherLoginHandler = async (req: Request, res: Response) => {
+    try {
+      await ensureDefaultTeacher();
+
+      const { username, password } = req.body as { username?: string; password?: string };
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password are required" });
+      }
+
+      const teacher = await Teacher.findOne({ username: String(username).trim() });
+      if (!teacher) return res.status(401).json({ error: "Invalid username or password" });
+      if (!teacher.isActive) return res.status(403).json({ error: "Teacher account is disabled" });
+
+      const valid = await bcrypt.compare(password, teacher.password);
+      if (!valid) return res.status(401).json({ error: "Invalid username or password" });
+
+      teacher.lastLogin = new Date();
+      await teacher.save();
+
+      req.session.adminId = undefined;
+      req.session.studentId = undefined;
+      req.session.teacherId = teacher.id;
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Teacher session save error:", err);
+          return res.status(500).json({ error: "Login failed" });
+        }
+
+        return res.json({
+          success: true,
+          teacher: {
+            id: teacher.id,
+            username: teacher.username,
+            fullName: teacher.fullName,
+            email: teacher.email,
+            department: teacher.department,
+            designation: teacher.designation,
+            lastLogin: teacher.lastLogin,
+          },
+        });
+      });
+    } catch (error) {
+      console.error("Teacher login error:", error);
+      res.status(500).json({ error: "Teacher login failed" });
+    }
+  };
+
+  app.post("/api/teacher/login", teacherLoginHandler);
+  app.post("/api/teacher/auth/login", teacherLoginHandler);
+
+  app.post("/api/teacher/logout", (req: Request, res: Response) => {
+    req.session.teacherId = undefined;
+    req.session.destroy(() => {
+      res.json({ success: true });
+    });
+  });
+
+  app.post("/api/teacher/auth/logout", (req: Request, res: Response) => {
+    req.session.teacherId = undefined;
+    req.session.destroy(() => {
+      res.json({ success: true });
+    });
+  });
+
+  app.get("/api/teacher/me", requireTeacherAuth, async (req: Request, res: Response) => {
+    const teacher = await Teacher.findOne({ id: req.session.teacherId });
+    if (!teacher) return res.status(404).json({ error: "Teacher not found" });
+
+    res.json({
+      id: teacher.id,
+      username: teacher.username,
+      fullName: teacher.fullName,
+      email: teacher.email,
+      department: teacher.department,
+      designation: teacher.designation,
+      lastLogin: teacher.lastLogin,
+    });
+  });
+
+  app.get("/api/teacher/auth/me", requireTeacherAuth, async (req: Request, res: Response) => {
+    const teacher = await Teacher.findOne({ id: req.session.teacherId });
+    if (!teacher) return res.status(404).json({ error: "Teacher not found" });
+
+    res.json({
+      id: teacher.id,
+      username: teacher.username,
+      fullName: teacher.fullName,
+      email: teacher.email,
+      department: teacher.department,
+      designation: teacher.designation,
+      lastLogin: teacher.lastLogin,
+    });
+  });
+
+  app.get("/api/teacher/erp/overview", requireTeacherAuth, async (_req: Request, res: Response) => {
+    try {
+      const [totalStudents, totalRegistrations, attendanceRows, recentRaw] = await Promise.all([
+        Student.countDocuments({}),
+        EventRegistration.countDocuments({}),
+        EventRegistration.aggregate([
+          {
+            $group: {
+              _id: "$attendanceStatus",
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        EventRegistration.find({ attendanceStatus: { $in: ["present", "absent", "pending"] } })
+          .sort({ attendanceMarkedAt: -1, updatedAt: -1 })
+          .limit(8)
+          .lean(),
+      ]);
+
+      const attendanceSummary = {
+        present: 0,
+        absent: 0,
+        pending: 0,
+      };
+
+      for (const row of attendanceRows as any[]) {
+        const key = String(row?._id || "pending");
+        if (key in attendanceSummary) {
+          (attendanceSummary as any)[key] = Number(row?.count || 0);
+        }
+      }
+
+      const recentParticipation = recentRaw.map((record: any) => ({
+        registrationId: record.id,
+        studentName: record.studentName,
+        enrollmentNumber: record.enrollmentNumber,
+        course: getTeacherCourse(record.department),
+        section: getTeacherSection({
+          department: record.department,
+          year: record.year,
+          enrollment: record.enrollmentNumber,
+        }),
+        eventTitle: record.eventTitle,
+        status: record.attendanceStatus || "pending",
+        participatedAt: record.attendanceMarkedAt || record.updatedAt || record.registeredAt,
+      }));
+
+      res.json({
+        totalStudents,
+        totalRegistrations,
+        attendanceSummary,
+        recentParticipation,
+      });
+    } catch (error) {
+      console.error("Teacher ERP overview fetch failed:", error);
+      res.status(500).json({ error: "Failed to load teacher ERP overview" });
+    }
+  });
+
+  app.get("/api/teacher/students", requireTeacherAuth, async (_req: Request, res: Response) => {
+    try {
+      const students = await Student.find({})
+        .select("name email enrollment department yearOfAdmission lastLogin")
+        .sort({ createdAt: -1 })
+        .lean();
+
+      const mapped = students.map((student: any) => ({
+        id: String(student._id),
+        name: student.name,
+        email: student.email,
+        enrollment: student.enrollment,
+        course: getTeacherCourse(student.department),
+        section: getTeacherSection({
+          department: student.department,
+          yearOfAdmission: student.yearOfAdmission,
+          enrollment: student.enrollment,
+        }),
+        lastLogin: student.lastLogin || null,
+      }));
+
+      res.json(mapped);
+    } catch (error) {
+      console.error("Teacher students fetch failed:", error);
+      res.status(500).json({ error: "Failed to load students" });
+    }
+  });
+
+  const getTeacherAttendanceRows = async (params?: {
+    search?: string;
+    status?: string;
+    selectedRegistrationIds?: string[];
+  }) => {
+    const search = String(params?.search || "").trim().toLowerCase();
+    const status = String(params?.status || "all").trim().toLowerCase();
+    const selectedIdSet = new Set(
+      (params?.selectedRegistrationIds || [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean),
+    );
+
+    const registrations = await EventRegistration.find({})
+      .sort({ attendanceMarkedAt: -1, updatedAt: -1 })
+      .limit(500)
+      .lean();
+
+    const registrationIds = registrations.map((record: any) => record.id);
+    const teacherAttendanceRows = await TeacherAttendance.find({ registrationId: { $in: registrationIds } }).lean();
+    const attendanceMap = new Map(teacherAttendanceRows.map((row: any) => [row.registrationId, row]));
+
+    const mapped = registrations.map((record: any) => {
+      const teacherAttendance = attendanceMap.get(record.id);
+      const mergedStatus = teacherAttendance?.status || record.attendanceStatus || "pending";
+      const participatedAt =
+        teacherAttendance?.participatedAt ||
+        record.attendanceMarkedAt ||
+        record.updatedAt ||
+        record.registeredAt;
+
+      return {
+        registrationId: record.id,
+        studentName: record.studentName,
+        studentEmail: record.studentEmail,
+        enrollmentNumber: record.enrollmentNumber,
+        course: getTeacherCourse(record.department),
+        section:
+          teacherAttendance?.sectionSnapshot && isCompactSectionCode(teacherAttendance.sectionSnapshot)
+            ? String(teacherAttendance.sectionSnapshot).toUpperCase()
+            : getTeacherSection({
+                department: record.department,
+                year: record.year,
+                enrollment: record.enrollmentNumber,
+              }),
+        department: record.department,
+        eventTitle: record.eventTitle,
+        eventDate: record.eventDate,
+        eventTime: record.eventTime,
+        clubName: record.clubName,
+        status: mergedStatus,
+        participationScore: teacherAttendance?.participationScore ?? (mergedStatus === "present" ? 7 : 0),
+        teacherRemark: teacherAttendance?.teacherRemark || "",
+        participatedAt,
+      };
+    });
+
+    const filtered = mapped.filter((row) => {
+      if (status !== "all" && row.status !== status) return false;
+      if (selectedIdSet.size > 0 && !selectedIdSet.has(row.registrationId)) return false;
+      if (!search) return true;
+
+      const searchable = [
+        row.studentName,
+        row.enrollmentNumber,
+        row.course,
+        row.section,
+        row.eventTitle,
+        row.clubName,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(search);
+    });
+
+    return filtered;
+  };
+
+  app.get("/api/teacher/attendance", requireTeacherAuth, async (req: Request, res: Response) => {
+    try {
+      const rows = await getTeacherAttendanceRows({
+        search: String(req.query.search || ""),
+        status: String(req.query.status || "all"),
+      });
+
+      res.json(rows);
+    } catch (error) {
+      console.error("Teacher attendance fetch failed:", error);
+      res.status(500).json({ error: "Failed to load attendance" });
+    }
+  });
+
+  app.post("/api/teacher/erp/sync", requireTeacherAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        search,
+        status,
+        selectedRegistrationIds,
+      } = req.body as {
+        search?: string;
+        status?: string;
+        selectedRegistrationIds?: string[];
+      };
+
+      const rows = await getTeacherAttendanceRows({
+        search,
+        status,
+        selectedRegistrationIds,
+      });
+
+      if (rows.length === 0) {
+        return res.status(400).json({ error: "No attendance records available for ERP sync" });
+      }
+
+      const teacher = await Teacher.findOne({ id: req.session.teacherId });
+      const payload = {
+        sourceSystem: "GEHU Clubs",
+        syncedAt: new Date().toISOString(),
+        syncedBy: {
+          teacherId: req.session.teacherId,
+          teacherName: teacher?.fullName || teacher?.username || "Teacher",
+          teacherEmail: teacher?.email || "",
+        },
+        summary: {
+          totalRecords: rows.length,
+          filterStatus: String(status || "all"),
+          filterSearch: String(search || "").trim(),
+        },
+        records: rows.map((row) => ({
+          registrationId: row.registrationId,
+          studentName: row.studentName,
+          studentEmail: row.studentEmail,
+          enrollmentNumber: row.enrollmentNumber,
+          course: row.course,
+          section: row.section,
+          clubName: row.clubName,
+          eventTitle: row.eventTitle,
+          eventDate: row.eventDate,
+          eventTime: row.eventTime,
+          attendanceStatus: row.status,
+          participationScore: row.participationScore,
+          teacherRemark: row.teacherRemark,
+          participatedAt: row.participatedAt,
+        })),
+      };
+
+      const erpSyncUrl = String(process.env.ERP_SYNC_URL || "").trim();
+      const erpSyncToken = String(process.env.ERP_SYNC_TOKEN || "").trim();
+
+      if (!erpSyncUrl) {
+        return res.json({
+          success: true,
+          mode: "preview",
+          message: "Set ERP_SYNC_URL in environment to enable direct ERP push.",
+          totalSynced: rows.length,
+          payload,
+        });
+      }
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "X-Source-System": "GEHU-Clubs",
+      };
+
+      if (erpSyncToken) {
+        headers.Authorization = `Bearer ${erpSyncToken}`;
+      }
+
+      const erpResponse = await fetch(erpSyncUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const erpResponseText = await erpResponse.text();
+
+      if (!erpResponse.ok) {
+        return res.status(502).json({
+          error: "ERP sync failed",
+          status: erpResponse.status,
+          details: erpResponseText,
+        });
+      }
+
+      return res.json({
+        success: true,
+        mode: "pushed",
+        totalSynced: rows.length,
+        erpStatus: erpResponse.status,
+        erpResponse: erpResponseText,
+      });
+    } catch (error) {
+      console.error("Teacher ERP sync failed:", error);
+      res.status(500).json({ error: "Failed to sync attendance to ERP" });
+    }
+  });
+
+  app.post("/api/teacher/attendance/mark", requireTeacherAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        registrationId,
+        status,
+        participationScore,
+        teacherRemark,
+      } = req.body as {
+        registrationId?: string;
+        status?: "pending" | "present" | "absent" | "late" | "excused";
+        participationScore?: number;
+        teacherRemark?: string;
+      };
+
+      if (!registrationId) {
+        return res.status(400).json({ error: "registrationId is required" });
+      }
+
+      const allowedStatus = new Set(["pending", "present", "absent", "late", "excused"]);
+      const normalizedStatus = allowedStatus.has(String(status)) ? String(status) : "pending";
+      const safeScore = Math.min(10, Math.max(0, Number(participationScore || 0)));
+
+      const registration = await EventRegistration.findOne({ id: registrationId });
+      if (!registration) {
+        return res.status(404).json({ error: "Registration not found" });
+      }
+
+      const now = new Date();
+      const shouldCountPresent = normalizedStatus === "present" || normalizedStatus === "late";
+
+      registration.attendanceStatus = shouldCountPresent ? "present" : normalizedStatus === "absent" ? "absent" : "pending";
+      registration.attended = shouldCountPresent;
+      registration.attendanceMarkedAt = now;
+      registration.attendanceMarkedBy = req.session.teacherId;
+      await registration.save();
+
+      const sectionSnapshot = getTeacherSection({
+        department: registration.department,
+        year: registration.year,
+        enrollment: registration.enrollmentNumber,
+      });
+
+      const attendance = await TeacherAttendance.findOneAndUpdate(
+        { registrationId },
+        {
+          $set: {
+            teacherId: req.session.teacherId,
+            status: normalizedStatus,
+            participationScore: safeScore,
+            teacherRemark: String(teacherRemark || "").trim(),
+            sectionSnapshot,
+            participatedAt: now,
+          },
+        },
+        { new: true, upsert: true },
+      );
+
+      res.json({ success: true, attendance });
+    } catch (error) {
+      console.error("Teacher attendance update failed:", error);
+      res.status(500).json({ error: "Failed to update attendance" });
+    }
   });
 
   app.patch("/api/student/me", requireStudentAuth, async (req: Request, res: Response) => {

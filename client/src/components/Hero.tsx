@@ -3,7 +3,7 @@ import { Calendar, Users } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
 
-const heroImage = "https://images.unsplash.com/photo-1523050854058-8df90110c9d5?w=1600&q=80";
+import heroImage from "@assets/stock_images/Gemini_Generated_Image_k07s30k07s30k07s (1).png";
 
 export default function Hero() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
@@ -19,14 +19,15 @@ export default function Hero() {
   }, []);
 
   return (
-    <section className="relative w-full min-h-[600px] lg:min-h-[700px] flex items-center justify-center overflow-hidden group">
+    <section className="relative w-full min-h-[640px] lg:min-h-[760px] flex items-center justify-center overflow-hidden group">
       <div className="absolute inset-0">
         <img
           src={heroImage}
           alt="College students at campus event"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+          className="w-full h-full object-cover brightness-110 contrast-105 saturate-110 group-hover:scale-105 transition-transform duration-700 ease-out"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-transparent group-hover:from-black/50 group-hover:via-black/35 transition-all duration-700" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/25 to-black/15 group-hover:from-black/40 group-hover:via-black/20 transition-all duration-700" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_24%,rgba(59,130,246,0.16),transparent_34%),radial-gradient(circle_at_82%_18%,rgba(14,165,233,0.14),transparent_30%)]" />
         
         {/* Interactive light effect that follows cursor */}
         <div 
@@ -40,7 +41,18 @@ export default function Hero() {
         />
       </div>
 
-      <div className="relative z-10 max-w-4xl mx-auto px-4 md:px-8 text-center py-20">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-8 text-center py-20 md:py-24">
+        <div
+          className={`inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs tracking-[0.16em] uppercase text-white/85 mb-6 backdrop-blur-md transition-all duration-700 ${
+            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
+          }`}
+          style={{ animation: isVisible ? 'fade-in-up 0.65s ease-out 0.05s both' : 'none' }}
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.85)]" />
+          Campus Clubs Platform
+        </div>
+
+        <div className="mx-auto max-w-4xl rounded-3xl border border-white/15 bg-black/20 px-5 md:px-9 py-8 md:py-10 backdrop-blur-md shadow-[0_18px_40px_rgba(0,0,0,0.38)]">
         <h1 
           className={`text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-white mb-6 transition-all duration-1000 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
@@ -53,7 +65,7 @@ export default function Hero() {
         </h1>
         
         <p 
-          className={`text-lg md:text-xl text-white/90 mb-8 max-w-2xl mx-auto leading-relaxed font-body transition-all duration-1000 ${
+          className={`text-lg md:text-xl text-white/90 mb-9 max-w-2xl mx-auto leading-relaxed font-body transition-all duration-1000 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           }`}
           style={{
@@ -106,6 +118,31 @@ export default function Hero() {
               <div className="absolute inset-0 rounded-lg border border-white/20 group-hover/btn:border-white/60 transition-all duration-300"></div>
             </Button>
           </Link>
+        </div>
+        <div
+          className={`mt-8 grid grid-cols-3 gap-3 max-w-xl mx-auto transition-all duration-1000 ${
+            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
+          }`}
+          style={{ animation: isVisible ? 'fade-in-up 0.8s ease-out 0.78s both' : 'none' }}
+        >
+          <div className="rounded-xl border border-white/20 bg-white/10 py-3 backdrop-blur-sm">
+            <p className="text-white font-semibold text-base md:text-lg">30+</p>
+            <p className="text-white/80 text-[11px] md:text-xs">Active Clubs</p>
+          </div>
+          <div className="rounded-xl border border-white/20 bg-white/10 py-3 backdrop-blur-sm">
+            <p className="text-white font-semibold text-base md:text-lg">100+</p>
+            <p className="text-white/80 text-[11px] md:text-xs">Events / Year</p>
+          </div>
+          <div className="rounded-xl border border-white/20 bg-white/10 py-3 backdrop-blur-sm">
+            <p className="text-white font-semibold text-base md:text-lg">2K+</p>
+            <p className="text-white/80 text-[11px] md:text-xs">Student Members</p>
+          </div>
+        </div>
+        </div>
+
+        <div className="mt-8 text-white/70 text-xs tracking-[0.14em] uppercase">Scroll to explore</div>
+        <div className="mx-auto mt-2 h-8 w-5 rounded-full border border-white/35 p-1">
+          <div className="mx-auto h-2 w-1 rounded-full bg-white/80 animate-bounce" />
         </div>
       </div>
 
