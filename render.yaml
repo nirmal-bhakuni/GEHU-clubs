@@ -1,0 +1,56 @@
+services:
+  - type: web
+    name: gehu-clubs
+    env: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /api/clubs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MONGO_URI
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: DISABLE_AUTO_SEED
+        value: "true"
+      - key: DISABLE_EMAIL_NOTIFICATIONS
+        value: "true"
+      - key: EVENT_REMINDER_DAYS
+        value: "3"
+      - key: EVENT_REMINDER_INTERVAL_HOURS
+        value: "6"
+      - key: EMAIL_BATCH_SIZE
+        value: "50"
+      - key: ERP_SYNC_URL
+        sync: false
+      - key: ERP_SYNC_TOKEN
+        sync: false
+      - key: SMTP_URL
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: TEACHER_USERNAME
+        value: teacher
+      - key: TEACHER_PASSWORD
+        sync: false
+      - key: TEACHER_PROOF_ID
+        sync: false
+      - key: TEACHER_FULLNAME
+        value: Faculty ERP Coordinator
+      - key: TEACHER_EMAIL
+        sync: false
+      - key: TEACHER_DEPARTMENT
+        value: Computer Science
+      - key: TEACHER_DESIGNATION
+        value: Assistant Professor
+      - key: TEACHER_SECTIONS
+        value: A1,B1
