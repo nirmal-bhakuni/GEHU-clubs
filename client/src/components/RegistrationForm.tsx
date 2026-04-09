@@ -20,6 +20,7 @@ interface StudentData {
 interface RegistrationFormProps {
   eventTitle: string;
   eventDate: string;
+  eventDurationMinutes?: number;
   clubName: string;
   studentData?: StudentData;
   isAuthenticated?: boolean;
@@ -32,8 +33,11 @@ export interface StudentRegistration {
   email: string;
   phone: string;
   rollNumber: string;
+  course: string;
   department: string;
   year: string;
+  section: string;
+  eventDurationMinutes?: number;
   enrollmentNumber: string;
   interests: string[];
   experience?: string;
@@ -43,6 +47,7 @@ export interface StudentRegistration {
 export default function RegistrationForm({
   eventTitle,
   eventDate,
+  eventDurationMinutes = 120,
   clubName,
   studentData,
   isAuthenticated = true,
@@ -70,8 +75,11 @@ export default function RegistrationForm({
     email: studentData?.email || "",
     phone: studentData?.phone || "",
     rollNumber: studentData?.rollNumber || "",
+    course: studentData?.department || "",
     department: studentData?.department || "",
     year: studentData?.yearOfAdmission ? getYearLabel(studentData.yearOfAdmission) : "First Year",
+    section: "",
+    eventDurationMinutes,
     enrollmentNumber: studentData?.enrollmentNumber || "",
     interests: [],
     experience: "",
@@ -92,14 +100,16 @@ export default function RegistrationForm({
           phone: studentData.phone || prev.phone || "",
           rollNumber: studentData.rollNumber || prev.rollNumber || "",
           enrollmentNumber: studentData.enrollmentNumber || prev.enrollmentNumber || "",
+          course: studentData.department || prev.course || "",
           department: studentData.department || prev.department || "",
           year: academicYear,
+          eventDurationMinutes,
         };
         console.log("Updated form data:", updated);
         return updated;
       });
     }
-  }, [studentData]);
+  }, [studentData, eventDurationMinutes]);
 
   const departments = [
     // Engineering Departments
@@ -139,6 +149,16 @@ export default function RegistrationForm({
   ];
 
   const years = ["First Year", "Second Year", "Third Year", "Fourth Year"];
+  const yearToSectionSuffix: Record<string, string> = {
+    "First Year": "1",
+    "Second Year": "2",
+    "Third Year": "3",
+    "Fourth Year": "4",
+  };
+
+  const sectionOptions = ["A", "B", "C", "D", "E", "F"].map(
+    (letter) => `${letter}${yearToSectionSuffix[formData.year] || "1"}`,
+  );
 
   const interestOptions = [
     "Web Development",
@@ -155,7 +175,28 @@ export default function RegistrationForm({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      if (name === "course") {
+        return {
+          ...prev,
+          course: value,
+          department: value,
+        };
+      }
+
+      if (name === "year") {
+        const nextSuffix = yearToSectionSuffix[value] || "1";
+        const currentPrefix = (prev.section || "A1").charAt(0).toUpperCase();
+
+        return {
+          ...prev,
+          year: value,
+          section: /^[A-F]$/.test(currentPrefix) ? `${currentPrefix}${nextSuffix}` : `A${nextSuffix}`,
+        };
+      }
+
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleInterestToggle = (interest: string) => {
@@ -187,7 +228,9 @@ export default function RegistrationForm({
       !formData.phone ||
       !formData.rollNumber ||
       !formData.enrollmentNumber ||
-      !formData.department
+      !formData.course ||
+      !formData.year ||
+      !formData.section
     ) {
       alert("Please fill in all required fields");
       return;
@@ -206,8 +249,11 @@ export default function RegistrationForm({
           email: "",
           phone: "",
           rollNumber: "",
+          course: "",
           department: "",
           year: "First Year",
+          section: "A1",
+          eventDurationMinutes,
           enrollmentNumber: "",
           interests: [],
           experience: "",
@@ -246,6 +292,25 @@ export default function RegistrationForm({
         Join <span className="font-semibold">{clubName}</span> for{" "}
         <span className="font-semibold">{eventTitle}</span>
       </p>
+
+      <div className="mb-6 grid grid-cols-1 gap-3 rounded-md border bg-muted/30 p-4 text-sm md:grid-cols-3">
+        <div>
+          <p className="text-muted-foreground">Date</p>
+          <p className="font-medium">{eventDate}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Duration</p>
+          <p className="font-medium">
+            {eventDurationMinutes >= 60
+              ? `${Math.floor(eventDurationMinutes / 60)}h ${eventDurationMinutes % 60 ? `${eventDurationMinutes % 60}m` : ""}`.trim()
+              : `${eventDurationMinutes}m`}
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Duration Snapshot</p>
+          <p className="font-medium">{eventDurationMinutes} minutes</p>
+        </div>
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Personal Information */}
@@ -337,17 +402,16 @@ export default function RegistrationForm({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">
-                Department <span className="text-red-500">*</span>
+                Course <span className="text-red-500">*</span>
               </label>
               <select
-                name="department"
-                value={formData.department}
+                name="course"
+                value={formData.course}
                 onChange={handleInputChange}
-                disabled
-                className="w-full px-3 py-2 border border-input rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 border border-input rounded-md bg-background"
                 required
               >
-                <option value="">Select Department</option>
+                <option value="">Select Course</option>
                 {departments.map((dept) => (
                   <option key={dept} value={dept}>
                     {dept}
@@ -364,13 +428,32 @@ export default function RegistrationForm({
                 name="year"
                 value={formData.year}
                 onChange={handleInputChange}
-                disabled
-                className="w-full px-3 py-2 border border-input rounded-md bg-background disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 border border-input rounded-md bg-background"
                 required
               >
                 {years.map((year) => (
                   <option key={year} value={year}>
                     {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Section <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="section"
+                value={formData.section}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                required
+              >
+                <option value="">Select Section</option>
+                {sectionOptions.map((section) => (
+                  <option key={section} value={section}>
+                    {section}
                   </option>
                 ))}
               </select>

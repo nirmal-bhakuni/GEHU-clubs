@@ -27,8 +27,6 @@ const StudentLogin = lazy(() => import("@/pages/StudentLogin"));
 const StudentSignup = lazy(() => import("@/pages/StudentSignup"));
 const StudentDashboard = lazy(() => import("@/pages/StudentDashboard"));
 const StudentProfile = lazy(() => import("@/pages/StudentProfile"));
-const TeacherLogin = lazy(() => import("@/pages/TeacherLogin"));
-const TeacherERP = lazy(() => import("@/pages/TeacherERP"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
 function RouteFallback() {
@@ -50,8 +48,6 @@ function Router() {
       <Route path="/student/signup" component={StudentSignup} />
       <Route path="/student-dashboard" component={StudentDashboard} />
       <Route path="/student/dashboard" component={StudentDashboard} />
-      <Route path="/teacher/login" component={TeacherLogin} />
-      <Route path="/teacher/erp" component={TeacherERP} />
       <Route path="/admin/login" component={Login} />
       <Route path="/club-admin/login" component={ClubAdminLogin} />
       <Route path="/dashboard" component={Dashboard} />

@@ -39,6 +39,7 @@ export interface EventRegistration {
   eventTitle: string;
   eventDate: string;
   eventTime: string;
+  eventDurationMinutes?: number;
   clubName: string;
   studentName: string;
   studentEmail: string;

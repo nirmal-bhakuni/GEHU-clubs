@@ -31,11 +31,6 @@ export default function Clubs() {
     },
   });
 
-  // Log for debugging
-  console.log("Clubs data:", clubs);
-  console.log("Is loading:", isLoading);
-  console.log("Error:", error);
-
   const defaultCategoryOptions = [
     "Technology",
     "Academic",

@@ -6,14 +6,17 @@ const eventRegistrationSchema = new mongoose.Schema({
   eventTitle: { type: String, required: true },
   eventDate: { type: String, required: true },
   eventTime: { type: String, required: true },
+  eventDurationMinutes: { type: Number, default: 120 },
   clubName: { type: String, required: true },
   studentName: { type: String, required: true },
   studentEmail: { type: String, required: true },
   enrollmentNumber: { type: String, required: true },
   phone: { type: String, required: true },
   rollNumber: { type: String, required: true },
+  course: { type: String, required: true },
   department: { type: String, required: true },
   year: { type: String, required: true },
+  section: { type: String, required: true },
   interests: [{ type: String }],
   experience: { type: String },
   attended: { type: Boolean, default: false },
@@ -27,6 +30,7 @@ const eventRegistrationSchema = new mongoose.Schema({
 eventRegistrationSchema.index({ eventId: 1, registeredAt: -1 });
 eventRegistrationSchema.index({ eventId: 1, status: 1, registeredAt: -1 });
 eventRegistrationSchema.index({ eventId: 1, attendanceStatus: 1, registeredAt: -1 });
+eventRegistrationSchema.index({ section: 1, year: 1, registeredAt: -1 });
 eventRegistrationSchema.index({ enrollmentNumber: 1 });
 eventRegistrationSchema.index({ studentEmail: 1 });
 

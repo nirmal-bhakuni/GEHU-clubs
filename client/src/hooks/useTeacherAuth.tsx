@@ -4,9 +4,11 @@ interface Teacher {
   id: string;
   username: string;
   fullName?: string;
+  teacherEmployeeId?: string;
   email?: string;
   department?: string;
   designation?: string;
+  assignedSections?: string[];
   lastLogin?: string;
 }
 

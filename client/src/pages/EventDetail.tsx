@@ -297,6 +297,7 @@ export default function EventDetail() {
             <RegistrationForm
               eventTitle={event.title}
               eventDate={event.date}
+              eventDurationMinutes={event.durationMinutes}
               clubName={event.clubName}
               isAuthenticated={isAuthenticated}
               onLoginRequired={() => setShowLoginPrompt(true)}
@@ -331,6 +332,7 @@ export default function EventDetail() {
                     eventTitle: event.title,
                     eventDate: event.date,
                     eventTime: event.time,
+                    eventDurationMinutes: event.durationMinutes,
                     clubName: event.clubName,
                     registeredAt: new Date().toISOString(),
                     isFallback: true

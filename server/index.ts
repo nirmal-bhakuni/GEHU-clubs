@@ -73,9 +73,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       await seedDatabase();
     }
 
-    // Temporarily skip route registration to test
     await registerRoutes(app);
-    app.get("/test", (req: Request, res: Response) => res.json({ message: "Server is working", timestamp: new Date().toISOString() }));
 
     startUpcomingEventReminderScheduler();
 

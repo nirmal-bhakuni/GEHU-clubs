@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { UserPlus, LogIn, Shield, Users, School, X } from "lucide-react";
+import { UserPlus, LogIn, Shield, Users, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 interface SidebarProps {
@@ -38,12 +38,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       label: "Club Admin",
       icon: Users,
       description: "Manage your club"
-    },
-    {
-      path: "/teacher/login",
-      label: "Teacher Login",
-      icon: School,
-      description: "Mark attendance and monitor sections"
     }
   ];
 

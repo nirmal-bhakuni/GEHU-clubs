@@ -26,7 +26,7 @@ import { ClubStory } from "./models/ClubStory";
 import { ChatGroup } from "./models/ChatGroup";
 import { ChatMessage } from "./models/ChatMessage";
 import { ChatReadState } from "./models/ChatReadState";
-import { notifyAnnouncement, notifyNewEvent } from "./services/emailService";
+import { notifyAnnouncement, notifyNewEvent, sendEmail } from "./services/emailService";
 
 const uploadsDirCandidates = [
   path.join(process.cwd(), "uploads"),
@@ -244,13 +244,59 @@ function getTeacherCourse(department?: string | null) {
   return value || "General Studies";
 }
 
+function normalizeTeacherProofId(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+}
+
+function normalizeTeacherSections(sections: unknown) {
+  if (!Array.isArray(sections)) return [] as string[];
+
+  return Array.from(
+    new Set(
+      sections
+        .map((section) => String(section || "").trim().toUpperCase())
+        .filter((section) => isCompactSectionCode(section)),
+    ),
+  );
+}
+
+function deriveTeacherDefaultSection(department?: string | null) {
+  return getTeacherSection({ department, year: "1" }).toUpperCase();
+}
+
+function resolveTeacherAssignedSections(teacher: any) {
+  const fromProfile = normalizeTeacherSections(teacher?.assignedSections);
+  if (fromProfile.length > 0) return fromProfile;
+
+  return [deriveTeacherDefaultSection(teacher?.department)];
+}
+
 async function ensureDefaultTeacher() {
   const defaultUsername = process.env.TEACHER_USERNAME || "teacher";
   const defaultPassword = process.env.TEACHER_PASSWORD || "teacher123";
   const defaultName = process.env.TEACHER_FULLNAME || "Faculty ERP Coordinator";
+  const configuredTeacherProofId = normalizeTeacherProofId(process.env.TEACHER_PROOF_ID || "");
+  const configuredSections = String(process.env.TEACHER_SECTIONS || "")
+    .split(",")
+    .map((item) => item.trim().toUpperCase())
+    .filter((item) => isCompactSectionCode(item));
 
   const existing = await Teacher.findOne({ username: defaultUsername });
-  if (existing) return existing;
+  if (existing) {
+    const assigned = resolveTeacherAssignedSections(existing);
+    const normalizedExistingProofId = normalizeTeacherProofId(existing.teacherEmployeeId);
+    if (!normalizedExistingProofId && configuredTeacherProofId) {
+      existing.teacherEmployeeId = configuredTeacherProofId;
+    }
+    if (normalizeTeacherSections(existing.assignedSections).length === 0) {
+      existing.assignedSections = assigned;
+    }
+    await existing.save();
+    return existing;
+  }
 
   const hashedPassword = await bcrypt.hash(defaultPassword, 10);
   return Teacher.create({
@@ -258,9 +304,14 @@ async function ensureDefaultTeacher() {
     username: defaultUsername,
     password: hashedPassword,
     fullName: defaultName,
+    teacherEmployeeId: configuredTeacherProofId || "",
     email: process.env.TEACHER_EMAIL || "teacher.erp@gehu.ac.in",
     department: process.env.TEACHER_DEPARTMENT || "Computer Science",
     designation: process.env.TEACHER_DESIGNATION || "Assistant Professor",
+    assignedSections:
+      configuredSections.length > 0
+        ? configuredSections
+        : [deriveTeacherDefaultSection(process.env.TEACHER_DEPARTMENT || "Computer Science")],
     isActive: true,
   });
 }
@@ -1542,14 +1593,41 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     try {
       await ensureDefaultTeacher();
 
-      const { username, password } = req.body as { username?: string; password?: string };
-      if (!username || !password) {
-        return res.status(400).json({ error: "Username and password are required" });
+      const {
+        username,
+        password,
+        teacherProofId,
+        sectionsTaught,
+      } = req.body as {
+        username?: string;
+        password?: string;
+        teacherProofId?: string;
+        sectionsTaught?: string[];
+      };
+      if (!username || !password || !teacherProofId) {
+        return res.status(400).json({ error: "Username, password and teacher ID proof are required" });
       }
 
       const teacher = await Teacher.findOne({ username: String(username).trim() });
       if (!teacher) return res.status(401).json({ error: "Invalid username or password" });
       if (!teacher.isActive) return res.status(403).json({ error: "Teacher account is disabled" });
+
+      const normalizedProofId = normalizeTeacherProofId(teacherProofId);
+      if (!normalizedProofId) {
+        return res.status(400).json({ error: "Valid teacher ID proof is required" });
+      }
+
+      const existingProofId = normalizeTeacherProofId(teacher.teacherEmployeeId);
+      if (existingProofId && existingProofId !== normalizedProofId) {
+        return res.status(401).json({ error: "Teacher ID proof does not match records" });
+      }
+
+      teacher.teacherEmployeeId = normalizedProofId;
+
+      const normalizedSections = normalizeTeacherSections(sectionsTaught);
+      if (normalizedSections.length > 0) {
+        teacher.assignedSections = normalizedSections;
+      }
 
       const valid = await bcrypt.compare(password, teacher.password);
       if (!valid) return res.status(401).json({ error: "Invalid username or password" });
@@ -1557,26 +1635,38 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       teacher.lastLogin = new Date();
       await teacher.save();
 
-      req.session.adminId = undefined;
-      req.session.studentId = undefined;
-      req.session.teacherId = teacher.id;
-      req.session.save((err: any) => {
+      req.session.regenerate((err) => {
         if (err) {
-          console.error("Teacher session save error:", err);
+          console.error("Teacher session regenerate error:", err);
           return res.status(500).json({ error: "Login failed" });
         }
 
-        return res.json({
-          success: true,
-          teacher: {
-            id: teacher.id,
-            username: teacher.username,
-            fullName: teacher.fullName,
-            email: teacher.email,
-            department: teacher.department,
-            designation: teacher.designation,
-            lastLogin: teacher.lastLogin,
-          },
+        req.session.adminId = undefined;
+        req.session.studentId = undefined;
+        req.session.teacherId = teacher.id;
+
+        req.session.save((saveErr: any) => {
+          if (saveErr) {
+            console.error("Teacher session save error:", saveErr);
+            return res.status(500).json({ error: "Login failed" });
+          }
+
+          const assignedSections = resolveTeacherAssignedSections(teacher);
+
+          return res.json({
+            success: true,
+            teacher: {
+              id: teacher.id,
+              username: teacher.username,
+              fullName: teacher.fullName,
+              teacherEmployeeId: teacher.teacherEmployeeId,
+              email: teacher.email,
+              department: teacher.department,
+              designation: teacher.designation,
+              assignedSections,
+              lastLogin: teacher.lastLogin,
+            },
+          });
         });
       });
     } catch (error) {
@@ -1606,13 +1696,17 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     const teacher = await Teacher.findOne({ id: req.session.teacherId });
     if (!teacher) return res.status(404).json({ error: "Teacher not found" });
 
+    const assignedSections = resolveTeacherAssignedSections(teacher);
+
     res.json({
       id: teacher.id,
       username: teacher.username,
       fullName: teacher.fullName,
+      teacherEmployeeId: teacher.teacherEmployeeId,
       email: teacher.email,
       department: teacher.department,
       designation: teacher.designation,
+      assignedSections,
       lastLogin: teacher.lastLogin,
     });
   });
@@ -1621,19 +1715,26 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     const teacher = await Teacher.findOne({ id: req.session.teacherId });
     if (!teacher) return res.status(404).json({ error: "Teacher not found" });
 
+    const assignedSections = resolveTeacherAssignedSections(teacher);
+
     res.json({
       id: teacher.id,
       username: teacher.username,
       fullName: teacher.fullName,
+      teacherEmployeeId: teacher.teacherEmployeeId,
       email: teacher.email,
       department: teacher.department,
       designation: teacher.designation,
+      assignedSections,
       lastLogin: teacher.lastLogin,
     });
   });
 
-  app.get("/api/teacher/erp/overview", requireTeacherAuth, async (_req: Request, res: Response) => {
+  app.get("/api/teacher/erp/overview", requireTeacherAuth, async (req: Request, res: Response) => {
     try {
+      const teacher = await Teacher.findOne({ id: req.session.teacherId });
+      const teacherAssignedSections = resolveTeacherAssignedSections(teacher);
+
       const [totalStudents, totalRegistrations, attendanceRows, recentRaw] = await Promise.all([
         Student.countDocuments({}),
         EventRegistration.countDocuments({}),
@@ -1664,24 +1765,33 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         }
       }
 
-      const recentParticipation = recentRaw.map((record: any) => ({
-        registrationId: record.id,
-        studentName: record.studentName,
-        enrollmentNumber: record.enrollmentNumber,
-        course: getTeacherCourse(record.department),
-        section: getTeacherSection({
-          department: record.department,
-          year: record.year,
-          enrollment: record.enrollmentNumber,
-        }),
-        eventTitle: record.eventTitle,
-        status: record.attendanceStatus || "pending",
-        participatedAt: record.attendanceMarkedAt || record.updatedAt || record.registeredAt,
-      }));
+      const recentParticipation = recentRaw.map((record: any) => {
+        const section =
+          String(record.section || "").trim().toUpperCase() ||
+          getTeacherSection({
+            department: record.department,
+            year: record.year,
+            enrollment: record.enrollmentNumber,
+          });
+
+        return {
+          registrationId: record.id,
+          studentName: record.studentName,
+          enrollmentNumber: record.enrollmentNumber,
+          course: String(record.course || "").trim() || getTeacherCourse(record.department),
+          section,
+          eventDurationMinutes: Number(record.eventDurationMinutes ?? 120),
+          isFromTeacherSection: teacherAssignedSections.includes(section.toUpperCase()),
+          eventTitle: record.eventTitle,
+          status: record.attendanceStatus || "pending",
+          participatedAt: record.attendanceMarkedAt || record.updatedAt || record.registeredAt,
+        };
+      });
 
       res.json({
         totalStudents,
         totalRegistrations,
+        teacherAssignedSections,
         attendanceSummary,
         recentParticipation,
       });
@@ -1723,6 +1833,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     search?: string;
     status?: string;
     selectedRegistrationIds?: string[];
+    teacherAssignedSections?: string[];
   }) => {
     const search = String(params?.search || "").trim().toLowerCase();
     const status = String(params?.status || "all").trim().toLowerCase();
@@ -1730,6 +1841,9 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       (params?.selectedRegistrationIds || [])
         .map((id) => String(id || "").trim())
         .filter(Boolean),
+    );
+    const teacherAssignedSections = new Set(
+      (params?.teacherAssignedSections || []).map((item) => String(item || "").trim().toUpperCase()),
     );
 
     const registrations = await EventRegistration.find({})
@@ -1755,26 +1869,31 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         studentName: record.studentName,
         studentEmail: record.studentEmail,
         enrollmentNumber: record.enrollmentNumber,
-        course: getTeacherCourse(record.department),
+        course: String(record.course || "").trim() || getTeacherCourse(record.department),
         section:
           teacherAttendance?.sectionSnapshot && isCompactSectionCode(teacherAttendance.sectionSnapshot)
             ? String(teacherAttendance.sectionSnapshot).toUpperCase()
-            : getTeacherSection({
+            : (String(record.section || "").trim().toUpperCase() ||
+              getTeacherSection({
                 department: record.department,
                 year: record.year,
                 enrollment: record.enrollmentNumber,
-              }),
+              })),
         department: record.department,
         eventTitle: record.eventTitle,
         eventDate: record.eventDate,
         eventTime: record.eventTime,
+        eventDurationMinutes: Number(record.eventDurationMinutes ?? 120),
         clubName: record.clubName,
         status: mergedStatus,
         participationScore: teacherAttendance?.participationScore ?? (mergedStatus === "present" ? 7 : 0),
         teacherRemark: teacherAttendance?.teacherRemark || "",
         participatedAt,
       };
-    });
+    }).map((row) => ({
+      ...row,
+      isFromTeacherSection: teacherAssignedSections.has(String(row.section || "").toUpperCase()),
+    }));
 
     const filtered = mapped.filter((row) => {
       if (status !== "all" && row.status !== status) return false;
@@ -1798,14 +1917,71 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     return filtered;
   };
 
+  const applyTeacherAttendanceUpdate = async (params: {
+    registration: any;
+    normalizedStatus: "pending" | "present" | "absent" | "late" | "excused";
+    participationScore: number;
+    teacherRemark?: string;
+    teacherId?: string;
+  }) => {
+    const now = new Date();
+    const shouldCountPresent =
+      params.normalizedStatus === "present" || params.normalizedStatus === "late";
+
+    await EventRegistration.updateOne(
+      { id: params.registration.id },
+      {
+        $set: {
+          attendanceStatus: shouldCountPresent
+            ? "present"
+            : params.normalizedStatus === "absent"
+              ? "absent"
+              : "pending",
+          attended: shouldCountPresent,
+          attendanceMarkedAt: now,
+          attendanceMarkedBy: params.teacherId,
+        },
+      },
+    );
+
+    const sectionSnapshot = String(params.registration.section || "").trim().toUpperCase() ||
+      getTeacherSection({
+        department: params.registration.department,
+        year: params.registration.year,
+        enrollment: params.registration.enrollmentNumber,
+      });
+
+    await TeacherAttendance.findOneAndUpdate(
+      { registrationId: params.registration.id },
+      {
+        $set: {
+          teacherId: params.teacherId,
+          status: params.normalizedStatus,
+          participationScore: params.participationScore,
+          teacherRemark: String(params.teacherRemark || "").trim(),
+          sectionSnapshot,
+          participatedAt: now,
+        },
+      },
+      { new: true, upsert: true },
+    );
+  };
+
   app.get("/api/teacher/attendance", requireTeacherAuth, async (req: Request, res: Response) => {
     try {
+      const teacher = await Teacher.findOne({ id: req.session.teacherId });
+      const teacherAssignedSections = resolveTeacherAssignedSections(teacher);
+
       const rows = await getTeacherAttendanceRows({
         search: String(req.query.search || ""),
         status: String(req.query.status || "all"),
+        teacherAssignedSections,
       });
 
-      res.json(rows);
+      res.json({
+        teacherAssignedSections,
+        rows,
+      });
     } catch (error) {
       console.error("Teacher attendance fetch failed:", error);
       res.status(500).json({ error: "Failed to load attendance" });
@@ -1824,17 +2000,20 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         selectedRegistrationIds?: string[];
       };
 
+      const teacher = await Teacher.findOne({ id: req.session.teacherId });
+      const teacherAssignedSections = resolveTeacherAssignedSections(teacher);
+
       const rows = await getTeacherAttendanceRows({
         search,
         status,
         selectedRegistrationIds,
+        teacherAssignedSections,
       });
 
       if (rows.length === 0) {
         return res.status(400).json({ error: "No attendance records available for ERP sync" });
       }
 
-      const teacher = await Teacher.findOne({ id: req.session.teacherId });
       const payload = {
         sourceSystem: "GEHU Clubs",
         syncedAt: new Date().toISOString(),
@@ -1944,40 +2123,168 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(404).json({ error: "Registration not found" });
       }
 
-      const now = new Date();
-      const shouldCountPresent = normalizedStatus === "present" || normalizedStatus === "late";
-
-      registration.attendanceStatus = shouldCountPresent ? "present" : normalizedStatus === "absent" ? "absent" : "pending";
-      registration.attended = shouldCountPresent;
-      registration.attendanceMarkedAt = now;
-      registration.attendanceMarkedBy = req.session.teacherId;
-      await registration.save();
-
-      const sectionSnapshot = getTeacherSection({
-        department: registration.department,
-        year: registration.year,
-        enrollment: registration.enrollmentNumber,
+      await applyTeacherAttendanceUpdate({
+        registration,
+        normalizedStatus: normalizedStatus as "pending" | "present" | "absent" | "late" | "excused",
+        participationScore: safeScore,
+        teacherRemark,
+        teacherId: req.session.teacherId,
       });
 
-      const attendance = await TeacherAttendance.findOneAndUpdate(
-        { registrationId },
-        {
-          $set: {
-            teacherId: req.session.teacherId,
-            status: normalizedStatus,
-            participationScore: safeScore,
-            teacherRemark: String(teacherRemark || "").trim(),
-            sectionSnapshot,
-            participatedAt: now,
-          },
-        },
-        { new: true, upsert: true },
-      );
+      const attendance = await TeacherAttendance.findOne({ registrationId });
 
       res.json({ success: true, attendance });
     } catch (error) {
       console.error("Teacher attendance update failed:", error);
       res.status(500).json({ error: "Failed to update attendance" });
+    }
+  });
+
+  app.post("/api/teacher/attendance/bulk-update", requireTeacherAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        registrationIds,
+        status,
+        participationScore,
+        teacherRemark,
+      } = req.body as {
+        registrationIds?: string[];
+        status?: "pending" | "present" | "absent" | "late" | "excused";
+        participationScore?: number;
+        teacherRemark?: string;
+      };
+
+      const ids = (registrationIds || []).map((id) => String(id || "").trim()).filter(Boolean);
+      if (ids.length === 0) {
+        return res.status(400).json({ error: "registrationIds are required" });
+      }
+
+      const allowedStatus = new Set(["pending", "present", "absent", "late", "excused"]);
+      const normalizedStatus = allowedStatus.has(String(status)) ? String(status) : "pending";
+      const safeScore = Math.min(10, Math.max(0, Number(participationScore ?? 7)));
+
+      const registrations = await EventRegistration.find({ id: { $in: ids } });
+      if (registrations.length === 0) {
+        return res.status(404).json({ error: "No matching registrations found" });
+      }
+
+      for (const registration of registrations as any[]) {
+        await applyTeacherAttendanceUpdate({
+          registration,
+          normalizedStatus: normalizedStatus as "pending" | "present" | "absent" | "late" | "excused",
+          participationScore: safeScore,
+          teacherRemark,
+          teacherId: req.session.teacherId,
+        });
+      }
+
+      return res.json({
+        success: true,
+        updatedCount: registrations.length,
+        status: normalizedStatus,
+      });
+    } catch (error) {
+      console.error("Teacher bulk attendance update failed:", error);
+      res.status(500).json({ error: "Failed to bulk update attendance" });
+    }
+  });
+
+  app.post("/api/teacher/notifications/send", requireTeacherAuth, async (req: Request, res: Response) => {
+    try {
+      const {
+        registrationIds,
+        search,
+        status,
+        mode,
+        subject,
+        message,
+      } = req.body as {
+        registrationIds?: string[];
+        search?: string;
+        status?: string;
+        mode?: "selected" | "at-risk" | "filtered";
+        subject?: string;
+        message?: string;
+      };
+
+      const teacher = await Teacher.findOne({ id: req.session.teacherId });
+      const teacherAssignedSections = resolveTeacherAssignedSections(teacher);
+
+      const rows = await getTeacherAttendanceRows({
+        search,
+        status,
+        selectedRegistrationIds: registrationIds,
+        teacherAssignedSections,
+      });
+
+      let targets = rows;
+
+      if (mode === "at-risk") {
+        const byStudent = new Map<string, {
+          row: any;
+          total: number;
+          absences: number;
+          scoreSum: number;
+        }>();
+
+        for (const row of rows as any[]) {
+          const key = row.enrollmentNumber;
+          const current = byStudent.get(key) || { row, total: 0, absences: 0, scoreSum: 0 };
+          current.total += 1;
+          current.absences += row.status === "absent" ? 1 : 0;
+          current.scoreSum += Number(row.participationScore || 0);
+          if (new Date(row.participatedAt).getTime() > new Date(current.row.participatedAt).getTime()) {
+            current.row = row;
+          }
+          byStudent.set(key, current);
+        }
+
+        targets = Array.from(byStudent.values())
+          .map((item) => ({
+            ...item.row,
+            avgScore: item.total ? item.scoreSum / item.total : 0,
+            absences: item.absences,
+          }))
+          .filter((item) => item.absences >= 2 || item.avgScore < 4);
+      }
+
+      if (targets.length === 0) {
+        return res.status(400).json({ error: "No target students found for notification" });
+      }
+
+      const deduped = Array.from(
+        new Map(targets.map((item: any) => [String(item.studentEmail).toLowerCase(), item])).values(),
+      );
+
+      const emailSubject =
+        String(subject || "").trim() ||
+        "Attendance Reminder - GEHU Teacher ERP";
+
+      const teacherName = teacher?.fullName || teacher?.username || "Teacher";
+      const sentTo: string[] = [];
+
+      for (const target of deduped as any[]) {
+        const personalizedText =
+          String(message || "").trim() ||
+          `Dear ${target.studentName},\n\nThis is a reminder regarding your recent attendance/participation records for ${target.eventTitle}. Please stay regular and contact ${teacherName} if you need support.\n\nSection: ${target.section}\nCourse: ${target.course}\n\nRegards,\n${teacherName}`;
+
+        await sendEmail({
+          to: target.studentEmail,
+          subject: emailSubject,
+          text: personalizedText,
+        });
+
+        sentTo.push(target.studentEmail);
+      }
+
+      return res.json({
+        success: true,
+        sentCount: sentTo.length,
+        recipients: sentTo,
+      });
+    } catch (error) {
+      console.error("Teacher notification send failed:", error);
+      res.status(500).json({ error: "Failed to send notifications" });
     }
   });
 
@@ -2328,6 +2635,34 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const { eventId } = req.params;
       const registrationData = req.body;
 
+      const requiredRegistrationFields = [
+        "fullName",
+        "email",
+        "phone",
+        "rollNumber",
+        "enrollmentNumber",
+        "course",
+        "year",
+        "section",
+      ];
+
+      const missingFields = requiredRegistrationFields.filter((field) => {
+        const value = (registrationData as any)?.[field];
+        return !String(value ?? "").trim();
+      });
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          error: `Missing required fields: ${missingFields.join(", ")}`,
+        });
+      }
+
+      registrationData.course = String(registrationData.course).trim();
+      registrationData.section = String(registrationData.section).trim().toUpperCase();
+      registrationData.department = String(
+        registrationData.department || registrationData.course,
+      ).trim();
+
       // Get event details
       const event = await storage.getEvent(eventId);
       if (!event) return res.status(404).json({ error: "Event not found" });
@@ -2349,6 +2684,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         eventTitle: event.title,
         eventDate: event.date,
         eventTime: event.time,
+        eventDurationMinutes: Number(event.durationMinutes ?? 120),
         clubName: event.clubName,
         status: 'pending',
       });
@@ -3327,17 +3663,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     }
   });
 
-  // Test route
-  app.get("/api/test-join", (req: Request, res: Response) => {
-    res.json({ message: "Test route works" });
-  });
-
   // Club Membership Routes
-  console.log("Registering club join route: /api/clubs/:clubId/join");
   app.post("/api/clubs/:clubId/join", requireStudentAuth, async (req: Request, res: Response) => {
-    console.log("Join route hit:", req.path, req.params, req.body, req.method, req.headers['content-type']);
-    console.log("ClubId from params:", req.params.clubId);
-
     try {
       const clubId = req.params.clubId;
       const { reason } = req.body;
@@ -3350,7 +3677,6 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       // Get club details
       const club = await storage.getClub(clubId);
       if (!club) {
-        console.log("Club not found:", clubId);
         return res.status(404).json({ error: "Club not found" });
       }
 
@@ -4452,32 +4778,6 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       console.error("Error deleting student:", error);
       res.status(500).json({ error: "Failed to delete student" });
     }
-  });
-
-  // Test email endpoint (development only)
-  if (process.env.NODE_ENV !== "production") {
-    app.post("/api/test/send-email", requireAuth, async (req: Request, res: Response) => {
-      try {
-        const { sendEmail } = await import("./services/emailService");
-        const { to, subject, text, html } = req.body;
-
-        if (!to || !subject || !text) {
-          return res.status(400).json({ error: "Missing required fields: to, subject, text" });
-        }
-
-        await sendEmail({ to, subject, text, html });
-        res.json({ success: true, message: "Email sent! Check terminal for preview URL." });
-      } catch (error: any) {
-        console.error("Test email failed:", error);
-        res.status(500).json({ error: error.message || "Failed to send test email" });
-      }
-    });
-  }
-
-  // Catch-all route for debugging
-  app.use("/api/clubs/:clubId/join", (req: Request, res: Response, next: NextFunction) => {
-    console.log("Catch-all hit for join route:", req.method, req.path, req.params);
-    next();
   });
 
   // Fallback route for SPA - serve index.html for all non-API routes
