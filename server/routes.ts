@@ -437,6 +437,14 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   const distPath = distPathCandidates.find((candidate) => fs.existsSync(candidate)) || distPathCandidates[0];
   app.use(express.static(distPath));
 
+  app.get("/api/health", (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   // General file upload endpoint
   app.post("/api/upload", requireAuth, upload.single("file"), async (req: Request, res: Response) => {
     try {
@@ -1148,17 +1156,73 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     }
   });
 
+  app.get("/api/auth/check-username", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const username = String(req.query.username || "").trim();
+      if (!username) {
+        return res.status(400).json({ available: false, error: "Username is required" });
+      }
+
+      const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const existing = await Admin.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
+
+      return res.json({ available: !existing });
+    } catch {
+      return res.status(500).json({ available: false, error: "Failed to check username" });
+    }
+  });
+
+  app.get("/api/auth/suggest-username", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const baseInput = String(req.query.base || "").trim().toLowerCase();
+      const normalizedBase = (baseInput || "club_admin")
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 40) || "club_admin";
+
+      const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const isTaken = async (candidate: string) => {
+        const escaped = escapeRegex(candidate);
+        const existing = await Admin.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
+        return !!existing;
+      };
+
+      if (!(await isTaken(normalizedBase))) {
+        return res.json({ suggestion: normalizedBase });
+      }
+
+      for (let i = 1; i <= 200; i++) {
+        const candidate = `${normalizedBase}_${i}`;
+        if (!(await isTaken(candidate))) {
+          return res.json({ suggestion: candidate });
+        }
+      }
+
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      return res.json({ suggestion: `${normalizedBase}_${randomSuffix}` });
+    } catch {
+      return res.status(500).json({ error: "Failed to generate username suggestion" });
+    }
+  });
+
   app.post("/api/auth/register", requireAuth, async (req: Request, res: Response) => {
     try {
       const { username, password, clubId } = req.body;
 
-      const existing = await storage.getAdminByUsername(username);
+      const normalizedUsername = String(username || "").trim();
+      if (!normalizedUsername) {
+        return res.status(400).json({ error: "Username is required" });
+      }
+
+      const escaped = normalizedUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const existing = await Admin.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
       if (existing) return res.status(400).json({ error: "Username already exists" });
 
       const hashed = await bcrypt.hash(password, 10);
 
       const admin = await storage.createAdmin({
-        username,
+        username: normalizedUsername,
         password: hashed,
         clubId
       });
@@ -3935,7 +3999,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   // In production, serve from dist folder. In development, redirect to frontend server
   app.get("*", (_req: Request, res: Response) => {
     if (process.env.NODE_ENV === "production") {
-      const indexPath = path.join(process.cwd(), "..", "dist", "index.html");
+      const indexPath = path.join(distPath, "index.html");
       res.sendFile(indexPath, (err: NodeJS.ErrnoException | undefined) => {
         if (err) {
           console.error("Error sending index.html:", err);

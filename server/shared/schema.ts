@@ -17,6 +17,7 @@ export const clubs = pgTable("clubs", {
   category: text("category").notNull(),
   memberCount: integer("member_count").notNull().default(0),
   logoUrl: text("logo_url"),
+  coverImageUrl: text("cover_image_url"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
@@ -45,9 +46,10 @@ export const insertClubSchema = createInsertSchema(clubs).omit({
 }).extend({
   facultyAssigned: z.string().optional(),
   phone: z.string().optional(),
-  email: z.string().email().optional(),
+  email: z.string().email().or(z.literal("")).optional(),
   eligibility: z.string().optional(),
   eligibilityYears: z.array(z.string()).optional(),
+  coverImageUrl: z.string().optional(),
 });
 
 export const insertEventSchema = createInsertSchema(events).omit({

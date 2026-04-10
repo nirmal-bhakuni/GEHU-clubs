@@ -6,7 +6,7 @@ services:
     autoDeploy: true
     buildCommand: npm run build
     startCommand: NODE_ENV=production npm start
-    healthCheckPath: /api/clubs
+    healthCheckPath: /api/health
     envVars:
       - key: HOST
         value: 0.0.0.0

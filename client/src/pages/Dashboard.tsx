@@ -316,6 +316,8 @@ export default function Dashboard() {
   const [clubAdminSearch, setClubAdminSearch] = useState("");
   const [clubAdminStatusFilter, setClubAdminStatusFilter] = useState<"all" | "active" | "frozen">("all");
   const eligibilityYearOptions = ["1st", "2nd", "3rd", "4th", "5th"];
+  const trimmedClubLoginId = clubLoginId.trim();
+  const suggestionBase = (trimmedClubLoginId || clubForm.name).trim();
 
   const { data: events = [] } = useQuery<Event[]>({
     queryKey: ["api", "events"],
@@ -333,6 +335,45 @@ export default function Dashboard() {
       return res.json();
     },
     enabled: isAuthenticated,
+  });
+
+  const { data: clubLoginAvailability, isFetching: isCheckingClubLoginId } = useQuery<{
+    available: boolean;
+    error?: string;
+  }>({
+    queryKey: ["api", "auth", "check-username", trimmedClubLoginId],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/auth/check-username?username=${encodeURIComponent(trimmedClubLoginId)}`,
+      );
+      return res.json();
+    },
+    enabled: isAuthenticated && showCreateClub && !editingClub && trimmedClubLoginId.length > 0,
+    staleTime: 30000,
+  });
+
+  const isClubLoginIdUnavailable =
+    !editingClub && trimmedClubLoginId.length > 0 && clubLoginAvailability?.available === false;
+
+  const { data: clubLoginSuggestion, isFetching: isSuggestingClubLoginId } = useQuery<{
+    suggestion: string;
+  }>({
+    queryKey: ["api", "auth", "suggest-username", suggestionBase],
+    queryFn: async () => {
+      const res = await apiRequest(
+        "GET",
+        `/api/auth/suggest-username?base=${encodeURIComponent(suggestionBase)}`,
+      );
+      return res.json();
+    },
+    enabled:
+      isAuthenticated &&
+      showCreateClub &&
+      !editingClub &&
+      isClubLoginIdUnavailable &&
+      suggestionBase.length > 0,
+    staleTime: 30000,
   });
 
   const { data: students = [], error: studentsError, isLoading: studentsLoading } = useQuery<any[]>({
@@ -654,30 +695,48 @@ export default function Dashboard() {
 
       const res = await apiRequest("POST", "/api/clubs", {
         ...clubData,
+        // Filter out empty strings for optional fields
+        facultyAssigned: clubData.facultyAssigned || undefined,
+        phone: clubData.phone || undefined,
+        email: clubData.email || undefined,
+        eligibility: clubData.eligibility || undefined,
         ...(logoUrl ? { logoUrl } : {}),
         ...(coverImageUrl ? { coverImageUrl } : {}),
       });
       const createdClub = await res.json();
+      let registerWarning: string | null = null;
 
       if (clubLoginId && clubLoginPassword) {
-        await apiRequest("POST", "/api/auth/register", {
-          username: clubLoginId,
-          password: clubLoginPassword,
-          clubId: createdClub.id,
-        });
+        try {
+          await apiRequest("POST", "/api/auth/register", {
+            username: clubLoginId,
+            password: clubLoginPassword,
+            clubId: createdClub.id,
+          });
+        } catch (error: any) {
+          registerWarning = error?.message || "Failed to create club login credentials.";
+        }
       }
 
-      return createdClub;
+      return { ...createdClub, registerWarning };
     },
     onSuccess: (createdClub) => {
       queryClient.invalidateQueries({ queryKey: ["/api/clubs"] });
-      const loginCredentials = clubLoginId && clubLoginPassword 
-        ? ` Club admin can now login at /club-admin-login using username: "${clubLoginId}"`
-        : "";
+      const loginCredentials =
+        clubLoginId && clubLoginPassword && !createdClub.registerWarning
+          ? ` Club admin can now login at /club-admin-login using username: "${clubLoginId}"`
+          : "";
       toast({
         title: "Club created successfully!",
         description: `${createdClub.name} has been created.${loginCredentials}`,
       });
+      if (createdClub.registerWarning) {
+        toast({
+          title: "Club created, but login setup failed",
+          description: `Club was created successfully. ${createdClub.registerWarning}`,
+          variant: "destructive",
+        });
+      }
       setShowCreateClub(false);
       setClubForm({
         name: "",
@@ -1481,6 +1540,15 @@ export default function Dashboard() {
                         coverFile: clubCoverFile,
                       });
                     } else {
+                      if (isClubLoginIdUnavailable) {
+                        toast({
+                          title: "Club ID already exists",
+                          description: "Please choose a different Club ID for dashboard login.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
                       createClubMutation.mutate({
                         clubData: clubForm,
                         logoFile: clubLogoFile,
@@ -1533,6 +1601,44 @@ export default function Dashboard() {
                             placeholder="Enter club_id for login"
                             required
                           />
+                          {trimmedClubLoginId.length > 0 && (
+                            <p
+                              className={`mt-2 text-xs ${
+                                isCheckingClubLoginId
+                                  ? "text-muted-foreground"
+                                  : clubLoginAvailability?.available
+                                    ? "text-green-500"
+                                    : "text-red-500"
+                              }`}
+                            >
+                              {isCheckingClubLoginId
+                                ? "Checking Club ID availability..."
+                                : clubLoginAvailability?.available
+                                  ? "Club ID is available"
+                                  : "Club ID already exists"}
+                            </p>
+                          )}
+                          {isClubLoginIdUnavailable && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={isSuggestingClubLoginId || !clubLoginSuggestion?.suggestion}
+                                onClick={() => {
+                                  if (clubLoginSuggestion?.suggestion) {
+                                    setClubLoginId(clubLoginSuggestion.suggestion);
+                                  }
+                                }}
+                              >
+                                {isSuggestingClubLoginId
+                                  ? "Finding available Club ID..."
+                                  : clubLoginSuggestion?.suggestion
+                                    ? `Use suggested: ${clubLoginSuggestion.suggestion}`
+                                    : "Suggest Club ID"}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                         <div>
                           <Label htmlFor="clubLoginPassword">Password</Label>
@@ -1685,7 +1791,12 @@ export default function Dashboard() {
                   <div className="flex gap-2">
                     <Button
                       type="submit"
-                      disabled={createClubMutation.isPending || updateClubMutation.isPending}
+                      disabled={
+                        createClubMutation.isPending ||
+                        updateClubMutation.isPending ||
+                        isCheckingClubLoginId ||
+                        isClubLoginIdUnavailable
+                      }
                     >
                       {editingClub ? "Update Club" : "Create Club"}
                     </Button>

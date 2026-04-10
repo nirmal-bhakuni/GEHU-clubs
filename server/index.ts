@@ -4,6 +4,7 @@ dotenv.config();
 import express, { Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MongoStore from "connect-mongo";
+import MemoryStore from "memorystore";
 import path from "path";
 import cors from "cors";
 
@@ -33,6 +34,23 @@ app.set("trust proxy", 1);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+const SessionMemoryStore = MemoryStore(session);
+
+let sessionStore: session.Store | undefined;
+if (process.env.MONGO_URI) {
+  try {
+    sessionStore = MongoStore.create({
+      mongoUrl: process.env.MONGO_URI,
+      collectionName: "sessions"
+    });
+  } catch (error) {
+    console.error("Failed to initialize MongoDB session store, falling back to memory store:", error);
+    sessionStore = new SessionMemoryStore({ checkPeriod: 86400000 });
+  }
+} else {
+  sessionStore = new SessionMemoryStore({ checkPeriod: 86400000 });
+}
+
 app.use(
   cors({
     origin: allowedOrigins,
@@ -45,12 +63,7 @@ app.use(
     secret: process.env.SESSION_SECRET || "dev-secret",
     resave: false,
     saveUninitialized: false,
-    store: process.env.MONGO_URI 
-      ? MongoStore.create({
-          mongoUrl: process.env.MONGO_URI,
-          collectionName: "sessions"
-        })
-      : undefined,
+    store: sessionStore,
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
