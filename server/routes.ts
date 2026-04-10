@@ -51,6 +51,8 @@ const upload = multer({
 });
 
 const DEFAULT_CLUB_LOGO = "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&h=200&fit=crop";
+const DEFAULT_CLUB_COVER = "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop";
+const DEFAULT_EVENT_IMAGE = "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&h=700&fit=crop";
 
 function hasLocalUploadFile(uploadUrl?: string | null): boolean {
   if (!uploadUrl || typeof uploadUrl !== "string" || !uploadUrl.startsWith("/uploads/")) {
@@ -73,8 +75,18 @@ function normalizeClubMedia<T extends { logoUrl?: string | null; coverImageUrl?:
     next.logoUrl = DEFAULT_CLUB_LOGO;
   }
 
-  if (next.coverImageUrl && next.coverImageUrl.startsWith("/uploads/") && !hasLocalUploadFile(next.coverImageUrl)) {
-    next.coverImageUrl = null;
+  if (!next.coverImageUrl || (next.coverImageUrl.startsWith("/uploads/") && !hasLocalUploadFile(next.coverImageUrl))) {
+    next.coverImageUrl = DEFAULT_CLUB_COVER;
+  }
+
+  return next;
+}
+
+function normalizeEventMedia<T extends { imageUrl?: string | null }>(event: T): T {
+  const next = { ...event };
+
+  if (!next.imageUrl || (next.imageUrl.startsWith("/uploads/") && !hasLocalUploadFile(next.imageUrl))) {
+    next.imageUrl = DEFAULT_EVENT_IMAGE;
   }
 
   return next;
@@ -984,10 +996,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       // Ensure all events have an id field
       const eventsWithId = events.map(e => {
         const eventObj = e.toObject ? e.toObject() : e;
-        return {
+        return normalizeEventMedia({
           ...eventObj,
           id: eventObj.id || eventObj._id?.toString() // Use id if present, fallback to _id
-        };
+        });
       });
 
       res.json(eventsWithId);
@@ -1003,10 +1015,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       
       // Ensure the event object includes an id field
       const eventObj = event.toObject ? event.toObject() : event;
-      const responseEvent = {
+      const responseEvent = normalizeEventMedia({
         ...eventObj,
         id: eventObj.id || eventObj._id?.toString()
-      };
+      });
       
       res.json(responseEvent);
     } catch (error) {
