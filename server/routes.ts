@@ -440,6 +440,9 @@ async function findVenueConflict(params: {
 
 export async function registerRoutes(app: ReturnType<typeof express>): Promise<void> {
   app.use("/uploads", express.static(uploadsDir));
+  app.get("/uploads/*", (_req: Request, res: Response) => {
+    res.redirect(DEFAULT_EVENT_IMAGE);
+  });
 
   // Serve static files from the client build
   const distPathCandidates = [
