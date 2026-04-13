@@ -3,8 +3,6 @@ import { Calendar, Users } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
 
-import heroImage from "@assets/stock_images/Gemini_Generated_Image_k07s30k07s30k07s_1.png";
-
 export default function Hero() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isVisible, setIsVisible] = useState(false);
@@ -22,7 +20,7 @@ export default function Hero() {
     <section className="relative w-full min-h-[640px] lg:min-h-[760px] flex items-center justify-center overflow-hidden group">
       <div className="absolute inset-0">
         <img
-          src={heroImage}
+          src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=1200&h=800&fit=crop"
           alt="College students at campus event"
           className="w-full h-full object-cover brightness-110 contrast-105 saturate-110 group-hover:scale-105 transition-transform duration-700 ease-out"
         />
