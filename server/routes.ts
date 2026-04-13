@@ -8,6 +8,7 @@ import multer from "multer";
 import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared/schema";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 import { Student } from "./models/Student";
 import { Admin } from "./models/Admin";
@@ -24,9 +25,11 @@ import { ClubStory } from "./models/ClubStory";
 import { ChatGroup } from "./models/ChatGroup";
 import { ChatMessage } from "./models/ChatMessage";
 import { ChatReadState } from "./models/ChatReadState";
+import { v2 as cloudinary } from "cloudinary";
 import { notifyAnnouncement, notifyNewEvent, sendEmail } from "./services/emailService";
 
 const uploadsDirCandidates = [
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "uploads"),
   path.join(process.cwd(), "uploads"),
   path.join(process.cwd(), "..", "uploads"),
 ];
@@ -41,7 +44,14 @@ const storage_multer = multer.diskStorage({
     cb(null, uploadsDir);
   },
   filename: function (_req: Request, file: any, cb: any) {
-    cb(null, Date.now() + "-" + Math.round(Math.random() * 1e9) + "-" + file.originalname);
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const rawBaseName = path.basename(file.originalname || "file", extension);
+    const safeBaseName = rawBaseName
+      .replace(/[^a-zA-Z0-9-_]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "file";
+
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}-${safeBaseName}${extension}`);
   }
 });
 
@@ -53,6 +63,37 @@ const upload = multer({
 const DEFAULT_CLUB_LOGO = "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&h=200&fit=crop";
 const DEFAULT_CLUB_COVER = "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop";
 const DEFAULT_EVENT_IMAGE = "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=1200&h=700&fit=crop";
+
+const hasCloudinaryConfig =
+  !!process.env.CLOUDINARY_CLOUD_NAME &&
+  !!process.env.CLOUDINARY_API_KEY &&
+  !!process.env.CLOUDINARY_API_SECRET;
+
+if (hasCloudinaryConfig) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+}
+
+async function getUploadedFileUrl(file: Express.Multer.File, folder = "gehu-clubs"): Promise<string> {
+  if (hasCloudinaryConfig) {
+    try {
+      const uploaded = await cloudinary.uploader.upload(file.path, {
+        folder,
+        resource_type: "auto",
+      });
+
+      fs.unlink(file.path, () => {});
+      return uploaded.secure_url;
+    } catch (error) {
+      console.error("Cloudinary upload failed; using local upload URL:", error);
+    }
+  }
+
+  return `/uploads/${file.filename}`;
+}
 
 function hasLocalUploadFile(uploadUrl?: string | null): boolean {
   if (!uploadUrl || typeof uploadUrl !== "string" || !uploadUrl.startsWith("/uploads/")) {
@@ -68,7 +109,23 @@ function hasLocalUploadFile(uploadUrl?: string | null): boolean {
   return fs.existsSync(path.join(uploadsDir, decodedFileName));
 }
 
-function normalizeClubMedia<T extends { logoUrl?: string | null; coverImageUrl?: string | null }>(club: T): T {
+function toPublicMediaUrl(uploadUrl?: string | null, req?: Request): string | null | undefined {
+  if (!uploadUrl || !uploadUrl.startsWith("/uploads/")) {
+    return uploadUrl;
+  }
+
+  const configuredBaseUrl = String(process.env.PUBLIC_API_URL || process.env.VITE_API_URL || "").trim();
+  const baseUrl = configuredBaseUrl
+    ? configuredBaseUrl.replace(/\/$/, "")
+    : req
+      ? `${req.protocol}://${req.get("host")}`
+      : "";
+
+  const encodedPath = encodeURI(uploadUrl);
+  return baseUrl ? `${baseUrl}${encodedPath}` : encodedPath;
+}
+
+function normalizeClubMedia<T extends { logoUrl?: string | null; coverImageUrl?: string | null }>(club: T, req?: Request): T {
   const next = { ...club };
 
   if (!next.logoUrl || (next.logoUrl.startsWith("/uploads/") && !hasLocalUploadFile(next.logoUrl))) {
@@ -79,15 +136,20 @@ function normalizeClubMedia<T extends { logoUrl?: string | null; coverImageUrl?:
     next.coverImageUrl = DEFAULT_CLUB_COVER;
   }
 
+  next.logoUrl = toPublicMediaUrl(next.logoUrl, req);
+  next.coverImageUrl = toPublicMediaUrl(next.coverImageUrl, req);
+
   return next;
 }
 
-function normalizeEventMedia<T extends { imageUrl?: string | null }>(event: T): T {
+function normalizeEventMedia<T extends { imageUrl?: string | null }>(event: T, req?: Request): T {
   const next = { ...event };
 
   if (!next.imageUrl || (next.imageUrl.startsWith("/uploads/") && !hasLocalUploadFile(next.imageUrl))) {
     next.imageUrl = DEFAULT_EVENT_IMAGE;
   }
+
+  next.imageUrl = toPublicMediaUrl(next.imageUrl, req);
 
   return next;
 }
@@ -465,8 +527,11 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     try {
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-      const fileUrl = `/uploads/${req.file.filename}`;
-      res.json({ url: fileUrl, filename: req.file.filename });
+      const type = String(req.body?.type || "general").trim().toLowerCase();
+      const folder = `gehu-clubs/${type.replace(/[^a-z0-9-_]+/g, "-") || "general"}`;
+      const fileUrl = await getUploadedFileUrl(req.file, folder);
+
+      res.json({ url: fileUrl, filename: req.file.originalname || req.file.filename });
     } catch {
       res.status(500).json({ error: "Failed to upload file" });
     }
@@ -504,7 +569,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-      const fileUrl = `/uploads/${req.file.filename}`;
+      const fileUrl = await getUploadedFileUrl(req.file, "gehu-clubs/chat");
       res.json({
         url: fileUrl,
         filename: req.file.originalname,
@@ -844,7 +909,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return normalizeClubMedia({
           ...clubObj,
           memberCount: actualCount !== undefined ? actualCount : (clubObj.memberCount || 0)
-        });
+        }, req);
       });
 
       let filteredClubs = clubsWithMemberCounts;
@@ -877,7 +942,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       res.json(normalizeClubMedia({
         ...clubObj,
         memberCount: actualMemberCount
-      }));
+      }, req));
     } catch (error) {
       console.error("Error fetching club:", error);
       res.status(500).json({ error: "Failed to fetch club" });
@@ -1002,7 +1067,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return normalizeEventMedia({
           ...eventObj,
           id: eventObj.id || eventObj._id?.toString() // Use id if present, fallback to _id
-        });
+        }, req);
       });
 
       res.json(eventsWithId);
@@ -1021,7 +1086,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const responseEvent = normalizeEventMedia({
         ...eventObj,
         id: eventObj.id || eventObj._id?.toString()
-      });
+      }, req);
       
       res.json(responseEvent);
     } catch (error) {
@@ -1046,13 +1111,16 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       const uploadedFiles = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
       const uploadedImage = uploadedFiles?.imageFile?.[0] || uploadedFiles?.image?.[0];
+      const eventImageUrl = uploadedImage
+        ? await getUploadedFileUrl(uploadedImage, "gehu-clubs/events")
+        : null;
 
       const eventData = {
         ...req.body,
         clubId: clubId,
         clubName: club.name,
         durationMinutes: req.body.durationMinutes,
-        imageUrl: uploadedImage ? `/uploads/${uploadedImage.filename}` : null
+        imageUrl: eventImageUrl
       };
 
       const validated = insertEventSchema.parse(eventData);
@@ -1112,10 +1180,13 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       const uploadedFiles = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
       const uploadedImage = uploadedFiles?.imageFile?.[0] || uploadedFiles?.image?.[0];
+      const updatedEventImageUrl = uploadedImage
+        ? await getUploadedFileUrl(uploadedImage, "gehu-clubs/events")
+        : null;
 
       const updates = {
         ...safeUpdates,
-        ...(uploadedImage && { imageUrl: `/uploads/${uploadedImage.filename}` })
+        ...(updatedEventImageUrl && { imageUrl: updatedEventImageUrl })
       };
 
       const nextDate = updates.date ?? oldEvent.date;
@@ -1583,7 +1654,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
       if (!req.session.studentId) return res.status(401).json({ error: "Student not authenticated" });
 
-      const imageUrl = `/uploads/${req.file.filename}`;
+      const imageUrl = await getUploadedFileUrl(req.file, "gehu-clubs/students/profile-pictures");
       
       // Update student profile with image URL and verify update
       const updatedStudent = await Student.findByIdAndUpdate(
@@ -1662,7 +1733,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(400).json({ error: "Missing required fields: title and studentId" });
       }
 
-      const certificateUrl = `/uploads/${req.file.filename}`;
+      const certificateUrl = await getUploadedFileUrl(req.file, "gehu-clubs/students/certificates");
       
       console.log("Searching for student:", studentId);
       
@@ -2974,7 +3045,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const achievementData = {
         ...req.body,
         clubId: admin.clubId,
-        imageUrl: req.file ? `/uploads/${req.file.filename}` : null
+        imageUrl: req.file ? await getUploadedFileUrl(req.file, "gehu-clubs/achievements") : null
       };
 
       const achievement = await storage.createAchievement(achievementData);

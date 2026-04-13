@@ -3,7 +3,7 @@ import { Calendar, Users } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
 
-import heroImage from "@assets/stock_images/Gemini_Generated_Image_k07s30k07s30k07s (1).png";
+import heroImage from "@assets/stock_images/Gemini_Generated_Image_k07s30k07s30k07s_1.png";
 
 export default function Hero() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });

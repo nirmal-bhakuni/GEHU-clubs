@@ -32,6 +32,7 @@ import {
 import { Calendar, Image, Users, Settings, Edit, Bell, MapPin, UserCheck, CheckCircle, Clock, TrendingUp, Activity, Award, AlertCircle, CheckSquare, Mail, Download, UserPlus, Filter, Eye, Trash2, Crown, FileText, Upload, RefreshCw, User } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { resolveMediaUrl } from "@/lib/utils";
 import type { Event, Club } from "@shared/schema";
 import type { ClubMembership } from "@shared/schema";
 import type { Achievement } from "@shared/schema";
@@ -1805,7 +1806,7 @@ export default function ClubAdmin() {
           <div className="flex items-center space-x-4">
             {displayClub?.logoUrl && (
               <img
-                src={displayClub?.logoUrl}
+                src={resolveMediaUrl(displayClub?.logoUrl)}
                 alt={`${displayClub?.name} logo`}
                 className="w-16 h-16 rounded-lg object-cover"
               />
@@ -2741,7 +2742,7 @@ export default function ClubAdmin() {
                   <Card key={event.id} className="p-4">
                     <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden mb-3">
                       <img
-                        src={event.imageUrl}
+                        src={resolveMediaUrl(event.imageUrl)}
                         alt={event.title}
                         className="w-full h-full object-cover"
                       />
@@ -3308,7 +3309,7 @@ export default function ClubAdmin() {
                     <Card key={achievement.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                       <div className="aspect-video bg-gray-100 relative overflow-hidden">
                         <img
-                          src={achievement.imageUrl}
+                          src={resolveMediaUrl(achievement.imageUrl)}
                           alt={achievement.title}
                           className="w-full h-full object-cover"
                         />
@@ -3633,7 +3634,7 @@ export default function ClubAdmin() {
                     <div className="flex items-center gap-4">
                       <div className="relative">
                         <img
-                          src={logoPreview || displayClub?.logoUrl || "/placeholder-logo.png"}
+                          src={resolveMediaUrl(logoPreview || displayClub?.logoUrl) || "/placeholder-logo.png"}
                           alt="Club logo preview"
                           className="w-20 h-20 rounded-lg object-cover border-2 border-dashed border-gray-300"
                         />
@@ -4112,7 +4113,7 @@ export default function ClubAdmin() {
                     <div className="flex-shrink-0">
                       {displayClub?.logoUrl ? (
                         <img
-                          src={displayClub?.logoUrl}
+                          src={resolveMediaUrl(displayClub?.logoUrl)}
                           alt={`${displayClub?.name} logo`}
                           className="w-24 h-24 rounded-lg object-cover border"
                         />

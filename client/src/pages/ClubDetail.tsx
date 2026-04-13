@@ -20,6 +20,7 @@ import type { Achievement } from "@shared/schema";
 import ClubMembership from "@/components/ClubMembership";
 import ClubContact from "@/components/ClubContact";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
+import { resolveMediaUrl } from "@/lib/utils";
 
 export default function ClubDetail() {
   const params = useParams<{ id: string }>();
@@ -316,7 +317,7 @@ export default function ClubDetail() {
         {club.coverImageUrl && (
           <div className="relative w-full h-64 md:h-80 rounded-lg overflow-hidden">
             <img
-              src={club.coverImageUrl}
+              src={resolveMediaUrl(club.coverImageUrl)}
               alt={`${club.name} cover`}
               className="w-full h-full object-cover"
             />
@@ -337,7 +338,7 @@ export default function ClubDetail() {
 
           <div className="flex flex-col md:flex-row items-start md:items-center gap-6 relative z-10">
             <Avatar className="w-20 h-20 ring-2 ring-primary/20">
-              <AvatarImage src={club.logoUrl} alt={club.name} />
+              <AvatarImage src={resolveMediaUrl(club.logoUrl)} alt={club.name} />
               <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
                 {club.name.charAt(0)}
               </AvatarFallback>

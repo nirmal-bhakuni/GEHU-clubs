@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Link } from "wouter";
 import { Users, Heart, Share2, Star, TrendingUp, Calendar, Eye, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { resolveMediaUrl } from "@/lib/utils";
 
 interface ClubCardProps {
   id: string;
@@ -162,7 +163,7 @@ export default function ClubCard({
                 group-hover:drop-shadow-lg
               `} data-testid={`avatar-club-${id}`}>
                 <AvatarImage 
-                  src={logoUrl || "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&h=200&fit=crop"} 
+                  src={resolveMediaUrl(logoUrl) || "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&h=200&fit=crop"} 
                   alt={name}
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
