@@ -110,9 +110,12 @@ export default function ClubCard({
           {coverImageUrl && (
             <div className="absolute top-0 left-0 right-0 h-16 overflow-hidden rounded-t-lg">
               <img
-                src={coverImageUrl}
+                src={resolveMediaUrl(coverImageUrl) || "https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=1200&h=300&fit=crop"}
                 alt={`${name} cover`}
                 className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1498243691581-b145c3f54a5a?w=1200&h=300&fit=crop";
+                }}
               />
               <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/20" />
             </div>
