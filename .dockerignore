@@ -5,6 +5,8 @@ npm-debug.log*
 .vscode
 .local
 attached_assets
+!attached_assets/stock_images
+!attached_assets/stock_images/**
 client/node_modules
 server/node_modules
 dist
