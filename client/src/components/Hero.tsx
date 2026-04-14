@@ -3,6 +3,8 @@ import { Calendar, Users } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
 
+import heroImage from "@assets/stock_images/college_students_at__ee69440f.jpg";
+
 export default function Hero() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [isVisible, setIsVisible] = useState(false);
@@ -20,16 +22,16 @@ export default function Hero() {
     <section className="relative w-full min-h-[640px] lg:min-h-[760px] flex items-center justify-center overflow-hidden group">
       <div className="absolute inset-0">
         <img
-          src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=1200&h=800&fit=crop"
+          src={heroImage}
           alt="College students at campus event"
-          className="w-full h-full object-cover brightness-110 contrast-105 saturate-110 group-hover:scale-105 transition-transform duration-700 ease-out"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/25 to-black/15 group-hover:from-black/40 group-hover:via-black/20 transition-all duration-700" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_24%,rgba(59,130,246,0.16),transparent_34%),radial-gradient(circle_at_82%_18%,rgba(14,165,233,0.14),transparent_30%)]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/18 via-black/10 to-black/5 group-hover:from-black/14 group-hover:via-black/8 transition-all duration-700" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_24%,rgba(59,130,246,0.08),transparent_34%),radial-gradient(circle_at_82%_18%,rgba(14,165,233,0.06),transparent_30%)]" />
         
         {/* Interactive light effect that follows cursor */}
         <div 
-          className="absolute w-96 h-96 rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-300 pointer-events-none blur-3xl"
+          className="absolute w-96 h-96 rounded-full opacity-0 group-hover:opacity-30 transition-opacity duration-300 pointer-events-none"
           style={{
             background: 'radial-gradient(circle, rgba(59,130,246,0.3), transparent)',
             left: `${mousePosition.x - 192}px`,
@@ -41,7 +43,7 @@ export default function Hero() {
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-8 text-center py-20 md:py-24">
         <div
-          className={`inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-xs tracking-[0.16em] uppercase text-white/85 mb-6 backdrop-blur-md transition-all duration-700 ${
+          className={`inline-flex items-center gap-2 rounded-full border border-white/20 bg-black/35 px-4 py-1.5 text-xs tracking-[0.16em] uppercase text-white/85 mb-6 transition-all duration-700 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
           }`}
           style={{ animation: isVisible ? 'fade-in-up 0.65s ease-out 0.05s both' : 'none' }}
@@ -50,7 +52,7 @@ export default function Hero() {
           Campus Clubs Platform
         </div>
 
-        <div className="mx-auto max-w-4xl rounded-3xl border border-white/15 bg-black/20 px-5 md:px-9 py-8 md:py-10 backdrop-blur-md shadow-[0_18px_40px_rgba(0,0,0,0.38)]">
+        <div className="mx-auto max-w-4xl rounded-3xl border border-white/15 bg-black/18 px-5 md:px-9 py-8 md:py-10 shadow-[0_18px_40px_rgba(0,0,0,0.38)]">
         <h1 
           className={`text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-white mb-6 transition-all duration-1000 ${
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
@@ -123,15 +125,15 @@ export default function Hero() {
           }`}
           style={{ animation: isVisible ? 'fade-in-up 0.8s ease-out 0.78s both' : 'none' }}
         >
-          <div className="rounded-xl border border-white/20 bg-white/10 py-3 backdrop-blur-sm">
+          <div className="rounded-xl border border-white/20 bg-black/30 py-3">
             <p className="text-white font-semibold text-base md:text-lg">30+</p>
             <p className="text-white/80 text-[11px] md:text-xs">Active Clubs</p>
           </div>
-          <div className="rounded-xl border border-white/20 bg-white/10 py-3 backdrop-blur-sm">
+          <div className="rounded-xl border border-white/20 bg-black/30 py-3">
             <p className="text-white font-semibold text-base md:text-lg">100+</p>
             <p className="text-white/80 text-[11px] md:text-xs">Events / Year</p>
           </div>
-          <div className="rounded-xl border border-white/20 bg-white/10 py-3 backdrop-blur-sm">
+          <div className="rounded-xl border border-white/20 bg-black/30 py-3">
             <p className="text-white font-semibold text-base md:text-lg">2K+</p>
             <p className="text-white/80 text-[11px] md:text-xs">Student Members</p>
           </div>
