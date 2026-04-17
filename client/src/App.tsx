@@ -201,7 +201,7 @@ function AppShell() {
   return (
     <TooltipProvider>
       <ThemeProvider>
-        <div className="flex flex-col min-h-screen">
+        <div className="app-ambient-bg flex min-h-screen flex-col">
           <Navbar
             onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             sidebarOpen={sidebarOpen}

@@ -149,10 +149,10 @@ export default function ClubContact({
       {/* Main Contact Cards */}
       <div className="grid grid-cols-1 gap-4">
         {/* Email Card - match other tabs */}
-        <Card className="p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/30 transition-all">
+        <Card className="p-6 rounded-xl border border-border/70 hover:border-primary/40 hover:bg-muted/20 transition-colors">
           <div className="flex items-start gap-4">
-            <div className="p-3 rounded-full bg-muted/50">
-              <Mail className="w-6 h-6 text-foreground" />
+            <div className="p-3 rounded-full bg-muted/40 border border-border/60">
+              <Mail className="w-5 h-5 text-foreground" />
             </div>
             <div className="flex-1">
               <p className="font-semibold text-lg mb-2">Email {clubName}</p>
@@ -160,7 +160,7 @@ export default function ClubContact({
                 <p className="text-sm text-muted-foreground mb-3">
                   Official club email for inquiries and coordination
                 </p>
-                <div className="flex items-center gap-3 bg-card p-4 rounded-lg border border-border w-full">
+                <div className="flex items-center gap-3 bg-background/70 p-3 rounded-lg border border-border/70 w-full">
                   <a
                     href={`mailto:${clubEmail}`}
                     className="text-foreground text-sm hover:underline font-semibold flex-1 break-all"
@@ -189,10 +189,10 @@ export default function ClubContact({
         </Card>
 
         {/* Phone Card - match other tabs */}
-        <Card className="p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/30 transition-all">
+        <Card className="p-6 rounded-xl border border-border/70 hover:border-primary/40 hover:bg-muted/20 transition-colors">
           <div className="flex items-start gap-4">
-            <div className="p-3 rounded-full bg-muted/50">
-              <Phone className="w-6 h-6 text-foreground" />
+            <div className="p-3 rounded-full bg-muted/40 border border-border/60">
+              <Phone className="w-5 h-5 text-foreground" />
             </div>
             <div className="flex-1">
               <p className="font-semibold text-lg mb-2">Call Us</p>
@@ -200,7 +200,7 @@ export default function ClubContact({
                 <p className="text-sm text-muted-foreground mb-3">
                   Reach us directly for urgent matters
                 </p>
-                <div className="flex items-center gap-3 bg-card p-4 rounded-lg border border-border w-full">
+                <div className="flex items-center gap-3 bg-background/70 p-3 rounded-lg border border-border/70 w-full">
                   <a
                     href={`tel:${clubPhone}`}
                     className="text-foreground text-sm hover:underline font-semibold flex-1"
@@ -230,7 +230,7 @@ export default function ClubContact({
       </div>
 
       {/* Contact Form */}
-      <Card className="p-6 border-2">
+      <Card className="p-6 rounded-xl border border-border/70">
         <div className="flex items-center gap-2 mb-6">
           <MessageCircle className="w-5 h-5 text-primary" />
           <h3 className="text-xl font-bold">Send us a Direct Message</h3>
@@ -347,7 +347,7 @@ export default function ClubContact({
       </Card>
 
       {/* Quick Tips */}
-      <Card className="p-4 rounded-lg border-2 border-border hover:border-primary/50 hover:bg-muted/30 transition-all">
+      <Card className="p-4 rounded-xl border border-border/70 bg-muted/20">
         <p className="text-sm text-foreground flex items-start gap-2">
           <span className="font-semibold">💡 Tip:</span>
           <span>

@@ -17,6 +17,7 @@ import type { Event } from "@shared/schema";
 export default function Events() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
+  const [sortBy, setSortBy] = useState("date-desc");
 
   const { data: events = [], isLoading } = useQuery<Event[]>({
     queryKey: ["/api/events"],
@@ -46,7 +47,26 @@ export default function Events() {
       event.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === "all" || event.category === selectedCategory;
     return matchesSearch && matchesCategory;
-  });
+  })
+    .sort((a, b) => {
+      if (sortBy === "title-asc") {
+        return a.title.localeCompare(b.title);
+      }
+      if (sortBy === "title-desc") {
+        return b.title.localeCompare(a.title);
+      }
+
+      const aTime = new Date(a.date || "").getTime();
+      const bTime = new Date(b.date || "").getTime();
+      const safeATime = Number.isNaN(aTime) ? 0 : aTime;
+      const safeBTime = Number.isNaN(bTime) ? 0 : bTime;
+
+      if (sortBy === "date-asc") {
+        return safeATime - safeBTime;
+      }
+
+      return safeBTime - safeATime;
+    });
 
   return (
     <div className="min-h-screen py-16 md:py-20">
@@ -96,6 +116,18 @@ export default function Events() {
               <SelectItem value="Networking">Networking</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-full md:w-56 hover:border-primary/50 transition-all duration-300" data-testid="select-sort-events">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="date-desc">Newest first</SelectItem>
+              <SelectItem value="date-asc">Oldest first</SelectItem>
+              <SelectItem value="title-asc">Title A-Z</SelectItem>
+              <SelectItem value="title-desc">Title Z-A</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {isLoading ? (
@@ -138,6 +170,7 @@ export default function Events() {
                   onClick={() => {
                     setSearchQuery("");
                     setSelectedCategory("all");
+                    setSortBy("date-desc");
                   }}
                   data-testid="button-clear-filters"
                 >

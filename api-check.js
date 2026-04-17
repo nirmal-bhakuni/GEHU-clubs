@@ -1,6 +1,6 @@
 // Polls the server until it responds, then performs API checks.
 (async () => {
-  const base = 'http://localhost:5000';
+  const base = 'http://localhost:12346';
   const maxRetries = 20;
   const retryDelay = 500; // ms
 

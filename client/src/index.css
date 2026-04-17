@@ -220,6 +220,18 @@ html {
   }
 }
 
+@layer components {
+  .app-ambient-bg {
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(circle at 8% 14%, rgba(59, 130, 246, 0.16) 0%, rgba(59, 130, 246, 0) 32%),
+      radial-gradient(circle at 92% 22%, rgba(59, 130, 246, 0.10) 0%, rgba(59, 130, 246, 0) 30%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0) 22%),
+      linear-gradient(to bottom, hsl(var(--background)), hsl(var(--card) / 0.28), hsl(var(--background)));
+    background-attachment: fixed;
+  }
+}
+
 /**
  * Using the elevate system.
  * Automatic contrast adjustment.

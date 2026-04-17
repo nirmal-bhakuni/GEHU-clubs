@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -316,6 +317,21 @@ export default function Dashboard() {
   const [clubAdminSearch, setClubAdminSearch] = useState("");
   const [clubAdminStatusFilter, setClubAdminStatusFilter] = useState<"all" | "active" | "frozen">("all");
   const eligibilityYearOptions = ["1st", "2nd", "3rd", "4th", "5th"];
+  const clubCategoryOptions = [
+    "Academic",
+    "Technical",
+    "Technology",
+    "Cultural",
+    "Sports",
+    "Social",
+    "Arts",
+    "Business",
+    "Legal",
+    "Leadership",
+    "NGO",
+    "Entrepreneurship",
+    "Other",
+  ];
   const trimmedClubLoginId = clubLoginId.trim();
   const suggestionBase = (trimmedClubLoginId || clubForm.name).trim();
 
@@ -1570,13 +1586,21 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <Label htmlFor="clubCategory">Category</Label>
-                    <Input
-                      id="clubCategory"
+                    <Select
                       value={clubForm.category}
-                      onChange={(e) => setClubForm(prev => ({ ...prev, category: e.target.value }))}
-                      placeholder="e.g., Technical, Cultural, Sports"
-                      required
-                    />
+                      onValueChange={(value) => setClubForm(prev => ({ ...prev, category: value }))}
+                    >
+                      <SelectTrigger id="clubCategory">
+                        <SelectValue placeholder="Select a club category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clubCategoryOptions.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label htmlFor="clubDescription">Description</Label>
@@ -1696,24 +1720,31 @@ export default function Dashboard() {
                   <div>
                     <Label>Eligibility Years</Label>
                     <div className="flex flex-wrap gap-3 mt-2">
-                      {eligibilityYearOptions.map((year) => (
-                        <label key={year} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={clubForm.eligibilityYears.includes(year)}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              setClubForm(prev => ({
-                                ...prev,
-                                eligibilityYears: checked
-                                  ? [...prev.eligibilityYears, year]
-                                  : prev.eligibilityYears.filter(y => y !== year)
-                              }));
-                            }}
-                          />
-                          {year}
-                        </label>
-                      ))}
+                      {eligibilityYearOptions.map((year) => {
+                        const yearId = `eligibility-year-${year}`;
+                        return (
+                          <label
+                            key={year}
+                            htmlFor={yearId}
+                            className="flex items-center gap-2 rounded-md border border-border/70 px-3 py-1.5 text-sm cursor-pointer hover:bg-muted/50 transition-colors"
+                          >
+                            <Checkbox
+                              id={yearId}
+                              checked={clubForm.eligibilityYears.includes(year)}
+                              onCheckedChange={(checked) => {
+                                const isChecked = checked === true;
+                                setClubForm(prev => ({
+                                  ...prev,
+                                  eligibilityYears: isChecked
+                                    ? Array.from(new Set([...prev.eligibilityYears, year]))
+                                    : prev.eligibilityYears.filter((y) => y !== year),
+                                }));
+                              }}
+                            />
+                            {year}
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

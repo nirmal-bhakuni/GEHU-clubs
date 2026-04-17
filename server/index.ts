@@ -73,10 +73,6 @@ app.use(
   })
 );
 
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  res.status(500).json({ message: "Internal Server Error" });
-});
-
 (async () => {
   try {
     const connected = await connectDB();
@@ -87,6 +83,15 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     }
 
     await registerRoutes(app);
+
+    // Global error handler (placed AFTER routes)
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      console.error("Unhandled route error:", err);
+      res.status(500).json({ 
+        error: "Internal Server Error",
+        message: process.env.NODE_ENV === "development" ? err.message : undefined 
+      });
+    });
 
     startUpcomingEventReminderScheduler();
 

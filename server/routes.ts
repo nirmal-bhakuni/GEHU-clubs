@@ -22,6 +22,7 @@ import { Message } from "./models/Message";
 import { Announcement } from "./models/Announcement";
 import { Event } from "./models/Event";
 import { ClubStory } from "./models/ClubStory";
+import { ClubRating } from "./models/ClubRating";
 import { ChatGroup } from "./models/ChatGroup";
 import { ChatMessage } from "./models/ChatMessage";
 import { ChatReadState } from "./models/ChatReadState";
@@ -436,6 +437,31 @@ function parseLocalDateTime(date: string, time: string): Date | null {
 
   const parsed = new Date(year, month - 1, day, hours, minutes, 0, 0);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function canStudentRateClub(clubId: string, enrollmentNumber: string): Promise<boolean> {
+  const approvedMembership = await ClubMembership.exists({
+    clubId,
+    enrollmentNumber,
+    status: "approved",
+  });
+
+  if (approvedMembership) {
+    return true;
+  }
+
+  const clubEventIds = await Event.find({ clubId }).distinct("id");
+  if (!clubEventIds.length) {
+    return false;
+  }
+
+  const participatedRegistration = await EventRegistration.exists({
+    eventId: { $in: clubEventIds },
+    enrollmentNumber,
+    $or: [{ attended: true }, { attendanceStatus: "present" }, { status: "approved" }],
+  });
+
+  return !!participatedRegistration;
 }
 
 function normalizeLocation(location: string) {
@@ -946,6 +972,141 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Error fetching club:", error);
       res.status(500).json({ error: "Failed to fetch club" });
+    }
+  });
+
+  app.get("/api/clubs/:clubId/ratings", async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+
+      const club = await storage.getClub(clubId);
+      if (!club) {
+        return res.status(404).json({ error: "Club not found" });
+      }
+
+      const [summary] = await ClubRating.aggregate([
+        { $match: { clubId } },
+        {
+          $group: {
+            _id: "$clubId",
+            totalRatings: { $sum: 1 },
+            averageRating: { $avg: "$rating" },
+            fiveStar: { $sum: { $cond: [{ $eq: ["$rating", 5] }, 1, 0] } },
+            fourStar: { $sum: { $cond: [{ $eq: ["$rating", 4] }, 1, 0] } },
+            threeStar: { $sum: { $cond: [{ $eq: ["$rating", 3] }, 1, 0] } },
+            twoStar: { $sum: { $cond: [{ $eq: ["$rating", 2] }, 1, 0] } },
+            oneStar: { $sum: { $cond: [{ $eq: ["$rating", 1] }, 1, 0] } },
+          },
+        },
+      ]);
+
+      let userRating: any = null;
+      let canRate = false;
+
+      if (req.session.studentId) {
+        const student = await Student.findById(req.session.studentId);
+        if (student?.enrollment) {
+          userRating = await ClubRating.findOne({
+            clubId,
+            enrollmentNumber: student.enrollment,
+          }).select("rating comment updatedAt createdAt");
+
+          canRate = await canStudentRateClub(clubId, student.enrollment);
+        }
+      }
+
+      res.json({
+        clubId,
+        averageRating: summary?.averageRating ? Number(summary.averageRating.toFixed(1)) : 0,
+        totalRatings: summary?.totalRatings || 0,
+        distribution: {
+          5: summary?.fiveStar || 0,
+          4: summary?.fourStar || 0,
+          3: summary?.threeStar || 0,
+          2: summary?.twoStar || 0,
+          1: summary?.oneStar || 0,
+        },
+        userRating,
+        canRate,
+      });
+    } catch (error) {
+      console.error("Failed to fetch club ratings:", error);
+      res.status(500).json({ error: "Failed to fetch club ratings" });
+    }
+  });
+
+  app.post("/api/clubs/:clubId/ratings", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const { clubId } = req.params;
+      const rawRating = Number(req.body?.rating);
+      const comment = String(req.body?.comment || "").trim();
+
+      if (!Number.isFinite(rawRating) || rawRating < 1 || rawRating > 5) {
+        return res.status(400).json({ error: "Rating must be between 1 and 5" });
+      }
+
+      const rating = Math.round(rawRating);
+      const club = await storage.getClub(clubId);
+      if (!club) {
+        return res.status(404).json({ error: "Club not found" });
+      }
+
+      const student = await Student.findById(req.session.studentId);
+      if (!student?.enrollment) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const eligible = await canStudentRateClub(clubId, student.enrollment);
+      if (!eligible) {
+        return res.status(403).json({
+          error: "You can rate this club only after joining it or participating in one of its events",
+        });
+      }
+
+      const savedRating = await ClubRating.findOneAndUpdate(
+        { clubId, enrollmentNumber: student.enrollment },
+        {
+          $set: {
+            studentName: student.name,
+            studentEmail: student.email,
+            rating,
+            comment,
+          },
+          $setOnInsert: {
+            id: randomUUID(),
+            clubId,
+            enrollmentNumber: student.enrollment,
+          },
+        },
+        { upsert: true, new: true },
+      );
+
+      const [summary] = await ClubRating.aggregate([
+        { $match: { clubId } },
+        {
+          $group: {
+            _id: "$clubId",
+            totalRatings: { $sum: 1 },
+            averageRating: { $avg: "$rating" },
+          },
+        },
+      ]);
+
+      res.status(201).json({
+        message: "Rating submitted successfully",
+        rating: {
+          rating: savedRating?.rating,
+          comment: savedRating?.comment,
+          updatedAt: savedRating?.updatedAt,
+        },
+        summary: {
+          averageRating: summary?.averageRating ? Number(summary.averageRating.toFixed(1)) : 0,
+          totalRatings: summary?.totalRatings || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to submit club rating:", error);
+      res.status(500).json({ error: "Failed to submit club rating" });
     }
   });
 

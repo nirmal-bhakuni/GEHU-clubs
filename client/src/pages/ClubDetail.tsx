@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -12,8 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Calendar, Star, BookOpen, Award, Mail, Phone, Heart, Share2, ExternalLink, Trophy, Megaphone, Clock3 } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { Users, Calendar, Star, BookOpen, Award, Mail, Phone, Share2, ExternalLink, Trophy, Megaphone, Clock3 } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Club, Event } from "@shared/schema";
 import type { ClubLeadership } from "@shared/schema";
 import type { Achievement } from "@shared/schema";
@@ -22,20 +22,43 @@ import ClubContact from "@/components/ClubContact";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { resolveMediaUrl } from "@/lib/utils";
 
+type ClubRatingSummary = {
+  clubId: string;
+  averageRating: number;
+  totalRatings: number;
+  distribution: Record<string, number>;
+  userRating?: {
+    rating: number;
+    comment?: string;
+    updatedAt?: string;
+    createdAt?: string;
+  } | null;
+  canRate: boolean;
+};
+
 export default function ClubDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [, setLocation] = useLocation();
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [isRateDialogOpen, setIsRateDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFavorited, setIsFavorited] = useState(false);
   const [hasAlreadyJoinedClub, setHasAlreadyJoinedClub] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<{
+    message: string;
+    requiredYears?: string[];
+    studentYear?: string;
+  } | null>(null);
   const [joinForm, setJoinForm] = useState({
     name: '',
     email: '',
     department: '',
     enrollmentNumber: '',
     reason: ''
+  });
+  const [ratingForm, setRatingForm] = useState({
+    rating: 0,
+    comment: "",
   });
   const { toast } = useToast();
   const { student, isAuthenticated, isLoading: studentAuthLoading } = useStudentAuth();
@@ -138,8 +161,25 @@ export default function ClubDetail() {
       });
       setIsJoinModalOpen(false);
       setJoinForm(prev => ({ ...prev, reason: '' }));
+      setEligibilityError(null);
     } catch (error: any) {
       console.error("Join request error:", error);
+      
+      // Check if this is an eligibility error
+      if (error?.ineligibleYear) {
+        const eligError = {
+          message: error?.error || "You don't meet the eligibility requirements for this club.",
+          requiredYears: error?.requiredYears,
+          studentYear: error?.studentYear
+        };
+        setEligibilityError(eligError);
+        toast({
+          title: "Not Eligible",
+          description: eligError.message,
+          variant: "destructive",
+        });
+        return;
+      }
       
       // Fallback: store join request locally
       const pendingRequests = JSON.parse(localStorage.getItem("pendingJoinRequests") || "[]");
@@ -169,14 +209,6 @@ export default function ClubDetail() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleFavorite = () => {
-    setIsFavorited(!isFavorited);
-    toast({
-      title: isFavorited ? "Removed from favorites" : "Added to favorites",
-      description: `${club?.name} has been ${isFavorited ? "removed from" : "added to"} your favorites.`,
-    });
   };
 
   const handleShare = async () => {
@@ -262,9 +294,64 @@ export default function ClubDetail() {
     enabled: !!id,
   });
 
+  const { data: clubRatings, isLoading: ratingsLoading } = useQuery<ClubRatingSummary>({
+    queryKey: ["/api/clubs/ratings", id],
+    queryFn: async () => {
+      if (!id) {
+        return {
+          clubId: "",
+          averageRating: 0,
+          totalRatings: 0,
+          distribution: {},
+          userRating: null,
+          canRate: false,
+        };
+      }
+      const res = await apiRequest("GET", `/api/clubs/${id}/ratings`);
+      return res.json();
+    },
+    enabled: !!id,
+  });
+
+  useEffect(() => {
+    if (clubRatings?.userRating) {
+      setRatingForm({
+        rating: Number(clubRatings.userRating.rating || 0),
+        comment: clubRatings.userRating.comment || "",
+      });
+    }
+  }, [clubRatings?.userRating?.rating, clubRatings?.userRating?.comment]);
+
+  const submitClubRatingMutation = useMutation({
+    mutationFn: async (payload: { rating: number; comment: string }) => {
+      if (!id) {
+        throw new Error("Club not found");
+      }
+      const res = await apiRequest("POST", `/api/clubs/${id}/ratings`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clubs/ratings", id] });
+      setIsRateDialogOpen(false);
+      toast({
+        title: "Thanks for your rating",
+        description: "Your club rating has been saved.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Could not submit rating",
+        description:
+          error?.message ||
+          "You can rate this club only after joining it or participating in one of its events.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const updatesTimeline = useMemo(() => {
     const clubAnnouncements = announcements
-      .filter((announcement: any) => announcement?.target === "all" || announcement?.target === id)
+      .filter((announcement: any) => announcement?.target === id)
       .map((announcement: any) => ({
         id: `announcement-${announcement.id || announcement._id}`,
         type: "announcement" as const,
@@ -310,118 +397,265 @@ export default function ClubDetail() {
   if (clubLoading) return <div className="p-8">Loading club...</div>;
   if (!club) return <div className="p-8">Club not found.</div>;
 
+  const isClubOpen = !club.isFrozen;
+  const joinStatusLabel = isClubOpen ? "Open for Registration" : "Registration Paused";
+  const joinStatusTone = isClubOpen ? "default" : "destructive";
+  const joinStatusNote = isClubOpen
+    ? "Students can submit membership requests."
+    : "This club is currently frozen by admin and not accepting new requests.";
+
+  const clubInfoRequirements = [
+    "Must be a current student",
+    ...(club.eligibilityYears && club.eligibilityYears.length > 0
+      ? [`Open to ${club.eligibilityYears.join(", ")} year students`]
+      : []),
+    ...(club.eligibility ? [club.eligibility] : []),
+  ];
+
   return (
     <TooltipProvider>
-      <div className="max-w-4xl mx-auto p-8 space-y-8">
+      <div className="w-full max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
         {/* Cover Image */}
         {club.coverImageUrl && (
-          <div className="relative w-full h-64 md:h-80 rounded-lg overflow-hidden">
+          <div className="relative w-full h-64 md:h-80 overflow-hidden rounded-2xl border border-border/60 shadow-lg">
             <img
               src={resolveMediaUrl(club.coverImageUrl)}
               alt={`${club.name} cover`}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-            <div className="absolute bottom-4 left-4 text-white">
-              <h1 className="text-3xl md:text-4xl font-bold mb-2">{club.name}</h1>
-              <Badge variant="secondary" className="bg-white/90 text-black hover:bg-white">
-                {club.category}
-              </Badge>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-5 md:p-6 text-white">
+              <div className="max-w-3xl space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.22em] text-white/80">
+                  <span>GEHU Clubs</span>
+                  <span className="h-1 w-1 rounded-full bg-white/70" />
+                  <span>{club.category}</span>
+                </div>
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{club.name}</h1>
+              </div>
             </div>
           </div>
         )}
 
         {/* Club Header */}
-        <Card className="p-6 relative overflow-hidden">
-          {/* Background gradient */}
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/10 opacity-50" />
+        <Card className="relative overflow-hidden border-border/70 bg-card/90 p-6 shadow-sm">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/10 opacity-60" />
 
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-6 relative z-10">
-            <Avatar className="w-20 h-20 ring-2 ring-primary/20">
+          <div className="relative z-10 grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)_260px] lg:items-start">
+            <Avatar className="w-20 h-20 ring-2 ring-primary/20 shadow-sm">
               <AvatarImage src={resolveMediaUrl(club.logoUrl)} alt={club.name} />
               <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
                 {club.name.charAt(0)}
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1">
+
+            <div className="min-w-0 space-y-4">
               {!club.coverImageUrl && (
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-3xl font-bold">{club.name}</h1>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-3xl font-bold tracking-tight">{club.name}</h1>
                   <Badge variant="secondary" className="hover:bg-primary hover:text-primary-foreground transition-colors">
                     {club.category}
                   </Badge>
                 </div>
               )}
-              <p className="text-muted-foreground mb-4">{club.description}</p>
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
+
+              <div className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Club snapshot
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1.5 rounded-full border border-border/70 bg-background/70 px-3 py-1">
                   <Users className="w-4 h-4" />
                   {club.memberCount} members
                 </span>
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1.5 rounded-full border border-border/70 bg-background/70 px-3 py-1">
                   <Calendar className="w-4 h-4" />
                   Active Club
                 </span>
+                <span className="flex items-center gap-1.5 rounded-full border border-border/70 bg-background/70 px-3 py-1">
+                  <Star className="w-4 h-4 text-amber-400" />
+                  {ratingsLoading
+                    ? "Loading rating..."
+                    : `${clubRatings?.averageRating?.toFixed(1) || "0.0"} (${clubRatings?.totalRatings || 0})`}
+                </span>
               </div>
+
+              {(club.eligibilityYears?.length || club.eligibility) ? (
+                <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                  Detailed eligibility and join requirements are listed in the Club Info tab.
+                </div>
+              ) : null}
             </div>
-            <div className="flex gap-2">
-              {/* Interactive buttons */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleFavorite}
-                    className="hover:bg-red-50 hover:border-red-200 transition-colors"
-                  >
-                    <Heart className={`w-4 h-4 mr-2 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-gray-600'}`} />
-                    {isFavorited ? 'Favorited' : 'Favorite'}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {isFavorited ? "Remove from favorites" : "Add to favorites"}
-                </TooltipContent>
-              </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleShare}
-                    className="hover:bg-blue-50 hover:border-blue-200 transition-colors"
-                  >
-                    <Share2 className="w-4 h-4 mr-2" />
-                    Share
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Share club</TooltipContent>
-              </Tooltip>
+            <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/50 p-3 shadow-sm lg:justify-self-end lg:min-w-[260px]">
+              <div className="grid grid-cols-1 gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleShare}
+                      className="w-full justify-center hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                    >
+                      <Share2 className="w-4 h-4 mr-2" />
+                      Share
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Share club</TooltipContent>
+                </Tooltip>
 
-              <Dialog open={isJoinModalOpen} onOpenChange={(open) => {
-                setIsJoinModalOpen(open);
-                if (!open) {
-                  setJoinForm(prev => ({ ...prev, reason: '' }));
-                  setIsSubmitting(false);
-                } else if (open && student && isAuthenticated) {
-                  // Ensure form is filled when modal opens
-                  setJoinForm(prev => ({
-                    ...prev,
-                    name: student.name,
-                    email: student.email,
-                    department: student.department || '',
-                    enrollmentNumber: student.enrollment
-                  }));
-                }
-              }}>
+                <Dialog
+                  open={isRateDialogOpen}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setRatingForm({
+                        rating: Number(clubRatings?.userRating?.rating || 0),
+                        comment: clubRatings?.userRating?.comment || "",
+                      });
+                    }
+                    setIsRateDialogOpen(open);
+                  }}
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {isAuthenticated ? (
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!clubRatings?.canRate}
+                            className="w-full justify-center"
+                          >
+                            <Star className="w-4 h-4 mr-2 text-amber-400" />
+                            {clubRatings?.userRating ? "Update Rating" : "Rate Club"}
+                          </Button>
+                        </DialogTrigger>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full justify-center"
+                          onClick={() => {
+                            toast({
+                              title: "Login Required",
+                              description: "Please login as a student to rate clubs.",
+                              variant: "destructive",
+                            });
+                            setLocation("/student/login");
+                          }}
+                        >
+                          <Star className="w-4 h-4 mr-2 text-amber-400" />
+                          Rate Club
+                        </Button>
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {!isAuthenticated
+                        ? "Login required to rate this club"
+                        : clubRatings?.canRate
+                          ? "Rate this club"
+                          : "Join the club or participate in one of its events to rate"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Rate {club.name}</DialogTitle>
+                    </DialogHeader>
+
+                    <form
+                      className="space-y-4"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (ratingForm.rating < 1 || ratingForm.rating > 5) {
+                          toast({
+                            title: "Select a rating",
+                            description: "Please choose a star rating between 1 and 5.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        submitClubRatingMutation.mutate({
+                          rating: ratingForm.rating,
+                          comment: ratingForm.comment.trim(),
+                        });
+                      }}
+                    >
+                      <div>
+                        <Label className="mb-2 block">Your Rating</Label>
+                        <div className="flex items-center gap-2">
+                          {[1, 2, 3, 4, 5].map((value) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setRatingForm((prev) => ({ ...prev, rating: value }))}
+                              className="rounded-md p-1 transition-colors hover:bg-muted"
+                              aria-label={`Rate ${value} star${value > 1 ? "s" : ""}`}
+                            >
+                              <Star
+                                className={`w-6 h-6 ${
+                                  value <= ratingForm.rating
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "text-muted-foreground"
+                                }`}
+                              />
+                            </button>
+                          ))}
+                          <span className="text-sm text-muted-foreground">{ratingForm.rating || 0}/5</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="clubRatingComment">Comment (optional)</Label>
+                        <Textarea
+                          id="clubRatingComment"
+                          rows={4}
+                          value={ratingForm.comment}
+                          onChange={(e) => setRatingForm((prev) => ({ ...prev, comment: e.target.value }))}
+                          placeholder="Share your experience with this club"
+                        />
+                      </div>
+
+                      <Button type="submit" className="w-full" disabled={submitClubRatingMutation.isPending}>
+                        {submitClubRatingMutation.isPending
+                          ? "Submitting..."
+                          : clubRatings?.userRating
+                            ? "Update Rating"
+                            : "Submit Rating"}
+                      </Button>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              <Dialog
+                open={isJoinModalOpen}
+                onOpenChange={(open) => {
+                  setIsJoinModalOpen(open);
+                  if (!open) {
+                    setJoinForm((prev) => ({ ...prev, reason: "" }));
+                    setIsSubmitting(false);
+                    setEligibilityError(null);
+                  } else if (open && student && isAuthenticated) {
+                    setJoinForm((prev) => ({
+                      ...prev,
+                      name: student.name,
+                      email: student.email,
+                      department: student.department || "",
+                      enrollmentNumber: student.enrollment,
+                    }));
+                  }
+                }}
+              >
                 <Tooltip>
                   <TooltipTrigger asChild>
                     {isAuthenticated ? (
                       <DialogTrigger asChild>
-                        <Button 
-                          variant="default" 
+                        <Button
+                          variant="default"
                           size="sm"
-                          className="hover:scale-105 transition-transform bg-primary hover:bg-primary/90"
+                          className="w-full justify-center hover:scale-[1.01] transition-transform bg-primary hover:bg-primary/90 col-span-2"
                           disabled={hasAlreadyJoinedClub || club?.isFrozen}
                         >
                           <Users className="w-4 h-4 mr-2" />
@@ -429,10 +663,10 @@ export default function ClubDetail() {
                         </Button>
                       </DialogTrigger>
                     ) : (
-                      <Button 
+                      <Button
                         variant="default"
                         size="sm"
-                        className="hover:scale-105 transition-transform bg-primary hover:bg-primary/90"
+                        className="w-full justify-center hover:scale-[1.01] transition-transform bg-primary hover:bg-primary/90 col-span-2"
                         disabled={club?.isFrozen}
                         onClick={() => {
                           if (club?.isFrozen) {
@@ -448,7 +682,6 @@ export default function ClubDetail() {
                             description: "Please login as a student to join clubs.",
                             variant: "destructive",
                           });
-                          // Redirect to student login page
                           setLocation("/student/login");
                         }}
                       >
@@ -458,104 +691,126 @@ export default function ClubDetail() {
                     )}
                   </TooltipTrigger>
                   <TooltipContent>
-                    {club?.isFrozen ? "This club is frozen and not accepting new members" : !isAuthenticated ? "Login required to join clubs" : hasAlreadyJoinedClub ? "You are already a member or have a pending request" : "Join this club"}
+                    {club?.isFrozen
+                      ? "This club is frozen and not accepting new members"
+                      : !isAuthenticated
+                        ? "Login required to join clubs"
+                        : hasAlreadyJoinedClub
+                          ? "You are already a member or have a pending request"
+                          : "Join this club"}
                   </TooltipContent>
                 </Tooltip>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Join {club.name}</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleJoinSubmit} className="space-y-4">
-                  <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    Name, email, department, and enrollment number are auto-filled from your logged-in student profile and cannot be edited here.
-                  </p>
-                  {!isStudentProfileComplete && (
-                    <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                      Submit is disabled because your profile is missing: {missingProfileFields.join(", ")}. Please complete your student profile first.
+
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Join {club.name}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleJoinSubmit} className="space-y-4">
+                    {eligibilityError && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        <div className="mb-1 font-semibold">Not Eligible for This Club</div>
+                        <div>{eligibilityError.message}</div>
+                        {eligibilityError.requiredYears && eligibilityError.studentYear && (
+                          <div className="mt-2 text-xs">
+                            <div>Required: {eligibilityError.requiredYears.join(", ")} year</div>
+                            <div>Your current year: {eligibilityError.studentYear}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                      Name, email, department, and enrollment number are auto-filled from your logged-in student profile and cannot be edited here.
+                    </p>
+                    {!isStudentProfileComplete && (
+                      <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        Submit is disabled because your profile is missing: {missingProfileFields.join(", ")}. Please complete your student profile first.
+                      </div>
+                    )}
+                    <div>
+                      <Label htmlFor="name">Full Name</Label>
+                      <Input
+                        id="name"
+                        value={joinForm.name}
+                        onChange={(e) => setJoinForm((prev) => ({ ...prev, name: e.target.value }))}
+                        disabled={isSubmitting || isAuthenticated}
+                        required
+                      />
                     </div>
-                  )}
-                  <div>
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input
-                      id="name"
-                      value={joinForm.name}
-                      onChange={(e) => setJoinForm(prev => ({ ...prev, name: e.target.value }))}
-                      disabled={isSubmitting || isAuthenticated}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={joinForm.email}
-                      onChange={(e) => setJoinForm(prev => ({ ...prev, email: e.target.value }))}
-                      disabled={isSubmitting || isAuthenticated}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="department">Department</Label>
-                    <Input
-                      id="department"
-                      value={joinForm.department}
-                      onChange={(e) => setJoinForm(prev => ({ ...prev, department: e.target.value }))}
-                      disabled={isSubmitting || isAuthenticated}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="enrollmentNumber">Enrollment Number</Label>
-                    <Input
-                      id="enrollmentNumber"
-                      value={joinForm.enrollmentNumber}
-                      onChange={(e) => setJoinForm(prev => ({ ...prev, enrollmentNumber: e.target.value }))}
-                      placeholder="GEHU/2024/001"
-                      disabled={isSubmitting || isAuthenticated}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="reason">Why do you want to join?</Label>
-                    <Textarea
-                      id="reason"
-                      value={joinForm.reason}
-                      onChange={(e) => setJoinForm(prev => ({ ...prev, reason: e.target.value }))}
-                      rows={3}
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isSubmitting || hasAlreadyJoinedClub || !isStudentProfileComplete}
-                  >
-                    {isSubmitting
-                      ? "Submitting..."
-                      : hasAlreadyJoinedClub
-                        ? "Already a member or request pending"
-                        : !isStudentProfileComplete
-                          ? "Complete Profile To Submit"
-                          : "Submit Join Request"}
-                  </Button>
-                  {!isStudentProfileComplete && (
-                    <Button type="button" variant="outline" className="w-full" onClick={() => setLocation("/student")}>Go To Student Profile</Button>
-                  )}
-                </form>
-              </DialogContent>
-            </Dialog>
-            <Link href="/clubs">
-              <Button variant="ghost">Back</Button>
-            </Link>
+                    <div>
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={joinForm.email}
+                        onChange={(e) => setJoinForm((prev) => ({ ...prev, email: e.target.value }))}
+                        disabled={isSubmitting || isAuthenticated}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="department">Department</Label>
+                      <Input
+                        id="department"
+                        value={joinForm.department}
+                        onChange={(e) => setJoinForm((prev) => ({ ...prev, department: e.target.value }))}
+                        disabled={isSubmitting || isAuthenticated}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="enrollmentNumber">Enrollment Number</Label>
+                      <Input
+                        id="enrollmentNumber"
+                        value={joinForm.enrollmentNumber}
+                        onChange={(e) => setJoinForm((prev) => ({ ...prev, enrollmentNumber: e.target.value }))}
+                        placeholder="GEHU/2024/001"
+                        disabled={isSubmitting || isAuthenticated}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="reason">Why do you want to join?</Label>
+                      <Textarea
+                        id="reason"
+                        value={joinForm.reason}
+                        onChange={(e) => setJoinForm((prev) => ({ ...prev, reason: e.target.value }))}
+                        rows={3}
+                        disabled={isSubmitting}
+                        required
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isSubmitting || hasAlreadyJoinedClub || !isStudentProfileComplete || !!eligibilityError}
+                    >
+                      {isSubmitting
+                        ? "Submitting..."
+                        : hasAlreadyJoinedClub
+                          ? "Already a member or request pending"
+                          : !isStudentProfileComplete
+                            ? "Complete Profile To Submit"
+                            : "Submit Join Request"}
+                    </Button>
+                    {!isStudentProfileComplete && (
+                      <Button type="button" variant="outline" className="w-full" onClick={() => setLocation("/student")}>Go To Student Profile</Button>
+                    )}
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              <Link href="/clubs" className="self-start">
+                <Button variant="ghost" className="h-9 px-2 text-muted-foreground hover:text-foreground">
+                  Back
+                </Button>
+              </Link>
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
 
       {/* Tabbed Content */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-6 rounded-xl border border-border/70 bg-muted/60 p-1 shadow-sm">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="club-info">Club Info</TabsTrigger>
@@ -632,11 +887,20 @@ export default function ClubDetail() {
         <TabsContent value="club-info" className="space-y-8">
           <ClubMembership
             clubName={club.name}
-            description={`Join ${club.name} to be part of a vibrant community of innovators and learners. Connect with like-minded individuals and grow together!`}
-            memberCount={club.memberCount}
+            description={club.description}
+            memberCount={club.memberCount ?? 0}
             joinFee={0}
+            joinStatusLabel={joinStatusLabel}
+            joinStatusTone={joinStatusTone}
+            statusNote={joinStatusNote}
+            requirements={clubInfoRequirements}
           />
-          <ClubContact clubName={club.name} clubId={id} />
+          <ClubContact
+            clubName={club.name}
+            clubId={id}
+            clubEmail={club.email}
+            clubPhone={club.phone}
+          />
         </TabsContent>
 
         <TabsContent value="announcements" className="space-y-6">

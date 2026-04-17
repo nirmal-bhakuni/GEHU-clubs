@@ -7,6 +7,9 @@ interface ClubMembershipProps {
   description?: string;
   memberCount?: number;
   joinFee?: number;
+  joinStatusLabel?: string;
+  joinStatusTone?: "default" | "secondary" | "destructive" | "outline";
+  statusNote?: string;
   requirements?: string[];
   benefits?: string[];
 }
@@ -16,6 +19,9 @@ export default function ClubMembership({
   description,
   memberCount = 120,
   joinFee = 0,
+  joinStatusLabel = "Open for Registration",
+  joinStatusTone = "default",
+  statusNote,
   requirements = [
     "Must be a current student",
     "Valid student ID required",
@@ -31,11 +37,19 @@ export default function ClubMembership({
 }: ClubMembershipProps) {
   return (
     <div className="space-y-6">
+      {/* Description */}
+      {description && (
+        <Card className="p-6 border-l-4 border-l-primary">
+          <h3 className="text-lg font-bold mb-3">About {clubName}</h3>
+          <p className="text-foreground leading-relaxed">{description}</p>
+        </Card>
+      )}
+
       {/* Overview */}
       <Card className="p-6 border-2 bg-gradient-to-br from-primary/5 to-secondary/5">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           <div className="flex items-center gap-4">
-            <Users className="w-10 h-10 text-primary flex-shrink-0" />
+            <Users className="w-8 h-8 text-primary flex-shrink-0" />
             <div>
               <p className="text-sm text-muted-foreground">Active Members</p>
               <p className="text-2xl font-bold">{memberCount}+</p>
@@ -43,7 +57,7 @@ export default function ClubMembership({
           </div>
 
           <div className="flex items-center gap-4">
-            <DollarSign className="w-10 h-10 text-primary flex-shrink-0" />
+            <DollarSign className="w-8 h-8 text-primary flex-shrink-0" />
             <div>
               <p className="text-sm text-muted-foreground">Membership Fee</p>
               <p className="text-2xl font-bold">
@@ -53,10 +67,13 @@ export default function ClubMembership({
           </div>
 
           <div className="flex items-center gap-4">
-            <Clock className="w-10 h-10 text-primary flex-shrink-0" />
+            <Clock className="w-8 h-8 text-primary flex-shrink-0" />
             <div>
               <p className="text-sm text-muted-foreground">Join Status</p>
-              <Badge className="mt-1">Open for Registration</Badge>
+              <Badge variant={joinStatusTone} className="mt-1">{joinStatusLabel}</Badge>
+              {statusNote ? (
+                <p className="mt-1 text-xs text-muted-foreground">{statusNote}</p>
+              ) : null}
             </div>
           </div>
         </div>
@@ -87,14 +104,6 @@ export default function ClubMembership({
           ))}
         </div>
       </Card>
-
-      {/* Description */}
-      {description && (
-        <Card className="p-6 border-l-4 border-l-primary">
-          <h3 className="text-lg font-bold mb-3">About {clubName}</h3>
-          <p className="text-foreground leading-relaxed">{description}</p>
-        </Card>
-      )}
     </div>
   );
 }

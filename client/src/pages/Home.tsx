@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Hero from "@/components/Hero";
 import EventCard from "@/components/EventCard";
 import ClubCard from "@/components/ClubCard";
 import StatsSection from "@/components/StatsSection";
-import { SwipeActivityCard } from "@/components/SwipeActivityCard";
+import { SwipeActivityCard, type FeedItem } from "@/components/SwipeActivityCard";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Calendar, Users, Flame, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import type { Event, Club, ClubStory } from "@shared/schema";
+import type { Event, Club, ClubStory, Achievement } from "@shared/schema";
 
 const eventPlaceholder = "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&q=80";
 
@@ -73,6 +73,25 @@ const demoClubs: Club[] = [
     createdAt: new Date(),
   },
 ];
+
+type AnnouncementRecord = {
+  id: string;
+  title: string;
+  content: string;
+  authorName?: string;
+  target?: string;
+  createdAt?: string | Date;
+  pinned?: boolean;
+};
+
+type HomeAchievement = Achievement & { clubName?: string };
+
+function formatFeedDate(dateValue?: string | Date) {
+  if (!dateValue) return "Date TBA";
+  const parsed = new Date(dateValue);
+  if (Number.isNaN(parsed.getTime())) return String(dateValue);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit", year: "numeric" }).format(parsed);
+}
 
 export default function Home() {
   const [visibleEvents, setVisibleEvents] = useState(false);
@@ -139,6 +158,44 @@ export default function Home() {
     },
   });
 
+  const { data: announcements = [], isLoading: announcementsLoading } = useQuery<AnnouncementRecord[]>({
+    queryKey: ["/api/announcements"],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", "/api/announcements?limit=12");
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch {
+        return [];
+      }
+    },
+  });
+
+  const { data: achievements = [], isLoading: achievementsLoading } = useQuery<HomeAchievement[]>({
+    queryKey: ["/api/achievements", clubs.map((club) => club.id).join(",")],
+    enabled: clubs.length > 0,
+    queryFn: async () => {
+      try {
+        const visibleClubs = clubs.filter((club) => !club.isFrozen);
+        const results = await Promise.all(
+          visibleClubs.map(async (club) => {
+            try {
+              const res = await apiRequest("GET", `/api/achievements/${club.id}`);
+              const data = await res.json();
+              if (!Array.isArray(data)) return [];
+              return data.map((achievement: Achievement) => ({ ...achievement, clubName: club.name }));
+            } catch {
+              return [];
+            }
+          })
+        );
+        return results.flat();
+      } catch {
+        return [];
+      }
+    },
+  });
+
   const upcomingEvents = events
     .filter((event) => {
       // Only show events from non-frozen clubs
@@ -160,6 +217,85 @@ export default function Home() {
     club,
     story: storyByClubId.get(club.id),
   }));
+
+  const campusFeedItems = useMemo<FeedItem[]>(() => {
+    const clubMap = new Map(clubs.map((club) => [club.id, club]));
+
+    const toTimestamp = (value?: string | Date) => {
+      if (!value) return 0;
+      const parsed = new Date(value).getTime();
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+
+    const eventCards = events
+      .filter((event) => {
+        const club = clubMap.get(event.clubId);
+        return !club?.isFrozen;
+      })
+      .map((event) => {
+        const eventTime = toTimestamp(event.createdAt || event.date);
+        const isUpcoming = new Date(event.date).getTime() >= Date.now();
+        return {
+          id: `event-${event.id}`,
+          kind: isUpcoming ? ("upcoming-event" as const) : ("latest-event" as const),
+          title: event.title,
+          description: event.description,
+          imageUrl: event.imageUrl || eventPlaceholder,
+          clubName: event.clubName || clubMap.get(event.clubId)?.name || "Campus",
+          category: event.category || "Event",
+          href: `/events/${event.id}`,
+          badges: [isUpcoming ? "UPCOMING" : "LATEST", event.category || "EVENT"],
+          meta: [
+            { icon: "calendar" as const, label: formatFeedDate(event.date) },
+            { icon: "clock" as const, label: event.time || "TBA" },
+            { icon: "map" as const, label: event.location || "Campus" },
+          ],
+          createdAt: eventTime,
+        };
+      });
+
+    const announcementCards = announcements.map((announcement) => ({
+      id: `announcement-${announcement.id}`,
+      kind: "community-post" as const,
+      title: announcement.title,
+      description: announcement.content,
+      imageUrl: eventPlaceholder,
+      clubName: announcement.authorName || "Campus Community",
+      category: announcement.target && announcement.target !== "all" ? "Club Update" : "Community Post",
+      href: "/clubs",
+      badges: [announcement.pinned ? "PINNED" : "COMMUNITY", "POST"],
+      meta: [
+        { icon: "author" as const, label: announcement.authorName || "System" },
+        { icon: "calendar" as const, label: formatFeedDate(announcement.createdAt) },
+        { icon: "tag" as const, label: announcement.target === "all" ? "All Clubs" : "Club Update" },
+      ],
+      createdAt: toTimestamp(announcement.createdAt),
+    }));
+
+    const achievementCards = achievements.map((achievement) => ({
+      id: `achievement-${achievement.id}`,
+      kind: "achievement" as const,
+      title: achievement.title,
+      description: achievement.description,
+      imageUrl: achievement.imageUrl || eventPlaceholder,
+      clubName: achievement.clubName || clubMap.get(achievement.clubId)?.name || "Club Achievement",
+      category: achievement.category || "Achievement",
+      href: `/clubs/${achievement.clubId}`,
+      badges: ["ACHIEVEMENT", achievement.category || "AWARD"],
+      meta: [
+        { icon: "calendar" as const, label: formatFeedDate(achievement.achievementDate) },
+        { icon: "sparkles" as const, label: achievement.category || "Milestone" },
+        { icon: "author" as const, label: achievement.clubName || clubMap.get(achievement.clubId)?.name || "Club" },
+      ],
+      createdAt: toTimestamp(achievement.createdAt || achievement.achievementDate),
+    }));
+
+    return [...eventCards, ...announcementCards, ...achievementCards]
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .slice(0, 8);
+  }, [events, clubs, announcements, achievements]);
+
+  const feedLoading = eventsLoading || clubsLoading || announcementsLoading || achievementsLoading;
 
   const activeStory = activeStoryIndex !== null ? storyItems[activeStoryIndex] : null;
 
@@ -251,7 +387,7 @@ export default function Home() {
 
       {/* Upcoming Events Section */}
       <section className={`py-16 md:py-20 transition-all duration-1000 ${visibleEvents ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-        <div className="max-w-7xl mx-auto px-4 md:px-8">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex items-center justify-between mb-8 group">
             <div className="flex-1">
               <h2 className={`
@@ -340,7 +476,7 @@ export default function Home() {
 
       {/* Featured Clubs Section */}
       <section className={`py-16 md:py-20 bg-card transition-all duration-1000 ${visibleClubs ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-        <div className="max-w-7xl mx-auto px-4 md:px-8">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="flex items-center justify-between mb-8 group">
             <div className="flex-1">
               <h2 className="text-3xl md:text-4xl font-semibold mb-2 relative inline-block group/heading">
@@ -420,7 +556,7 @@ export default function Home() {
         <div className="pointer-events-none absolute -left-20 top-16 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
         <div className="pointer-events-none absolute -right-20 bottom-20 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
         
-        <div className="max-w-7xl mx-auto px-4 md:px-8 relative z-10">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 relative z-10">
           <div className="mb-8 sm:mb-10 md:mb-12 animate-fade-in-up">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 backdrop-blur-sm sm:mb-4 sm:px-4 sm:py-2">
               <span className="relative flex h-2 w-2">
@@ -437,7 +573,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="story-section mb-8 ml-0 max-w-5xl rounded-2xl border border-border bg-card/80 p-4 backdrop-blur-md sm:mb-10 md:mb-12 sm:p-5">
+          <div className="story-section mb-8 w-full rounded-2xl border border-border bg-card/80 p-4 backdrop-blur-md sm:mb-10 md:mb-12 sm:p-5">
             <div className="mb-3 flex items-center justify-between sm:mb-4">
               <h3 className="flex items-center gap-2 text-base font-semibold text-foreground sm:text-lg">
                 <span className="text-xl sm:text-2xl">✨</span> Stories
@@ -597,31 +733,11 @@ export default function Home() {
             </div>
           )}
 
-          <div className="mb-10 ml-0 max-w-5xl rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-md sm:mb-12 md:mb-16 sm:p-6">
-            <div className="mb-3 flex flex-col items-start justify-between gap-3 sm:mb-4 sm:flex-row sm:items-center sm:gap-0">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary shadow-lg sm:h-10 sm:w-10">
-                  <Flame className="h-4 w-4 text-primary-foreground sm:h-5 sm:w-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-foreground sm:text-xl">Posts</h3>
-                  <p className="hidden text-xs text-muted-foreground sm:block sm:text-sm">Instagram-style event posts from your campus clubs.</p>
-                </div>
-              </div>
-              <Link href="/events" className="w-full sm:w-auto">
-                <Button variant="outline" size="sm" className="w-full text-xs sm:w-auto sm:text-sm">
-                  Explore all events
-                </Button>
-              </Link>
-            </div>
-            <div className="flex justify-center">
-              <SwipeActivityCard announcements={upcomingEvents} />
-            </div>
-          </div>
+          <SwipeActivityCard feedItems={campusFeedItems} isLoading={feedLoading} />
 
           {/* Recommended for You Section with Category Filters */}
-          <div className="border-t border-primary/10 pt-0 sm:pt-1 md:pt-2 -mt-8 sm:-mt-12 md:-mt-16">
-            <div className="max-w-5xl ml-0 px-4 sm:px-0">
+          <div className="mt-2 border-t border-primary/10 pt-3 sm:mt-4 sm:pt-4 md:mt-5 md:pt-5">
+            <div className="w-full px-0">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
                 <div>
                   <h3 className="text-xl sm:text-2xl font-bold mb-1 flex flex-wrap items-center gap-2">
