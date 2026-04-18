@@ -1,45 +1,81 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { UserPlus, LogIn, Shield, Users, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { UserPlus, Shield, Users, X, GraduationCap, ArrowLeft, Building2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+interface SidebarItem {
+  path: string;
+  label: string;
+  icon: typeof Users;
+  description: string;
+}
+
+interface SidebarSection {
+  key: "student" | "admin";
+  title: string;
+  subtitle: string;
+  actionIcon: typeof Users;
+  items: SidebarItem[];
+}
+
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [location] = useLocation();
+  const [selectedAccess, setSelectedAccess] = useState<"student" | "admin" | null>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const firstFocusableRef = useRef<HTMLButtonElement>(null);
 
-  const sidebarItems = [
+  const sidebarSections: SidebarSection[] = [
     {
-      path: "/student/login",
-      label: "Student Login",
-      icon: LogIn,
-      description: "Access your student account"
+      key: "student",
+      title: "Student Actions",
+      subtitle: "Student onboarding and dashboard",
+      actionIcon: GraduationCap,
+      items: [
+        {
+          path: "/student/dashboard",
+          label: "Student Dashboard",
+          icon: Users,
+          description: "Open your student dashboard"
+        },
+        {
+          path: "/student/signup",
+          label: "Student Signup",
+          icon: UserPlus,
+          description: "Create a new student account"
+        }
+      ]
     },
     {
-      path: "/student/signup",
-      label: "Student Signup",
-      icon: UserPlus,
-      description: "Create a new student account"
-    },
-    {
-      path: "/admin/login",
-      label: "Admin Login",
-      icon: Shield,
-      description: "University admin access"
-    },
-    {
-      path: "/club-admin/login",
-      label: "Club Admin",
-      icon: Users,
-      description: "Manage your club"
+      key: "admin",
+      title: "Admin / Faculty Actions",
+      subtitle: "Administrative and club management",
+      actionIcon: Shield,
+      items: [
+        {
+          path: "/dashboard",
+          label: "Uni Admin Dashboard",
+          icon: Building2,
+          description: "Open university admin dashboard"
+        },
+        {
+          path: "/club-admin",
+          label: "Club Admin Dashboard",
+          icon: Users,
+          description: "Open club admin dashboard"
+        }
+      ]
     }
   ];
+
+  const activeSection = selectedAccess
+    ? sidebarSections.find((section) => section.key === selectedAccess) || null
+    : null;
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -61,6 +97,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedAccess(null);
+    }
+  }, [isOpen]);
 
   // Handle touch gestures for mobile
   useEffect(() => {
@@ -165,97 +207,151 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
-            <p className="text-sm text-muted-foreground mb-6 flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
-              Login or signup to access your account
-            </p>
+            <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+              {activeSection ? "Choose an action" : "Tap an action icon to continue"}
+            </div>
 
-            <div className="space-y-3">
-              {sidebarItems.map((item, index) => {
-                const Icon = item.icon;
-                const isActive = location === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    href={item.path}
-                    onClick={onClose}
-                    className="block focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-lg group"
-                    style={{
-                      animation: isOpen ? `slideInLeft 0.5s ease-out ${index * 0.1}s both` : 'none'
-                    }}
+            {!activeSection ? (
+              <div className="space-y-3">
+                {sidebarSections.map((section, index) => {
+                  const ActionIcon = section.actionIcon;
+                  return (
+                    <button
+                      key={section.key}
+                      type="button"
+                      onClick={() => setSelectedAccess(section.key)}
+                      className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-lg group"
+                      style={{
+                        animation: isOpen ? `slideInLeft 0.5s ease-out ${index * 0.1}s both` : "none"
+                      }}
+                    >
+                      <Card className="p-4 cursor-pointer transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:scale-[1.02] hover:-translate-y-1 relative overflow-hidden border-border/50 hover:border-primary/30 hover:bg-gradient-to-br hover:from-muted/80 hover:to-muted/40">
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+                          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"></div>
+                        </div>
+                        <div className="relative z-10 flex items-center gap-3">
+                          <div className="p-2.5 rounded-lg bg-muted group-hover:bg-primary/20 group-hover:text-primary transition-all duration-300 group-hover:scale-110">
+                            <ActionIcon className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm truncate group-hover:text-primary transition-colors duration-300">
+                              {section.title}
+                            </h3>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2 group-hover:text-foreground/80 transition-colors duration-300">
+                              {section.subtitle}
+                            </p>
+                          </div>
+                        </div>
+                      </Card>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div>
+                <div className="mb-3 px-1 flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-primary">{activeSection.title}</h3>
+                    <p className="text-[11px] text-muted-foreground">{activeSection.subtitle}</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs"
+                    onClick={() => setSelectedAccess(null)}
                   >
-                    <Card className={`
-                      p-4 cursor-pointer transition-all duration-300 
-                      hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] 
-                      hover:scale-[1.03] hover:-translate-y-1
-                      relative overflow-hidden
-                      ${isActive
-                        ? "bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 border-primary/40 shadow-lg shadow-primary/20"
-                        : "hover:bg-gradient-to-br hover:from-muted/80 hover:to-muted/40 border-border/50 hover:border-primary/30"
-                      }
-                    `}>
-                      {/* Hover glow effect */}
-                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-                        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"></div>
-                      </div>
-                      
-                      {/* Active indicator line */}
-                      {isActive && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary/80 to-primary/60 rounded-r-full animate-pulse"></div>
-                      )}
-                      
-                      <div className="flex items-center gap-3 relative z-10">
-                        <div className={`
-                          p-2.5 rounded-lg transition-all duration-300 
-                          group-hover:scale-110 group-hover:rotate-3
+                    <ArrowLeft className="w-3 h-3 mr-1" />
+                    Back
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {activeSection.items.map((item, itemIndex) => {
+                    const Icon = item.icon;
+                    const isActive = location === item.path;
+
+                    return (
+                      <Link
+                        key={item.path}
+                        href={item.path}
+                        onClick={onClose}
+                        className="block focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-lg group"
+                        style={{
+                          animation: isOpen ? `slideInLeft 0.5s ease-out ${itemIndex * 0.1}s both` : "none"
+                        }}
+                      >
+                        <Card className={`
+                          p-4 cursor-pointer transition-all duration-300 
+                          hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] 
+                          hover:scale-[1.03] hover:-translate-y-1
+                          relative overflow-hidden
                           ${isActive
-                            ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
-                            : "bg-muted group-hover:bg-primary/20 group-hover:text-primary"
+                            ? "bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 border-primary/40 shadow-lg shadow-primary/20"
+                            : "hover:bg-gradient-to-br hover:from-muted/80 hover:to-muted/40 border-border/50 hover:border-primary/30"
                           }
                         `}>
-                          <Icon className="w-4 h-4 transition-transform duration-300 group-hover:scale-110" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className={`
-                            font-semibold text-sm truncate transition-colors duration-300
-                            ${isActive ? "text-primary" : "group-hover:text-primary"}
-                          `}>
-                            {item.label}
-                          </h3>
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2 group-hover:text-foreground/80 transition-colors duration-300">
-                            {item.description}
-                          </p>
-                        </div>
-                        
-                        {/* Arrow indicator on hover */}
-                        <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-0 group-hover:translate-x-1">
-                          <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                      </div>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
+                          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
+                            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"></div>
+                          </div>
 
-            {/* Footer */}
-            <div className="mt-8 pt-6 border-t border-border/50 relative">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
-              <p className="text-xs text-muted-foreground text-center">
-                Need help?{" "}
-                <a
-                  href="mailto:Gehuclubs@gmail.com"
-                  className="text-primary hover:underline font-medium hover:text-primary/80 transition-colors duration-300 inline-flex items-center gap-1 group"
-                >
-                  Contact support
-                  <svg className="w-3 h-3 transform group-hover:translate-x-0.5 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </a>
-              </p>
-            </div>
+                          {isActive && (
+                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary/80 to-primary/60 rounded-r-full animate-pulse"></div>
+                          )}
+
+                          <div className="flex items-center gap-3 relative z-10">
+                            <div className={`
+                              p-2.5 rounded-lg transition-all duration-300 
+                              group-hover:scale-110 group-hover:rotate-3
+                              ${isActive
+                                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                                : "bg-muted group-hover:bg-primary/20 group-hover:text-primary"
+                              }
+                            `}>
+                              <Icon className="w-4 h-4 transition-transform duration-300 group-hover:scale-110" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className={`
+                                font-semibold text-sm truncate transition-colors duration-300
+                                ${isActive ? "text-primary" : "group-hover:text-primary"}
+                              `}>
+                                {item.label}
+                              </h3>
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-2 group-hover:text-foreground/80 transition-colors duration-300">
+                                {item.description}
+                              </p>
+                            </div>
+
+                            <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-0 group-hover:translate-x-1">
+                              <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                          </div>
+                        </Card>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer - Pinned to bottom */}
+          <div className="border-t border-border/50 bg-card/50 p-6 relative">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+            <p className="text-xs text-muted-foreground text-center">
+              Need help?{" "}
+              <a
+                href="mailto:Gehuclubs@gmail.com"
+                className="text-primary hover:underline font-medium hover:text-primary/80 transition-colors duration-300 inline-flex items-center gap-1 group"
+              >
+                Contact support
+                <svg className="w-3 h-3 transform group-hover:translate-x-0.5 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </a>
+            </p>
           </div>
         </div>
         

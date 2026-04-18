@@ -79,7 +79,7 @@ function kindLabel(kind: FeedItemKind) {
 function kindTone(kind: FeedItemKind) {
   switch (kind) {
     case "community-post":
-      return "border-sky-300/35 bg-sky-500/20 text-sky-100";
+      return "border-primary/35 bg-primary/20 text-primary-foreground";
     case "achievement":
       return "border-amber-300/35 bg-amber-500/20 text-amber-100";
     case "latest-event":
@@ -181,7 +181,7 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
   if (isLoading) {
     return (
       <section className="relative overflow-hidden bg-gradient-to-b from-background via-card/20 to-background text-foreground">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_44%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.12),transparent_44%)]" />
         <div className="pointer-events-none absolute left-1/2 top-1/2 h-[260px] w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 opacity-30 blur-[90px]" />
         <div className="mx-auto flex max-w-6xl flex-col px-6 py-4 sm:py-6">
           <div className="flex items-center justify-between gap-3 py-2">
@@ -233,7 +233,7 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
   if (!hasItems || !currentCard) {
     return (
       <section className="relative overflow-hidden bg-gradient-to-b from-background via-card/20 to-background text-foreground">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.1),transparent_44%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.1),transparent_44%)]" />
         <div className="mx-auto flex max-w-6xl flex-col px-6 py-4 sm:py-6">
           <div className="flex items-center justify-between gap-3 py-2">
             <div>
@@ -256,7 +256,7 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-b from-background via-card/20 to-background text-foreground">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.14),transparent_42%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.14),transparent_42%)]" />
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[260px] w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 opacity-25 blur-[90px]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.03),transparent_38%)]" />
 
@@ -363,7 +363,7 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
                       controls.start({ x: 0, rotate: 0, opacity: 1, transition: { type: "spring", stiffness: 300, damping: 30 } });
                     }}
                   >
-                    <Card className="flex h-full flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 to-black shadow-2xl shadow-black/40 backdrop-blur-xl">
+                    <Card className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card to-muted/20 shadow-2xl shadow-black/20 backdrop-blur-xl">
                       <div className="relative h-48 overflow-hidden sm:h-52 lg:h-56">
                         <img
                           src={item.imageUrl || fallbackImage}
@@ -373,7 +373,7 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
                           decoding="async"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.08),transparent_72%)]" />
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,hsl(var(--primary)/0.08),transparent_72%)]" />
 
                         <div className="absolute left-3 right-3 top-3 flex items-start justify-between gap-2">
                           <div className="flex flex-wrap gap-2">
@@ -410,15 +410,15 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
                       </div>
 
                       <div className="flex flex-1 flex-col space-y-3 p-3.5 sm:p-4 lg:p-4.5">
-                        <p className="line-clamp-2 text-xs leading-relaxed text-zinc-400 sm:text-sm">
+                        <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground sm:text-sm">
                           {item.description || "Discover a new campus update from your student community."}
                         </p>
 
-                        <div className="grid grid-cols-1 gap-1.5 text-[10px] text-zinc-400 sm:grid-cols-3 sm:gap-2 sm:text-[11px]">
+                        <div className="grid grid-cols-1 gap-1.5 text-[10px] text-muted-foreground sm:grid-cols-3 sm:gap-2 sm:text-[11px]">
                           {fallbackMeta.slice(0, 3).map((metaItem, index) => {
                             const Icon = iconForMeta(metaItem.icon);
                             return (
-                              <div key={`${metaItem.label}-${index}`} className="inline-flex items-center gap-1.5 rounded-2xl border border-white/10 bg-white/5 px-2 py-1.5 backdrop-blur-sm">
+                              <div key={`${metaItem.label}-${index}`} className="inline-flex items-center gap-1.5 rounded-2xl border border-border bg-muted/60 px-2 py-1.5 backdrop-blur-sm">
                                 <Icon className="h-3.5 w-3.5" />
                                 <span className="truncate">{metaItem.label}</span>
                               </div>
@@ -431,20 +431,20 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 rounded-full hover:bg-white/10"
+                              className="h-8 w-8 rounded-full hover:bg-muted"
                               onClick={() => toggleLiked(item.id)}
                               aria-label="Like post"
                             >
-                              <Heart className={`h-4 w-4 ${isLiked ? "fill-primary text-primary" : "text-white"}`} />
+                              <Heart className={`h-4 w-4 ${isLiked ? "fill-primary text-primary" : "text-muted-foreground"}`} />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-white/10" aria-label="Open comments">
-                              <MessageCircle className="h-4 w-4 text-white" />
+                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-muted" aria-label="Open comments">
+                              <MessageCircle className="h-4 w-4 text-muted-foreground" />
                             </Button>
                           </div>
 
                           <div className="text-right">
-                            <p className="text-xs font-semibold text-white">{likes} likes</p>
-                            <p className="line-clamp-1 text-xs text-zinc-500">View all {comments} comments</p>
+                            <p className="text-xs font-semibold text-foreground">{likes} likes</p>
+                            <p className="line-clamp-1 text-xs text-muted-foreground">View all {comments} comments</p>
                           </div>
                         </div>
 
@@ -457,11 +457,11 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
                           <Button
                             variant="outline"
                             size="icon"
-                            className="h-9 w-9 rounded-2xl border-white/10 bg-white/5 text-white hover:bg-white/10"
+                            className="h-9 w-9 rounded-2xl border-border bg-background/60 text-foreground hover:bg-muted"
                             onClick={() => toggleSaved(item.id)}
                             aria-label={isSaved ? "Remove save" : "Save item"}
                           >
-                            <Bookmark className={`h-4 w-4 ${isSaved ? "fill-white text-white" : "text-white"}`} />
+                            <Bookmark className={`h-4 w-4 ${isSaved ? "fill-primary text-primary" : "text-muted-foreground"}`} />
                           </Button>
                         </div>
                       </div>
@@ -507,12 +507,12 @@ export function SwipeActivityCard({ feedItems, isLoading = false }: SwipeActivit
                 </Button>
               </div>
 
-              <div className="absolute bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full border border-white/10 bg-black/35 px-3 py-1.5 backdrop-blur-sm">
+              <div className="absolute bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full border border-border bg-background/70 px-3 py-1.5 backdrop-blur-sm">
                 <div className="flex items-center gap-2">
                   {feedItems.map((item, index) => (
                     <button
                       key={item.id || index}
-                      className={`h-2 rounded-full transition-all duration-300 ${index === safeIndex ? "w-8 bg-white" : "w-2 bg-white/40"}`}
+                      className={`h-2 rounded-full transition-all duration-300 ${index === safeIndex ? "w-8 bg-primary" : "w-2 bg-muted-foreground/40"}`}
                       onClick={() => setCurrentIndex(index)}
                       aria-label={`Go to activity card ${index + 1}`}
                     />
