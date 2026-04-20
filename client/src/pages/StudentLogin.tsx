@@ -64,6 +64,7 @@ export default function StudentLogin() {
           rollNumber: data.student.rollNumber || "",
           department: data.student.department || "",
           yearOfAdmission: data.student.yearOfAdmission || undefined,
+          currentSemester: data.student.currentSemester || "",
         });
         // Store student session for offline functionality
        // localStorage.setItem("currentStudent", enrollment);

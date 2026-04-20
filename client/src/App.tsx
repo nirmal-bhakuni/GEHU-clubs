@@ -37,29 +37,27 @@ function RouteFallback() {
   );
 }
 
-function Router() {
-  return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/student" component={StudentProfile} />
-      <Route path="/student-login" component={StudentLogin} />
-      <Route path="/student/login" component={StudentLogin} />
-      <Route path="/student-signup" component={StudentSignup} />
-      <Route path="/student/signup" component={StudentSignup} />
-      <Route path="/student-dashboard" component={StudentDashboard} />
-      <Route path="/student/dashboard" component={StudentDashboard} />
-      <Route path="/admin/login" component={Login} />
-      <Route path="/club-admin/login" component={ClubAdminLogin} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/club-admin" component={ClubAdmin} />
-      <Route path="/clubs" component={Clubs} />
-      <Route path="/clubs/:id" component={ClubDetail} />
-      <Route path="/events" component={Events} />
-      <Route path="/events/:id" component={EventDetail} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
+const Router = () => (
+  <Switch>
+    <Route path="/" component={Home} />
+    <Route path="/student" component={StudentProfile} />
+    <Route path="/student-login" component={StudentLogin} />
+    <Route path="/student/login" component={StudentLogin} />
+    <Route path="/student-signup" component={StudentSignup} />
+    <Route path="/student/signup" component={StudentSignup} />
+    <Route path="/student-dashboard" component={StudentDashboard} />
+    <Route path="/student/dashboard" component={StudentDashboard} />
+    <Route path="/admin/login" component={Login} />
+    <Route path="/club-admin/login" component={ClubAdminLogin} />
+    <Route path="/dashboard" component={Dashboard} />
+    <Route path="/club-admin" component={ClubAdmin} />
+    <Route path="/clubs" component={Clubs} />
+    <Route path="/clubs/:id" component={ClubDetail} />
+    <Route path="/events" component={Events} />
+    <Route path="/events/:id" component={EventDetail} />
+    <Route component={NotFound} />
+  </Switch>
+);
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error?: Error }> {
   constructor(props: { children: ReactNode }) {

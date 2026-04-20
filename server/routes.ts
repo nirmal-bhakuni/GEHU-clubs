@@ -8,7 +8,6 @@ import multer from "multer";
 import { insertAdminSchema, insertClubSchema, insertEventSchema } from "./shared/schema";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 import { Student } from "./models/Student";
 import { Admin } from "./models/Admin";
@@ -21,6 +20,8 @@ import { Club } from "./models/Club";
 import { Message } from "./models/Message";
 import { Announcement } from "./models/Announcement";
 import { Event } from "./models/Event";
+import { EventFeedback } from "./models/EventFeedback";
+import { AttendanceDispute } from "./models/AttendanceDispute";
 import { ClubStory } from "./models/ClubStory";
 import { ClubRating } from "./models/ClubRating";
 import { ChatGroup } from "./models/ChatGroup";
@@ -28,9 +29,9 @@ import { ChatMessage } from "./models/ChatMessage";
 import { ChatReadState } from "./models/ChatReadState";
 import { v2 as cloudinary } from "cloudinary";
 import { notifyAnnouncement, notifyNewEvent, sendEmail } from "./services/emailService";
+import { isMongoDBConnected } from "./index";
 
 const uploadsDirCandidates = [
-  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "uploads"),
   path.join(process.cwd(), "uploads"),
   path.join(process.cwd(), "..", "uploads"),
 ];
@@ -60,6 +61,108 @@ const upload = multer({
   storage: storage_multer,
   limits: { fileSize: 25 * 1024 * 1024 }
 });
+
+const profileUpload = multer({
+  storage: storage_multer,
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+const allowedProfileImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const allowedProfileImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+
+function isAllowedProfileImage(file: Express.Multer.File) {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  return allowedProfileImageMimeTypes.has(file.mimetype) && allowedProfileImageExtensions.has(extension);
+}
+
+const phonePattern = /^\+?[0-9]{10,15}$/;
+const semesterPattern = /^semester\s*([1-8])$/i;
+const ACADEMIC_START_MONTH_INDEX = 6; // July
+
+function parseSemesterNumber(value?: string | null): number | null {
+  if (!value) return null;
+  const match = value.trim().match(semesterPattern);
+  if (!match) return null;
+  return Number(match[1]);
+}
+
+async function findStudentIdentityConflict(params: {
+  excludeStudentId?: string;
+  email?: string;
+  enrollment?: string;
+  rollNumber?: string;
+  phone?: string;
+}): Promise<{ field: "email" | "enrollment" | "rollNumber" | "phone"; studentId: string } | null> {
+  const exclusion = params.excludeStudentId ? { _id: { $ne: params.excludeStudentId } } : {};
+
+  const normalizedEmail = String(params.email || "").trim();
+  if (normalizedEmail) {
+    const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const existing = await Student.findOne({
+      ...exclusion,
+      email: { $regex: `^${escapedEmail}$`, $options: "i" },
+    }).select("_id");
+    if (existing?._id) {
+      return { field: "email", studentId: String(existing._id) };
+    }
+  }
+
+  const normalizedEnrollment = String(params.enrollment || "").trim();
+  if (normalizedEnrollment) {
+    const existing = await Student.findOne({ ...exclusion, enrollment: normalizedEnrollment }).select("_id");
+    if (existing?._id) {
+      return { field: "enrollment", studentId: String(existing._id) };
+    }
+  }
+
+  const normalizedRollNumber = String(params.rollNumber || "").trim();
+  if (normalizedRollNumber) {
+    const existing = await Student.findOne({ ...exclusion, rollNumber: normalizedRollNumber }).select("_id");
+    if (existing?._id) {
+      return { field: "rollNumber", studentId: String(existing._id) };
+    }
+  }
+
+  const normalizedPhone = String(params.phone || "").trim();
+  if (normalizedPhone) {
+    const existing = await Student.findOne({ ...exclusion, phone: normalizedPhone }).select("_id");
+    if (existing?._id) {
+      return { field: "phone", studentId: String(existing._id) };
+    }
+  }
+
+  return null;
+}
+
+function getAutoSemesterFromAdmissionYear(yearOfAdmission?: number | null, referenceDate = new Date()): string {
+  if (typeof yearOfAdmission !== "number" || !Number.isFinite(yearOfAdmission)) {
+    return "";
+  }
+
+  const normalizedYear = Math.floor(yearOfAdmission);
+  const monthsElapsed =
+    (referenceDate.getFullYear() - normalizedYear) * 12 +
+    (referenceDate.getMonth() - ACADEMIC_START_MONTH_INDEX);
+
+  const semesterNumber = Math.min(8, Math.max(1, Math.floor(Math.max(0, monthsElapsed) / 6) + 1));
+  return `Semester ${semesterNumber}`;
+}
+
+function profilePictureUploadMiddleware(req: Request, res: Response, next: NextFunction) {
+  profileUpload.single("profilePicture")(req, res, (error: any) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      res.status(400).json({ error: "Profile picture must be smaller than 5MB" });
+      return;
+    }
+
+    res.status(400).json({ error: "Invalid profile picture upload" });
+  });
+}
 
 const DEFAULT_CLUB_LOGO = "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&h=200&fit=crop";
 const DEFAULT_CLUB_COVER = "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop";
@@ -109,6 +212,129 @@ function hasLocalUploadFile(uploadUrl?: string | null): boolean {
   const decodedFileName = decodeURIComponent(fileName);
   return fs.existsSync(path.join(uploadsDir, decodedFileName));
 }
+
+function extractCloudinaryPublicId(uploadUrl: string): string | null {
+  try {
+    const parsed = new URL(uploadUrl);
+    if (!/cloudinary\.com$/i.test(parsed.hostname)) return null;
+
+    const marker = "/upload/";
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+
+    const tail = parsed.pathname.slice(markerIndex + marker.length);
+    const parts = tail.split("/").filter(Boolean);
+    if (!parts.length) return null;
+
+    const versionIndex = parts.findIndex((part) => /^v\d+$/.test(part));
+    const idParts = versionIndex >= 0 ? parts.slice(versionIndex + 1) : [];
+    if (!idParts.length) return null;
+
+    const joined = idParts.join("/");
+    return joined.replace(/\.[^/.]+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+async function deleteUploadedMedia(uploadUrl?: string | null): Promise<void> {
+  if (!uploadUrl || typeof uploadUrl !== "string") return;
+
+  if (uploadUrl.startsWith("/uploads/")) {
+    const fileName = uploadUrl.replace("/uploads/", "");
+    if (!fileName) return;
+
+    const decodedFileName = decodeURIComponent(fileName);
+    const absolutePath = path.join(uploadsDir, decodedFileName);
+    if (fs.existsSync(absolutePath)) {
+      fs.unlink(absolutePath, (unlinkError) => {
+        if (unlinkError) {
+          console.error("Failed to delete local upload:", unlinkError);
+        }
+      });
+    }
+    return;
+  }
+
+  if (!hasCloudinaryConfig) return;
+  const publicId = extractCloudinaryPublicId(uploadUrl);
+  if (!publicId) return;
+
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+  } catch (error) {
+    console.error("Failed to delete Cloudinary media:", error);
+  }
+}
+
+type RateLimitState = {
+  count: number;
+  resetAt: number;
+};
+
+const studentRateLimitState = new Map<string, RateLimitState>();
+
+function cleanupExpiredStudentRateLimitStates(now: number) {
+  for (const [key, state] of studentRateLimitState.entries()) {
+    if (state.resetAt <= now) {
+      studentRateLimitState.delete(key);
+    }
+  }
+}
+
+function createStudentRateLimiter(config: {
+  routeKey: string;
+  maxRequests: number;
+  windowMs: number;
+  message: string;
+}) {
+  return function studentRateLimiter(req: Request, res: Response, next: NextFunction) {
+    if (!req.session.studentId) {
+      next();
+      return;
+    }
+
+    const now = Date.now();
+    cleanupExpiredStudentRateLimitStates(now);
+
+    const key = `${config.routeKey}:${req.session.studentId}:${req.ip || "unknown"}`;
+    const existing = studentRateLimitState.get(key);
+
+    if (!existing || existing.resetAt <= now) {
+      studentRateLimitState.set(key, {
+        count: 1,
+        resetAt: now + config.windowMs,
+      });
+      next();
+      return;
+    }
+
+    if (existing.count >= config.maxRequests) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+      res.setHeader("Retry-After", String(retryAfterSeconds));
+      res.status(429).json({ error: config.message, retryAfterSeconds });
+      return;
+    }
+
+    existing.count += 1;
+    studentRateLimitState.set(key, existing);
+    next();
+  };
+}
+
+const limitStudentProfileUpdates = createStudentRateLimiter({
+  routeKey: "student-profile-update",
+  maxRequests: 12,
+  windowMs: 60_000,
+  message: "Too many profile update attempts. Please wait a minute and try again.",
+});
+
+const limitStudentProfilePictureUploads = createStudentRateLimiter({
+  routeKey: "student-profile-picture-upload",
+  maxRequests: 6,
+  windowMs: 60_000,
+  message: "Too many profile picture uploads. Please wait a minute and try again.",
+});
 
 function toPublicMediaUrl(uploadUrl?: string | null, req?: Request): string | null | undefined {
   if (!uploadUrl || !uploadUrl.startsWith("/uploads/")) {
@@ -425,6 +651,44 @@ async function requireClubOwnership(req: Request, res: Response, next: NextFunct
     console.error("Club ownership check error:", error);
     res.status(500).json({ error: "Authorization check failed" });
   }
+}
+
+const defaultStudentNotificationPreferences = {
+  eventReminders: true,
+  attendanceUpdates: true,
+  announcements: true,
+  certificates: true,
+};
+
+function normalizeStudentNotificationPreferences(raw: any) {
+  return {
+    eventReminders:
+      typeof raw?.eventReminders === "boolean"
+        ? raw.eventReminders
+        : defaultStudentNotificationPreferences.eventReminders,
+    attendanceUpdates:
+      typeof raw?.attendanceUpdates === "boolean"
+        ? raw.attendanceUpdates
+        : defaultStudentNotificationPreferences.attendanceUpdates,
+    announcements:
+      typeof raw?.announcements === "boolean"
+        ? raw.announcements
+        : defaultStudentNotificationPreferences.announcements,
+    certificates:
+      typeof raw?.certificates === "boolean"
+        ? raw.certificates
+        : defaultStudentNotificationPreferences.certificates,
+  };
+}
+
+function normalizeDismissedReminderIds(raw: any): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => String(item)).filter(Boolean);
+}
+
+function normalizeSavedIdList(raw: any): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => String(item)).filter(Boolean);
 }
 
 function parseLocalDateTime(date: string, time: string): Date | null {
@@ -916,37 +1180,56 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         clubs = fallbackClubs as any;
       }
 
-      // Fetch all club memberships once for efficiency
-      const { ClubMembership } = await import("./models/ClubMembership.js");
-      const allMemberships = await ClubMembership.find({ status: { $ne: 'rejected' } });
-      
-      // Create a map of clubId -> member count
-      const memberCountMap = new Map<string, number>();
-      allMemberships.forEach(membership => {
-        const current = memberCountMap.get(membership.clubId) || 0;
-        memberCountMap.set(membership.clubId, current + 1);
-      });
+      // Only fetch memberships if MongoDB is connected to avoid timeouts
+      let clubsWithMemberCounts: any = clubs;
+      if (isMongoDBConnected) {
+        try {
+          // Fetch all club memberships once for efficiency
+          const { ClubMembership } = await import("./models/ClubMembership.js");
+          const allMemberships = await ClubMembership.find({ status: { $ne: 'rejected' } });
+          
+          // Create a map of clubId -> member count
+          const memberCountMap = new Map<string, number>();
+          allMemberships.forEach(membership => {
+            const current = memberCountMap.get(membership.clubId) || 0;
+            memberCountMap.set(membership.clubId, current + 1);
+          });
 
-      // Add actual member counts to clubs
-      const clubsWithMemberCounts = clubs.map((club) => {
-        const clubObj = club.toObject ? club.toObject() : club;
-        // Use actual membership count if available, otherwise use club's existing memberCount
-        const actualCount = memberCountMap.get(club.id);
-        return normalizeClubMedia({
-          ...clubObj,
-          memberCount: actualCount !== undefined ? actualCount : (clubObj.memberCount || 0)
-        }, req);
-      });
+          // Add actual member counts to clubs
+          clubsWithMemberCounts = clubs.map((club) => {
+            const clubObj = club.toObject ? club.toObject() : club;
+            // Use actual membership count if available, otherwise use club's existing memberCount
+            const actualCount = memberCountMap.get(club.id);
+            return normalizeClubMedia({
+              ...clubObj,
+              memberCount: actualCount !== undefined ? actualCount : (clubObj.memberCount || 0)
+            }, req);
+          }) as any;
+        } catch (dbError) {
+          console.error("Error fetching memberships:", dbError);
+          // Fall back to club data without membership counts
+          clubsWithMemberCounts = clubs.map((club) => {
+            const clubObj = club.toObject ? club.toObject() : club;
+            return normalizeClubMedia(clubObj, req);
+          }) as any;
+        }
+      } else {
+        // MongoDB not connected, return clubs with normalized media
+        clubsWithMemberCounts = clubs.map((club) => {
+          const clubObj = club.toObject ? club.toObject() : club;
+          return normalizeClubMedia(clubObj, req);
+        }) as any;
+      }
 
       let filteredClubs = clubsWithMemberCounts;
 
       if (search && typeof search === "string") {
         const s = search.toLowerCase();
-        filteredClubs = filteredClubs.filter(c => c.name?.toLowerCase().includes(s) || c.description?.toLowerCase().includes(s));
+        filteredClubs = filteredClubs.filter((c: any) => c.name?.toLowerCase().includes(s) || c.description?.toLowerCase().includes(s));
       }
 
       if (category && typeof category === "string" && category !== "all") {
-        filteredClubs = filteredClubs.filter(c => c.category === category);
+        filteredClubs = filteredClubs.filter((c: any) => c.category === category);
       }
 
       res.json(filteredClubs);
@@ -1485,22 +1768,32 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   app.post("/api/student/signup", async (req: Request, res: Response) => {
     try {
-      const { name, email, phone, rollNumber, password, enrollment, department, yearOfAdmission } = req.body;
+      const { name, email, phone, rollNumber, password, enrollment, department, yearOfAdmission, currentSemester } = req.body;
 
       if (!name || !email || !password || !enrollment || !department)
         return res.status(400).json({ error: "All fields required" });
 
       const exists = await Student.findOne({ email });
-      if (exists) return res.status(400).json({ error: "Email already exists" });
+      if (exists) return res.status(409).json({ error: "Email already exists", field: "email" });
 
       const enrollmentExists = await Student.findOne({ enrollment });
-      if (enrollmentExists) return res.status(400).json({ error: "Enrollment number already registered. Please login instead or contact the administrator." });
+      if (enrollmentExists) return res.status(409).json({ error: "Enrollment number already registered. Please login instead or contact the administrator.", field: "enrollment" });
 
       // Check for duplicate roll number if provided
       if (rollNumber) {
         const rollNumberExists = await Student.findOne({ rollNumber });
-        if (rollNumberExists) return res.status(400).json({ error: "Roll number already registered with another account. Please use a different roll number or contact the administrator." });
+        if (rollNumberExists) return res.status(409).json({ error: "Roll number already registered with another account. Please use a different roll number or contact the administrator.", field: "rollNumber" });
       }
+
+      if (typeof phone === "string" && phone.trim()) {
+        const phoneExists = await Student.findOne({ phone: phone.trim() });
+        if (phoneExists) return res.status(409).json({ error: "Phone number already registered with another account.", field: "phone" });
+      }
+
+      const normalizedAdmissionYear = Number.isFinite(Number(yearOfAdmission))
+        ? Math.floor(Number(yearOfAdmission))
+        : new Date().getFullYear();
+      const autoSemester = getAutoSemesterFromAdmissionYear(normalizedAdmissionYear);
 
       const hashed = await bcrypt.hash(password, 10);
 
@@ -1512,7 +1805,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         password: hashed,
         enrollment,
         department: department || "",
-        yearOfAdmission: yearOfAdmission || new Date().getFullYear(),
+        yearOfAdmission: normalizedAdmissionYear,
+        currentSemester: autoSemester,
         lastLogin: new Date()
       });
 
@@ -1540,8 +1834,12 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
             enrollment: student.enrollment,
             department: student.department,
             yearOfAdmission: student.yearOfAdmission,
+            currentSemester: student.currentSemester,
             yearOfCourse,
-            lastLogin: student.lastLogin
+            lastLogin: student.lastLogin,
+            notificationPreferences: normalizeStudentNotificationPreferences(
+              (student as any).notificationPreferences,
+            ),
           }
         });
       });
@@ -1673,6 +1971,19 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const student = await Student.findOne({ enrollment });
       if (!student) return res.status(401).json({ error: "Invalid enrollment or password" });
 
+      const loginConflict = await findStudentIdentityConflict({
+        excludeStudentId: String(student._id),
+        email: student.email,
+        enrollment: student.enrollment,
+        rollNumber: student.rollNumber || undefined,
+        phone: student.phone || undefined,
+      });
+      if (loginConflict) {
+        return res.status(409).json({
+          error: `Account data conflict detected for ${loginConflict.field}. Please contact university admin.`,
+        });
+      }
+
       // Check if account is disabled
       if (student.isDisabled) {
         return res.status(403).json({ error: "Account is disabled. Please contact administrator." });
@@ -1683,6 +1994,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       // update lastLogin timestamp
       student.lastLogin = new Date();
+      const autoSemesterOnLogin = getAutoSemesterFromAdmissionYear(student.yearOfAdmission);
+      if (autoSemesterOnLogin) {
+        student.currentSemester = autoSemesterOnLogin;
+      }
       await student.save();
 
       // Calculate current year of course based on admission year
@@ -1711,6 +2026,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
             enrollment: student.enrollment,
             department: student.department,
             yearOfAdmission: student.yearOfAdmission,
+            currentSemester: student.currentSemester,
             yearOfCourse,
             lastLogin: student.lastLogin
           }
@@ -1732,6 +2048,12 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     const student = await Student.findById(req.session.studentId);
     if (!student) return res.status(404).json({ error: "Student not found" });
 
+    const autoSemester = getAutoSemesterFromAdmissionYear(student.yearOfAdmission);
+    if (autoSemester && student.currentSemester !== autoSemester) {
+      student.currentSemester = autoSemester;
+      await student.save();
+    }
+
     // Calculate current year of course based on admission year
     const currentYear = new Date().getFullYear();
     const yearOfCourse = student.yearOfAdmission ? currentYear - student.yearOfAdmission + 1 : 1;
@@ -1745,33 +2067,485 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       enrollment: student.enrollment,
       department: student.department,
       yearOfAdmission: student.yearOfAdmission,
+      currentSemester: student.currentSemester,
       yearOfCourse,
-      profilePicture: student.profilePicture || null
+      profilePicture: student.profilePicture || null,
+      notificationPreferences: normalizeStudentNotificationPreferences(
+        (student as any).notificationPreferences,
+      ),
+      savedEventIds: normalizeSavedIdList((student as any).savedEventIds),
+      savedClubIds: normalizeSavedIdList((student as any).savedClubIds),
     });
   });
 
-  app.patch("/api/student/me", requireStudentAuth, async (req: Request, res: Response) => {
+  app.get("/api/student/watchlist", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });
 
-      const { phone, department, yearOfAdmission, rollNumber } = req.body as {
+      const savedEventIds = normalizeSavedIdList((student as any).savedEventIds);
+      const savedClubIds = normalizeSavedIdList((student as any).savedClubIds);
+
+      const [savedEvents, savedClubs] = await Promise.all([
+        Event.find({ id: { $in: savedEventIds } }).sort({ createdAt: -1 }),
+        Club.find({ id: { $in: savedClubIds } }).sort({ createdAt: -1 }),
+      ]);
+
+      res.json({
+        savedEventIds,
+        savedClubIds,
+        savedEvents: savedEvents.map((event: any) => normalizeEventMedia(event.toObject ? event.toObject() : event, req)),
+        savedClubs: savedClubs.map((club: any) => normalizeClubMedia(club.toObject ? club.toObject() : club, req)),
+      });
+    } catch (error) {
+      console.error("Failed to fetch watchlist:", error);
+      res.status(500).json({ error: "Failed to fetch watchlist" });
+    }
+  });
+
+  app.patch("/api/student/watchlist/toggle", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const type = String(req.body?.type || "").trim().toLowerCase();
+      const itemId = String(req.body?.itemId || "").trim();
+
+      if (!itemId || !["event", "club"].includes(type)) {
+        return res.status(400).json({ error: "type and itemId are required" });
+      }
+
+      const savedEventIds = normalizeSavedIdList((student as any).savedEventIds);
+      const savedClubIds = normalizeSavedIdList((student as any).savedClubIds);
+
+      let saved = false;
+
+      if (type === "event") {
+        const exists = savedEventIds.includes(itemId);
+        (student as any).savedEventIds = exists ? savedEventIds.filter((id) => id !== itemId) : [...savedEventIds, itemId];
+        saved = !exists;
+      } else {
+        const exists = savedClubIds.includes(itemId);
+        (student as any).savedClubIds = exists ? savedClubIds.filter((id) => id !== itemId) : [...savedClubIds, itemId];
+        saved = !exists;
+      }
+
+      await student.save();
+
+      res.json({
+        success: true,
+        type,
+        itemId,
+        saved,
+        savedEventIds: normalizeSavedIdList((student as any).savedEventIds),
+        savedClubIds: normalizeSavedIdList((student as any).savedClubIds),
+      });
+    } catch (error) {
+      console.error("Failed to toggle watchlist item:", error);
+      res.status(500).json({ error: "Failed to update watchlist" });
+    }
+  });
+
+  app.get("/api/student/preferences", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      res.json({
+        notificationPreferences: normalizeStudentNotificationPreferences(
+          (student as any).notificationPreferences,
+        ),
+      });
+    } catch (error) {
+      console.error("Failed to fetch student preferences:", error);
+      res.status(500).json({ error: "Failed to fetch preferences" });
+    }
+  });
+
+  app.patch("/api/student/preferences", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const incoming = req.body?.notificationPreferences ?? req.body ?? {};
+      const current = normalizeStudentNotificationPreferences((student as any).notificationPreferences);
+
+      const nextPreferences = {
+        eventReminders:
+          typeof incoming.eventReminders === "boolean"
+            ? incoming.eventReminders
+            : current.eventReminders,
+        attendanceUpdates:
+          typeof incoming.attendanceUpdates === "boolean"
+            ? incoming.attendanceUpdates
+            : current.attendanceUpdates,
+        announcements:
+          typeof incoming.announcements === "boolean"
+            ? incoming.announcements
+            : current.announcements,
+        certificates:
+          typeof incoming.certificates === "boolean"
+            ? incoming.certificates
+            : current.certificates,
+      };
+
+      (student as any).notificationPreferences = nextPreferences;
+      await student.save();
+
+      res.json({ success: true, notificationPreferences: nextPreferences });
+    } catch (error) {
+      console.error("Failed to update student preferences:", error);
+      res.status(500).json({ error: "Failed to update preferences" });
+    }
+  });
+
+  app.get("/api/student/reminders", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const enrollment = student.enrollment;
+      const preferences = normalizeStudentNotificationPreferences((student as any).notificationPreferences);
+      const dismissedReminderIds = normalizeDismissedReminderIds((student as any).dismissedReminderIds);
+      const now = new Date();
+
+      const [registrations, studentAnnouncements] = await Promise.all([
+        EventRegistration.find({
+          $or: [{ enrollmentNumber: enrollment }, { studentEmail: student.email }],
+          status: { $ne: "rejected" },
+        }).sort({ eventDate: 1, eventTime: 1 }),
+        storage.getAnnouncementsForStudent(enrollment),
+      ]);
+
+      const reminders: Array<{
+        id: string;
+        type: string;
+        priority: "high" | "medium" | "low";
+        title: string;
+        description: string;
+        action: string;
+      }> = [];
+
+      if (preferences.eventReminders) {
+        const upcomingRegistration = registrations.find((registration: any) => {
+          const eventDate = new Date(registration.eventDate);
+          if (Number.isNaN(eventDate.getTime())) return false;
+          const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          return daysUntil >= 0 && daysUntil <= 7;
+        });
+
+        if (upcomingRegistration) {
+          const eventDate = new Date((upcomingRegistration as any).eventDate);
+          const daysUntil = Math.max(
+            0,
+            Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+          );
+          reminders.push({
+            id: `event-${(upcomingRegistration as any).id}`,
+            type: "event",
+            priority: daysUntil <= 1 ? "high" : "medium",
+            title: "Upcoming registered event",
+            description: `${(upcomingRegistration as any).eventTitle} is in ${daysUntil} day${daysUntil === 1 ? "" : "s"}.`,
+            action: "View Event",
+          });
+        }
+      }
+
+      if (preferences.attendanceUpdates) {
+        const pendingAttendanceCount = registrations.filter(
+          (registration: any) =>
+            !registration.attendanceStatus || registration.attendanceStatus === "pending",
+        ).length;
+
+        if (pendingAttendanceCount > 0) {
+          reminders.push({
+            id: "attendance-pending",
+            type: "attendance",
+            priority: "low",
+            title: "Attendance updates pending",
+            description: `${pendingAttendanceCount} registration${pendingAttendanceCount > 1 ? "s" : ""} are pending attendance status updates.`,
+            action: "Review Attendance",
+          });
+        }
+
+        const recentDisputeDecisions = await AttendanceDispute.find({
+          enrollmentNumber: enrollment,
+          status: { $in: ["approved", "rejected"] },
+        })
+          .sort({ reviewedAt: -1, updatedAt: -1 })
+          .limit(3)
+          .lean();
+
+        for (const dispute of recentDisputeDecisions as any[]) {
+          const reviewedAt = dispute.reviewedAt ? new Date(dispute.reviewedAt) : null;
+          const isRecent = reviewedAt
+            ? Date.now() - reviewedAt.getTime() <= 1000 * 60 * 60 * 24 * 14
+            : false;
+
+          if (!isRecent) continue;
+
+          reminders.push({
+            id: `dispute-${dispute.id}`,
+            type: "attendance-dispute",
+            priority: dispute.status === "approved" ? "medium" : "low",
+            title: `Attendance correction ${dispute.status}`,
+            description:
+              dispute.status === "approved"
+                ? `Your attendance correction for ${dispute.eventTitle} was approved.`
+                : `Your attendance correction for ${dispute.eventTitle} was reviewed and rejected.`,
+            action: "Open Attendance",
+          });
+        }
+      }
+
+      if (preferences.announcements) {
+        const unreadAnnouncements = studentAnnouncements.filter((item: any) => !item.isRead).length;
+        if (unreadAnnouncements > 0) {
+          reminders.push({
+            id: "announcements-unread",
+            type: "announcements",
+            priority: unreadAnnouncements > 2 ? "high" : "medium",
+            title: "Unread announcements",
+            description: `You have ${unreadAnnouncements} unread announcement${unreadAnnouncements > 1 ? "s" : ""}.`,
+            action: "Open Notifications",
+          });
+        }
+      }
+
+      if (preferences.certificates) {
+        const certCount = Array.isArray((student as any).certificates)
+          ? (student as any).certificates.length
+          : 0;
+        if (certCount > 0) {
+          reminders.push({
+            id: "certificates-available",
+            type: "certificates",
+            priority: "low",
+            title: "Certificates available",
+            description: `You have ${certCount} certificate${certCount > 1 ? "s" : ""} in your profile.`,
+            action: "View Certificates",
+          });
+        }
+      }
+
+      const activeReminders = reminders.filter(
+        (reminder) => !dismissedReminderIds.includes(reminder.id),
+      );
+
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      activeReminders.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+      res.json({
+        reminders: activeReminders.slice(0, 6),
+        dismissedReminderIds,
+        notificationPreferences: preferences,
+      });
+    } catch (error) {
+      console.error("Failed to build student reminders:", error);
+      res.status(500).json({ error: "Failed to fetch reminders" });
+    }
+  });
+
+  app.post("/api/student/reminders/:id/dismiss", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ error: "Reminder id is required" });
+
+      const nextDismissedIds = new Set(
+        normalizeDismissedReminderIds((student as any).dismissedReminderIds),
+      );
+      nextDismissedIds.add(String(id));
+
+      (student as any).dismissedReminderIds = Array.from(nextDismissedIds);
+      await student.save();
+
+      res.json({ success: true, dismissedReminderIds: (student as any).dismissedReminderIds || [] });
+    } catch (error) {
+      console.error("Failed to dismiss reminder:", error);
+      res.status(500).json({ error: "Failed to dismiss reminder" });
+    }
+  });
+
+  app.delete("/api/student/reminders/:id/dismiss", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const { id } = req.params;
+      const nextDismissedIds = normalizeDismissedReminderIds((student as any).dismissedReminderIds).filter(
+        (item) => item !== String(id),
+      );
+
+      (student as any).dismissedReminderIds = nextDismissedIds;
+      await student.save();
+
+      res.json({ success: true, dismissedReminderIds: nextDismissedIds });
+    } catch (error) {
+      console.error("Failed to restore reminder:", error);
+      res.status(500).json({ error: "Failed to restore reminder" });
+    }
+  });
+
+  app.post("/api/admin/reminders/events-24h/dispatch", requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const now = new Date();
+      const next24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+      const registrations = await EventRegistration.find({
+        status: { $ne: "rejected" },
+        $or: [{ reminder24hSentAt: { $exists: false } }, { reminder24hSentAt: null }],
+      });
+
+      const enrollmentNumbers = [...new Set(registrations.map((registration: any) => registration.enrollmentNumber).filter(Boolean))];
+      const students = await Student.find({ enrollment: { $in: enrollmentNumbers }, isDisabled: { $ne: true } });
+      const studentByEnrollment = new Map<string, any>();
+      students.forEach((student: any) => {
+        studentByEnrollment.set(student.enrollment, student);
+      });
+
+      let evaluatedCount = 0;
+      let sentCount = 0;
+      let skippedCount = 0;
+      let failedCount = 0;
+
+      for (const registration of registrations) {
+        evaluatedCount += 1;
+        const eventStartDate = new Date((registration as any).eventDate);
+
+        if (Number.isNaN(eventStartDate.getTime())) {
+          skippedCount += 1;
+          continue;
+        }
+
+        if (eventStartDate <= now || eventStartDate > next24Hours) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const student = studentByEnrollment.get((registration as any).enrollmentNumber);
+        if (!student) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const preferences = normalizeStudentNotificationPreferences((student as any).notificationPreferences);
+        if (!preferences.eventReminders) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const recipient = (registration as any).studentEmail || student.email;
+        if (!recipient) {
+          skippedCount += 1;
+          continue;
+        }
+
+        const subject = `Reminder: ${(registration as any).eventTitle} starts within 24 hours`;
+        const text = [
+          `Hi ${(registration as any).studentName || student.name},`,
+          "",
+          `This is a reminder that your registered event \"${(registration as any).eventTitle}\" starts within 24 hours.`,
+          `Date: ${(registration as any).eventDate}`,
+          `Time: ${(registration as any).eventTime}`,
+          `Club: ${(registration as any).clubName}`,
+          "",
+          "See you there!",
+          "GEHU Clubs Team",
+        ].join("\n");
+
+        try {
+          await sendEmail({
+            to: recipient,
+            subject,
+            text,
+          });
+
+          (registration as any).reminder24hSentAt = new Date();
+          await registration.save();
+          sentCount += 1;
+        } catch (error) {
+          failedCount += 1;
+          console.error("Failed to send 24h reminder email:", error);
+        }
+      }
+
+      res.json({
+        success: true,
+        summary: {
+          evaluatedCount,
+          sentCount,
+          skippedCount,
+          failedCount,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to dispatch 24h event reminders:", error);
+      res.status(500).json({ error: "Failed to dispatch event reminders" });
+    }
+  });
+
+  app.patch("/api/student/me", requireStudentAuth, limitStudentProfileUpdates, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const { phone, department, yearOfAdmission, rollNumber, currentSemester, email, enrollment } = req.body as {
         phone?: string;
         department?: string;
         yearOfAdmission?: number;
         rollNumber?: string;
+        currentSemester?: string;
+        email?: string;
+        enrollment?: string;
       };
 
+      if (typeof email === "string" && email.trim() !== student.email) {
+        return res.status(403).json({ error: "Email cannot be changed from student profile" });
+      }
+
+      if (typeof enrollment === "string" && enrollment.trim() !== student.enrollment) {
+        return res.status(403).json({ error: "Enrollment cannot be changed from student profile" });
+      }
+
       if (typeof phone === "string") {
-        student.phone = phone.trim();
+        const normalizedPhone = phone.trim();
+        if (normalizedPhone && !phonePattern.test(normalizedPhone)) {
+          return res.status(400).json({ error: "Phone must contain 10 to 15 digits (optional leading +)" });
+        }
+        if (normalizedPhone) {
+          const phoneConflict = await findStudentIdentityConflict({
+            excludeStudentId: String(student._id),
+            phone: normalizedPhone,
+          });
+          if (phoneConflict) {
+            return res.status(409).json({ error: "Phone number is already used by another student" });
+          }
+        }
+        student.phone = normalizedPhone;
       }
 
       if (typeof department === "string") {
-        student.department = department.trim();
+        const normalizedDepartment = department.trim();
+        if (normalizedDepartment && normalizedDepartment.length < 2) {
+          return res.status(400).json({ error: "Department must be at least 2 characters" });
+        }
+        student.department = normalizedDepartment;
       }
 
       if (typeof rollNumber === "string") {
-        student.rollNumber = rollNumber.trim();
+        const normalizedRollNumber = rollNumber.trim();
+        const existingRollNumber = String(student.rollNumber || "").trim();
+
+        if (existingRollNumber && normalizedRollNumber && normalizedRollNumber !== existingRollNumber) {
+          return res.status(403).json({ error: "Roll number is locked and cannot be changed" });
+        }
+
+        if (!existingRollNumber && normalizedRollNumber) {
+          student.rollNumber = normalizedRollNumber;
+        }
       }
 
       if (typeof yearOfAdmission === "number") {
@@ -1781,6 +2555,15 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           return res.status(400).json({ error: "Invalid admission year" });
         }
         student.yearOfAdmission = normalizedYear;
+      }
+
+      if (typeof currentSemester === "string" && currentSemester.trim() && parseSemesterNumber(currentSemester) === null) {
+        return res.status(400).json({ error: "Semester must be between Semester 1 and Semester 8" });
+      }
+
+      const autoSemester = getAutoSemesterFromAdmissionYear(student.yearOfAdmission);
+      if (autoSemester) {
+        student.currentSemester = autoSemester;
       }
 
       await student.save();
@@ -1799,8 +2582,14 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           enrollment: student.enrollment,
           department: student.department,
           yearOfAdmission: student.yearOfAdmission,
+          currentSemester: student.currentSemester,
           yearOfCourse,
           profilePicture: student.profilePicture || null,
+          notificationPreferences: normalizeStudentNotificationPreferences(
+            (student as any).notificationPreferences,
+          ),
+          savedEventIds: normalizeSavedIdList((student as any).savedEventIds),
+          savedClubIds: normalizeSavedIdList((student as any).savedClubIds),
         },
       });
     } catch (error) {
@@ -1810,22 +2599,32 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   });
 
   // Student: Upload profile picture
-  app.post("/api/student/profile-picture", requireStudentAuth, upload.single("profilePicture"), async (req: Request, res: Response) => {
+  app.post(
+    "/api/student/profile-picture",
+    requireStudentAuth,
+    limitStudentProfilePictureUploads,
+    profilePictureUploadMiddleware,
+    async (req: Request, res: Response) => {
     try {
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
       if (!req.session.studentId) return res.status(401).json({ error: "Student not authenticated" });
 
-      const imageUrl = await getUploadedFileUrl(req.file, "gehu-clubs/students/profile-pictures");
-      
-      // Update student profile with image URL and verify update
-      const updatedStudent = await Student.findByIdAndUpdate(
-        req.session.studentId,
-        { profilePicture: imageUrl },
-        { new: true }
-      );
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
 
-      if (!updatedStudent) {
-        return res.status(404).json({ error: "Student not found" });
+      if (!isAllowedProfileImage(req.file)) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(400).json({ error: "Only JPG, PNG, and WEBP images are allowed" });
+      }
+
+      const previousProfilePicture = student.profilePicture || null;
+      const imageUrl = await getUploadedFileUrl(req.file, "gehu-clubs/students/profile-pictures");
+
+      student.profilePicture = imageUrl;
+      await student.save();
+
+      if (previousProfilePicture && previousProfilePicture !== imageUrl) {
+        void deleteUploadedMedia(previousProfilePicture);
       }
 
       res.json({ 
@@ -1838,7 +2637,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       console.error("Profile picture upload error:", error);
       res.status(500).json({ error: "Failed to upload profile picture" });
     }
-  });
+    },
+  );
 
   // Student: Get certificates
   app.get("/api/student/certificates", requireStudentAuth, async (req: Request, res: Response) => {
@@ -1954,9 +2754,12 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         name: s.name,
         email: s.email,
         phone: s.phone || "",
+        rollNumber: s.rollNumber || "",
         enrollment: s.enrollment,
         department: s.department || "",
         branch: s.department || "",
+        yearOfAdmission: s.yearOfAdmission,
+        currentSemester: s.currentSemester || "",
         lastLogin: s.lastLogin || null,
         isDisabled: s.isDisabled,
         createdAt: s.createdAt
@@ -1995,6 +2798,130 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Failed to toggle student status:", error);
       res.status(500).json({ error: "Failed to toggle student status" });
+    }
+  });
+
+  app.patch("/api/admin/students/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const student = await Student.findById(id);
+      if (!student) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const { name, email, phone, rollNumber, enrollment, department, yearOfAdmission } = req.body as {
+        name?: string;
+        email?: string;
+        phone?: string;
+        rollNumber?: string;
+        enrollment?: string;
+        department?: string;
+        yearOfAdmission?: number;
+      };
+
+      if (typeof name === "string") {
+        const normalizedName = name.trim();
+        if (!normalizedName) {
+          return res.status(400).json({ error: "Name is required" });
+        }
+        student.name = normalizedName;
+      }
+
+      if (typeof phone === "string") {
+        const normalizedPhone = phone.trim();
+        if (normalizedPhone && !phonePattern.test(normalizedPhone)) {
+          return res.status(400).json({ error: "Phone must contain 10 to 15 digits (optional leading +)" });
+        }
+        if (normalizedPhone) {
+          const conflict = await findStudentIdentityConflict({
+            excludeStudentId: String(student._id),
+            phone: normalizedPhone,
+          });
+          if (conflict) {
+            return res.status(409).json({ error: "Phone number already exists for another student" });
+          }
+        }
+        student.phone = normalizedPhone;
+      }
+
+      if (typeof department === "string") {
+        const normalizedDepartment = department.trim();
+        if (normalizedDepartment && normalizedDepartment.length < 2) {
+          return res.status(400).json({ error: "Department must be at least 2 characters" });
+        }
+        student.department = normalizedDepartment;
+      }
+
+      const nextEmail = typeof email === "string" ? email.trim() : student.email;
+      const nextEnrollment = typeof enrollment === "string" ? enrollment.trim() : student.enrollment;
+      const nextRollNumber = typeof rollNumber === "string" ? rollNumber.trim() : String(student.rollNumber || "").trim();
+
+      if (!nextEmail || !nextEnrollment) {
+        return res.status(400).json({ error: "Email and enrollment are required" });
+      }
+
+      const identityConflict = await findStudentIdentityConflict({
+        excludeStudentId: String(student._id),
+        email: nextEmail,
+        enrollment: nextEnrollment,
+        rollNumber: nextRollNumber,
+      });
+      if (identityConflict) {
+        if (identityConflict.field === "email") {
+          return res.status(409).json({ error: "Email already exists for another student" });
+        }
+        if (identityConflict.field === "enrollment") {
+          return res.status(409).json({ error: "Enrollment already exists for another student" });
+        }
+        if (identityConflict.field === "rollNumber") {
+          return res.status(409).json({ error: "Roll number already exists for another student" });
+        }
+      }
+
+      student.email = nextEmail;
+      student.enrollment = nextEnrollment;
+      student.rollNumber = nextRollNumber;
+
+      if (typeof yearOfAdmission === "number") {
+        const currentYear = new Date().getFullYear();
+        const normalizedYear = Math.floor(yearOfAdmission);
+        if (normalizedYear < 2000 || normalizedYear > currentYear + 1) {
+          return res.status(400).json({ error: "Invalid admission year" });
+        }
+        student.yearOfAdmission = normalizedYear;
+      }
+
+      const autoSemester = getAutoSemesterFromAdmissionYear(student.yearOfAdmission);
+      if (autoSemester) {
+        student.currentSemester = autoSemester;
+      }
+
+      await student.save();
+
+      const currentYear = new Date().getFullYear();
+      const yearOfCourse = student.yearOfAdmission ? currentYear - student.yearOfAdmission + 1 : 1;
+
+      res.json({
+        success: true,
+        student: {
+          id: student._id.toString(),
+          name: student.name,
+          email: student.email,
+          phone: student.phone || "",
+          rollNumber: student.rollNumber || "",
+          enrollment: student.enrollment,
+          department: student.department || "",
+          yearOfAdmission: student.yearOfAdmission,
+          currentSemester: student.currentSemester,
+          yearOfCourse,
+          lastLogin: student.lastLogin || null,
+          isDisabled: student.isDisabled,
+          createdAt: student.createdAt,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to update student by admin:", error);
+      res.status(500).json({ error: "Failed to update student details" });
     }
   });
 
@@ -2092,38 +3019,74 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     }
   });
   // Event Registration Routes
-  app.post("/api/events/:eventId/register", async (req: Request, res: Response) => {
+  app.post("/api/events/:eventId/register", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const { eventId } = req.params;
-      const registrationData = req.body;
+      const registrationData = req.body || {};
+
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const currentYear = new Date().getFullYear();
+      const derivedYearOfCourse = student.yearOfAdmission
+        ? Math.max(1, currentYear - student.yearOfAdmission + 1)
+        : 1;
+      const derivedYearLabelMap: Record<number, string> = {
+        1: "First Year",
+        2: "Second Year",
+        3: "Third Year",
+        4: "Fourth Year",
+      };
+
+      const normalizedPhone = String(student.phone || registrationData.phone || "").trim();
+      const normalizedRollNumber = String(student.rollNumber || "").trim();
+      const normalizedCourse = String(
+        student.department || registrationData.course || registrationData.department || "",
+      ).trim();
+      const normalizedDepartment = normalizedCourse;
+      const normalizedYear = String(
+        registrationData.year || derivedYearLabelMap[derivedYearOfCourse] || "First Year",
+      ).trim();
+      const normalizedSemester = String(
+        student.currentSemester || registrationData.semester || "",
+      ).trim();
+      const normalizedSection = String(registrationData.section || "").trim().toUpperCase();
+      const normalizedInterests = Array.isArray(registrationData.interests)
+        ? registrationData.interests
+            .map((value: unknown) => String(value).trim())
+            .filter(Boolean)
+        : [];
+      const normalizedExperience = String(registrationData.experience || "").trim();
 
       const requiredRegistrationFields = [
-        "fullName",
-        "email",
         "phone",
         "rollNumber",
-        "enrollmentNumber",
         "course",
         "year",
+        "semester",
         "section",
       ];
 
-      const missingFields = requiredRegistrationFields.filter((field) => {
-        const value = (registrationData as any)?.[field];
-        return !String(value ?? "").trim();
-      });
+      const registrationFieldValues: Record<string, string> = {
+        phone: normalizedPhone,
+        rollNumber: normalizedRollNumber,
+        course: normalizedCourse,
+        year: normalizedYear,
+        semester: normalizedSemester,
+        section: normalizedSection,
+      };
+
+      const missingFields = requiredRegistrationFields.filter(
+        (field) => !registrationFieldValues[field],
+      );
 
       if (missingFields.length > 0) {
         return res.status(400).json({
-          error: `Missing required fields: ${missingFields.join(", ")}`,
+          error: `Missing required fields: ${missingFields.join(
+            ", ",
+          )}. Please complete your profile before registering.`,
         });
       }
-
-      registrationData.course = String(registrationData.course).trim();
-      registrationData.section = String(registrationData.section).trim().toUpperCase();
-      registrationData.department = String(
-        registrationData.department || registrationData.course,
-      ).trim();
 
       // Get event details
       const event = await storage.getEvent(eventId);
@@ -2131,7 +3094,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       // Check if student has already registered for this event
       const existingRegistration = await EventRegistration.findOne({
-        enrollmentNumber: registrationData.enrollmentNumber,
+        enrollmentNumber: student.enrollment,
         eventId: eventId
       });
 
@@ -2141,35 +3104,52 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       // Create registration with event details
       const registration = await storage.createEventRegistration({
-        ...registrationData,
         eventId,
         eventTitle: event.title,
         eventDate: event.date,
         eventTime: event.time,
         eventDurationMinutes: Number(event.durationMinutes ?? 120),
         clubName: event.clubName,
+        studentName: student.name,
+        studentEmail: student.email,
+        enrollmentNumber: student.enrollment,
+        phone: normalizedPhone,
+        rollNumber: normalizedRollNumber,
+        course: normalizedCourse,
+        department: normalizedDepartment,
+        year: normalizedYear,
+        semester: normalizedSemester,
+        section: normalizedSection,
+        interests: normalizedInterests,
+        experience: normalizedExperience,
         status: 'pending',
       });
 
         // Automatically create a membership request for the club
         // Check if student doesn't already have a membership for this club
         const existingMembership = await ClubMembership.findOne({
-          enrollmentNumber: registrationData.enrollmentNumber,
+          enrollmentNumber: student.enrollment,
           clubId: event.clubId
         });
 
         if (!existingMembership) {
           // Create a pending membership request
-          await storage.createClubMembership({
-            studentName: registrationData.fullName || registrationData.studentName,
-            studentEmail: registrationData.email || registrationData.studentEmail,
-            enrollmentNumber: registrationData.enrollmentNumber,
-            department: registrationData.department,
-            reason: `Registered for event: ${event.title}`,
-            clubId: event.clubId,
-            clubName: event.clubName,
-            status: 'pending'
-          });
+          try {
+            await storage.createClubMembership({
+              studentName: student.name,
+              studentEmail: student.email,
+              enrollmentNumber: student.enrollment,
+              department: normalizedDepartment,
+              reason: `Registered for event: ${event.title}`,
+              clubId: event.clubId,
+              clubName: event.clubName,
+              status: 'pending'
+            });
+          } catch (membershipError: any) {
+            if (membershipError?.code !== 11000) {
+              throw membershipError;
+            }
+          }
         }
 
         res.json({ success: true, registration });
@@ -2184,21 +3164,180 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });
 
-      const registrations = await storage.getEventRegistrationsByStudent(student.enrollment);
-      res.json(registrations);
+      const year = String(req.query.year || "").trim();
+      const semester = String(req.query.semester || "").trim();
+
+      const { page, limit, skip } = parsePagination(req.query, {
+        page: 1,
+        limit: 25,
+        maxLimit: 100,
+      });
+
+      const query: Record<string, any> = {
+        $or: [{ enrollmentNumber: student.enrollment }, { studentEmail: student.email }],
+      };
+
+      if (year) {
+        query.year = year;
+      }
+
+      if (semester) {
+        query.semester = semester;
+      }
+
+      const [registrations, total] = await Promise.all([
+        EventRegistration.find(query)
+          .sort({ eventDate: -1, registeredAt: -1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        EventRegistration.countDocuments(query),
+      ]);
+
+      res.json({
+        registrations,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+        },
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch registrations" });
     }
   });
 
+  app.get("/api/student/attendance-disputes", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const disputes = await AttendanceDispute.find({ enrollmentNumber: student.enrollment })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      res.json({ disputes });
+    } catch (error) {
+      console.error("Failed to fetch student attendance disputes:", error);
+      res.status(500).json({ error: "Failed to fetch attendance disputes" });
+    }
+  });
+
+  app.post("/api/student/attendance-disputes", requireStudentAuth, async (req: Request, res: Response) => {
+    try {
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const registrationId = String(req.body?.registrationId || "").trim();
+      const reason = String(req.body?.reason || "").trim();
+
+      if (!registrationId || reason.length < 8) {
+        return res.status(400).json({ error: "registrationId and a detailed reason are required" });
+      }
+
+      const registration = await EventRegistration.findOne({
+        id: registrationId,
+        $or: [{ enrollmentNumber: student.enrollment }, { studentEmail: student.email }],
+      });
+
+      if (!registration) {
+        return res.status(404).json({ error: "Registration not found for this student" });
+      }
+
+      const dispute = await AttendanceDispute.findOneAndUpdate(
+        {
+          registrationId,
+          enrollmentNumber: student.enrollment,
+        },
+        {
+          $set: {
+            registrationId,
+            eventId: (registration as any).eventId,
+            eventTitle: (registration as any).eventTitle,
+            clubName: (registration as any).clubName,
+            studentId: String(student._id),
+            studentName: student.name,
+            studentEmail: student.email,
+            enrollmentNumber: student.enrollment,
+            reason,
+            status: "pending",
+            adminResponse: "",
+            reviewedAt: null,
+            reviewedBy: null,
+          },
+          $setOnInsert: {
+            id: randomUUID(),
+          },
+        },
+        {
+          new: true,
+          upsert: true,
+          setDefaultsOnInsert: true,
+        }
+      );
+
+      res.json({ success: true, dispute });
+    } catch (error) {
+      console.error("Failed to submit attendance dispute:", error);
+      res.status(500).json({ error: "Failed to submit attendance dispute" });
+    }
+  });
+
+  app.get("/api/events/:eventId/feedback", async (req: Request, res: Response) => {
+    try {
+      const { eventId } = req.params;
+
+      const [feedbacks, totalRatingsResult] = await Promise.all([
+        EventFeedback.find({ eventId }).sort({ submittedAt: -1 }).limit(8),
+        EventFeedback.aggregate([
+          { $match: { eventId } },
+          {
+            $group: {
+              _id: "$eventId",
+              totalRatings: { $sum: 1 },
+              averageRating: { $avg: "$rating" },
+            },
+          },
+        ]),
+      ]);
+
+      const summary = totalRatingsResult[0];
+
+      res.json({
+        feedbacks,
+        summary: {
+          totalRatings: summary?.totalRatings || 0,
+          averageRating: summary?.averageRating ? Number(summary.averageRating.toFixed(1)) : 0,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch event feedback:", error);
+      res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+  });
+
   // Event Feedback Routes
-  app.post("/api/events/:eventId/feedback", async (req: Request, res: Response) => {
+  app.post("/api/events/:eventId/feedback", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const { eventId } = req.params;
       const { rating, comment } = req.body;
 
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+
+      const registration = await EventRegistration.findOne({
+        eventId,
+        enrollmentNumber: student.enrollment,
+      });
+
+      if (!registration) {
+        return res.status(403).json({ error: "Register for the event before submitting feedback" });
+      }
+
       // Validate input
-      if (!rating || rating < 1 || rating > 5) {
+      const numericRating = Number(rating);
+      if (!Number.isFinite(numericRating) || numericRating < 1 || numericRating > 5) {
         return res.status(400).json({ error: "Rating must be between 1 and 5" });
       }
 
@@ -2208,24 +3347,25 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(404).json({ error: "Event not found" });
       }
 
-      // Create feedback record (you might want to create a proper Feedback model)
-      // For now, we'll just return success
-      console.log("Event feedback received:", {
-        eventId,
-        eventTitle: event.title,
-        rating,
-        comment,
-        submittedAt: new Date()
-      });
+      const savedFeedback = await EventFeedback.findOneAndUpdate(
+        { eventId, enrollmentNumber: student.enrollment },
+        {
+          eventId,
+          eventTitle: event.title,
+          studentId: student._id.toString(),
+          studentName: student.name,
+          studentEmail: student.email,
+          enrollmentNumber: student.enrollment,
+          rating: Math.round(numericRating),
+          comment: String(comment || "").trim(),
+          submittedAt: new Date(),
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
 
       res.status(201).json({
         message: "Feedback submitted successfully",
-        feedback: {
-          eventId,
-          rating,
-          comment,
-          submittedAt: new Date()
-        }
+        feedback: savedFeedback,
       });
     } catch (error) {
       console.error("Feedback submission error:", error);
@@ -2234,13 +3374,16 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   });
 
   // Message Routes
-  app.post("/api/clubs/:clubId/messages", async (req: Request, res: Response) => {
+  app.post("/api/clubs/:clubId/messages", requireStudentAuth, async (req: Request, res: Response) => {
     try {
       const { clubId } = req.params;
-      const { senderName, senderEmail, enrollmentNumber, subject, message: messageContent } = req.body;
+      const { subject, message: messageContent } = req.body || {};
+
+      const student = await Student.findById(req.session.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
 
       // Validate input
-      if (!senderName || !senderEmail || !enrollmentNumber || !subject || !messageContent) {
+      if (!String(subject || "").trim() || !String(messageContent || "").trim()) {
         return res.status(400).json({ error: "All fields are required" });
       }
 
@@ -2254,11 +3397,11 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const message = new Message({
         id: Date.now().toString(),
         clubId,
-        senderName,
-        senderEmail,
-        enrollmentNumber,
-        subject,
-        message: messageContent,
+        senderName: student.name,
+        senderEmail: student.email,
+        enrollmentNumber: student.enrollment,
+        subject: String(subject).trim(),
+        message: String(messageContent).trim(),
         sentAt: new Date(),
         read: false
       });
@@ -3543,6 +4686,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const status = String(req.query.status || "").trim();
       const attendanceStatus = String(req.query.attendanceStatus || "").trim();
       const eventId = String(req.query.eventId || "").trim();
+      const year = String(req.query.year || "").trim();
+      const semester = String(req.query.semester || "").trim();
       const search = String(req.query.search || "").trim();
 
       // Get all events for this club
@@ -3585,6 +4730,14 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           { enrollmentNumber: { $regex: escaped, $options: "i" } },
           { rollNumber: { $regex: escaped, $options: "i" } },
         ];
+      }
+
+      if (year) {
+        query.year = year;
+      }
+
+      if (semester) {
+        query.semester = semester;
       }
 
       const total = await EventRegistration.countDocuments(query);
@@ -3640,6 +4793,129 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Failed to update attendance:", error);
       res.status(500).json({ error: "Failed to update attendance" });
+    }
+  });
+
+  app.get("/api/admin/attendance-disputes", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const status = String(req.query?.status || "all").trim().toLowerCase();
+      const page = Math.max(1, Number(req.query?.page || 1));
+      const limit = Math.min(100, Math.max(1, Number(req.query?.limit || 25)));
+      const skip = (page - 1) * limit;
+
+      const filter: Record<string, unknown> = {};
+      if (["pending", "approved", "rejected"].includes(status)) {
+        filter.status = status;
+      }
+
+      const [total, disputes] = await Promise.all([
+        AttendanceDispute.countDocuments(filter),
+        AttendanceDispute.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      ]);
+
+      res.json({
+        disputes,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch attendance disputes for admin:", error);
+      res.status(500).json({ error: "Failed to fetch attendance disputes" });
+    }
+  });
+
+  app.patch("/api/admin/attendance-disputes/:disputeId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const disputeId = String(req.params.disputeId || "").trim();
+      const status = String(req.body?.status || "").trim().toLowerCase();
+      const adminResponse = String(req.body?.adminResponse || "").trim();
+      const resolvedAttendanceStatus = String(req.body?.resolvedAttendanceStatus || "").trim().toLowerCase();
+
+      if (!disputeId || !["approved", "rejected"].includes(status)) {
+        return res.status(400).json({ error: "disputeId and valid status are required" });
+      }
+
+      const dispute = await AttendanceDispute.findOne({ id: disputeId });
+      if (!dispute) return res.status(404).json({ error: "Dispute not found" });
+
+      const existingRegistration = await EventRegistration.findOne({ id: (dispute as any).registrationId });
+      const previousAttendanceStatus = String((existingRegistration as any)?.attendanceStatus || "pending");
+
+      (dispute as any).status = status;
+      (dispute as any).adminResponse = adminResponse;
+      (dispute as any).reviewedBy = req.session.adminId;
+      (dispute as any).reviewedAt = new Date();
+      await dispute.save();
+
+      if (status === "approved" && ["present", "absent", "pending"].includes(resolvedAttendanceStatus)) {
+        const updatedRegistration = await EventRegistration.findOneAndUpdate(
+          { id: (dispute as any).registrationId },
+          {
+            $set: {
+              attendanceStatus: resolvedAttendanceStatus,
+              attended: resolvedAttendanceStatus === "present",
+              attendanceMarkedAt: new Date(),
+              attendanceMarkedBy: req.session.adminId,
+            },
+          }
+        );
+
+        const event = await Event.findOne({ id: (dispute as any).eventId });
+        const eventClubId = (event as any)?.clubId;
+
+        if (eventClubId && updatedRegistration) {
+          const studentIdForPoints = (updatedRegistration as any).studentEmail || (updatedRegistration as any).enrollmentNumber;
+          const transitionedToPresent = previousAttendanceStatus !== "present" && resolvedAttendanceStatus === "present";
+          const transitionedFromPresent = previousAttendanceStatus === "present" && resolvedAttendanceStatus !== "present";
+
+          if (transitionedToPresent) {
+            await StudentPoints.findOneAndUpdate(
+              {
+                clubId: eventClubId,
+                studentId: studentIdForPoints,
+              },
+              {
+                $set: {
+                  studentName: (updatedRegistration as any).studentName,
+                  studentEmail: (updatedRegistration as any).studentEmail,
+                  enrollmentNumber: (updatedRegistration as any).enrollmentNumber,
+                  lastUpdated: new Date(),
+                  lastAwardReason: "Attendance correction approved",
+                },
+                $inc: { points: 10 },
+                $setOnInsert: {
+                  badges: [],
+                  skills: [],
+                },
+              },
+              { upsert: true, new: true }
+            );
+          }
+
+          if (transitionedFromPresent) {
+            const pointsDoc = await StudentPoints.findOne({
+              clubId: eventClubId,
+              studentId: studentIdForPoints,
+            });
+
+            if (pointsDoc) {
+              pointsDoc.points = Math.max(0, Number(pointsDoc.points || 0) - 10);
+              pointsDoc.lastAwardReason = "Attendance correction reversed";
+              pointsDoc.lastUpdated = new Date();
+              await pointsDoc.save();
+            }
+          }
+        }
+      }
+
+      res.json({ success: true, dispute });
+    } catch (error) {
+      console.error("Failed to resolve attendance dispute:", error);
+      res.status(500).json({ error: "Failed to resolve attendance dispute" });
     }
   });
 

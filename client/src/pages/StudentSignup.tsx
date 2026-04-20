@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { UNIVERSITY_BRANCH_OPTIONS } from "@/lib/branchOptions";
 import CaptchaComponent from "@/components/CaptchaComponent";
 import { UserPlus } from "lucide-react";
 
@@ -18,6 +19,7 @@ export default function StudentSignup() {
     rollNumber: "",
     enrollment: "",
     yearOfAdmission: new Date().getFullYear(),
+    currentSemester: "",
     department: "",
     password: "",
   });
@@ -25,43 +27,6 @@ export default function StudentSignup() {
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
-
-  const departments = [
-    // Engineering Departments
-    "Computer Science",
-    "Electronics",
-    "Mechanical",
-    "Civil",
-    "Electrical",
-    "Chemical",
-    "Biotechnology",
-    "Instrumentation",
-    // Science Departments
-    "Physics",
-    "Chemistry",
-    "Mathematics",
-    "Biology",
-    "Microbiology",
-    // Management & Commerce
-    "Business Administration",
-    "Commerce",
-    "Economics",
-    "Management Studies",
-    // Humanities & Social Sciences
-    "English",
-    "Hindi",
-    "History",
-    "Political Science",
-    "Psychology",
-    "Sociology",
-    // Law
-    "Law",
-    // Fine Arts
-    "Fine Arts",
-    "Performing Arts",
-    // Other
-    "Other",
-  ];
 
   const currentYear = new Date().getFullYear();
   const admissionYears = Array.from({ length: 10 }, (_, i) => currentYear - i);
@@ -94,31 +59,56 @@ export default function StudentSignup() {
       }
     } catch (error: any) {
       const errorMessage = error?.message || "";
+      const parsedField = error?.field || undefined;
       
       // Parse error message to check for validation errors
-      if (errorMessage.includes("400:")) {
+      if (errorMessage.includes("400:") || errorMessage.includes("409:")) {
         try {
-          const jsonStr = errorMessage.replace(/^400:\s*/, '');
+          const jsonStr = errorMessage.replace(/^(400|409):\s*/, '');
           const parsed = JSON.parse(jsonStr);
-          
-          if (parsed.error?.includes("enrollment")) {
-            setValidationErrors({ enrollment: parsed.error });
+
+          const field = parsed.field || parsedField;
+          const message = parsed.error || "Please try again";
+
+          if (field && ["email", "phone", "rollNumber", "enrollment"].includes(field)) {
+            setValidationErrors({ [field]: message });
             toast({
-              title: "Enrollment Error",
-              description: parsed.error,
+              title: `${field.charAt(0).toUpperCase() + field.slice(1)} Error`,
+              description: message,
               variant: "destructive",
             });
-          } else if (parsed.error?.includes("roll number")) {
-            setValidationErrors({ rollNumber: parsed.error });
+          } else if (message.includes("enrollment")) {
+            setValidationErrors({ enrollment: message });
+            toast({
+              title: "Enrollment Error",
+              description: message,
+              variant: "destructive",
+            });
+          } else if (message.includes("roll number")) {
+            setValidationErrors({ rollNumber: message });
             toast({
               title: "Roll Number Error",
-              description: parsed.error,
+              description: message,
+              variant: "destructive",
+            });
+          } else if (message.includes("phone")) {
+            setValidationErrors({ phone: message });
+            toast({
+              title: "Phone Error",
+              description: message,
+              variant: "destructive",
+            });
+          } else if (message.includes("email")) {
+            setValidationErrors({ email: message });
+            toast({
+              title: "Email Error",
+              description: message,
               variant: "destructive",
             });
           } else {
             toast({
               title: "Signup failed",
-              description: parsed.error || "Please try again",
+              description: message,
               variant: "destructive",
             });
           }
@@ -139,7 +129,8 @@ export default function StudentSignup() {
           rollNumber: formData.rollNumber,
           enrollment: formData.enrollment,
           department: formData.department,
-          yearOfAdmission: formData.yearOfAdmission
+          yearOfAdmission: formData.yearOfAdmission,
+          currentSemester: formData.currentSemester
         };
 
         const offlineStudents = JSON.parse(localStorage.getItem("offlineStudents") || "{}");
@@ -206,7 +197,11 @@ export default function StudentSignup() {
               onChange={handleChange}
               required
               placeholder="your.email@gehu.ac.in"
+              className={validationErrors.email ? "border-red-500" : ""}
             />
+            {validationErrors.email && (
+              <p className="text-red-500 text-sm mt-1">{validationErrors.email}</p>
+            )}
           </div>
 
           <div>
@@ -219,7 +214,11 @@ export default function StudentSignup() {
               onChange={handleChange}
               required
               placeholder="10-digit mobile number"
+              className={validationErrors.phone ? "border-red-500" : ""}
             />
+            {validationErrors.phone && (
+              <p className="text-red-500 text-sm mt-1">{validationErrors.phone}</p>
+            )}
           </div>
 
           <div>
@@ -257,7 +256,7 @@ export default function StudentSignup() {
           </div>
 
           <div>
-            <Label htmlFor="department">Department</Label>
+            <Label htmlFor="department">Department / Branch</Label>
             <select
               id="department"
               name="department"
@@ -266,10 +265,10 @@ export default function StudentSignup() {
               required
               className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
             >
-              <option value="">Select Department</option>
-              {departments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
+              <option value="">Select Branch</option>
+              {UNIVERSITY_BRANCH_OPTIONS.map((branch) => (
+                <option key={branch} value={branch}>
+                  {branch}
                 </option>
               ))}
             </select>
@@ -289,6 +288,25 @@ export default function StudentSignup() {
               {admissionYears.map((year) => (
                 <option key={year} value={year}>
                   {year}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <Label htmlFor="currentSemester">Current Semester</Label>
+            <select
+              id="currentSemester"
+              name="currentSemester"
+              value={formData.currentSemester}
+              onChange={handleChange}
+              required
+              className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground"
+            >
+              <option value="">Select Semester</option>
+              {Array.from({ length: 8 }, (_, index) => `Semester ${index + 1}`).map((semester) => (
+                <option key={semester} value={semester}>
+                  {semester}
                 </option>
               ))}
             </select>

@@ -103,8 +103,31 @@ export const storage = {
   async createClubMembership(data: any) {
     data.id = randomUUID();
     data.joinedAt = new Date();
+    if (data.clubId && data.enrollmentNumber) {
+      const existing = await ClubMembership.findOne({
+        clubId: data.clubId,
+        enrollmentNumber: data.enrollmentNumber,
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+
     const doc = new ClubMembership(data);
-    return await doc.save();
+    try {
+      return await doc.save();
+    } catch (error: any) {
+      if (error?.code === 11000 && data.clubId && data.enrollmentNumber) {
+        const existing = await ClubMembership.findOne({
+          clubId: data.clubId,
+          enrollmentNumber: data.enrollmentNumber,
+        });
+        if (existing) {
+          return existing;
+        }
+      }
+      throw error;
+    }
   },
 
   async getClubMembershipsByStudent(enrollmentNumber: string) {

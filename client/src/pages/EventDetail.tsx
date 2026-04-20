@@ -1,17 +1,17 @@
 import React, { ReactNode, useState, useRef, useEffect } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Calendar, Clock, MapPin, Share2, Users, Star, MessageSquare } from "lucide-react";
+import { Calendar, Clock, MapPin, Share2, Users, Star, MessageSquare, Bookmark } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import RegistrationForm from "@/components/RegistrationForm";
 import ClubMembership from "@/components/ClubMembership";
 import StudentReviews from "@/components/StudentReviews";
 import ClubContact from "@/components/ClubContact";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import type { Event } from "@shared/schema";
@@ -45,6 +45,63 @@ export default function EventDetail() {
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [hasAlreadyRegistered, setHasAlreadyRegistered] = useState(false);
+
+  const { data: watchlistData } = useQuery<{
+    savedEventIds: string[];
+    savedClubIds: string[];
+  }>({
+    queryKey: ["/api/student/watchlist"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/student/watchlist");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
+  const { data: eventFeedbackData } = useQuery<{
+    feedbacks: Array<{
+      id: string;
+      studentName: string;
+      rating: number;
+      comment: string;
+      submittedAt: string;
+    }>;
+    summary: {
+      totalRatings: number;
+      averageRating: number;
+    };
+  }>({
+    queryKey: ["/api/events", eventId, "feedback"],
+    queryFn: async () => {
+      if (!eventId) return { feedbacks: [], summary: { totalRatings: 0, averageRating: 0 } };
+      const res = await apiRequest("GET", `/api/events/${eventId}/feedback`);
+      return res.json();
+    },
+    enabled: !!eventId,
+  });
+
+  const toggleWatchlistMutation = useMutation({
+    mutationFn: async (payload: { type: "event"; itemId: string }) => {
+      const res = await apiRequest("PATCH", "/api/student/watchlist/toggle", payload);
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/student/watchlist"] });
+      toast({
+        title: result?.saved ? "Saved for later" : "Removed from watchlist",
+        description: result?.saved ? "This event is now on your watchlist." : "This event was removed from your saved items.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Watchlist update failed",
+        description: "Could not update your saved events.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isSavedEvent = !!eventId && !!watchlistData?.savedEventIds?.includes(eventId);
 
   // Check if student has already registered for this event
   useEffect(() => {
@@ -117,6 +174,11 @@ export default function EventDetail() {
     e.preventDefault();
     if (isSubmittingFeedback || feedbackRating === 0) return;
 
+    if (!isAuthenticated) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
     setIsSubmittingFeedback(true);
 
     try {
@@ -132,6 +194,7 @@ export default function EventDetail() {
 
       setFeedbackRating(0);
       setFeedbackComment("");
+      queryClient.invalidateQueries({ queryKey: ["/api/events", eventId, "feedback"] });
     } catch (error: any) {
       toast({
         title: "Feedback submission failed",
@@ -261,6 +324,23 @@ export default function EventDetail() {
               >
                 {hasAlreadyRegistered ? "Already Registered" : "Register for this Event"}
               </Button>
+              <Button
+                variant={isSavedEvent ? "secondary" : "outline"}
+                size="lg"
+                className="flex items-center gap-2"
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    setShowLoginPrompt(true);
+                    return;
+                  }
+                  if (!eventId) return;
+                  toggleWatchlistMutation.mutate({ type: "event", itemId: eventId });
+                }}
+                disabled={toggleWatchlistMutation.isPending}
+              >
+                <Bookmark className={`w-4 h-4 ${isSavedEvent ? "fill-current" : ""}`} />
+                {isSavedEvent ? "Saved" : "Save for later"}
+              </Button>
               <Link href={`/clubs/${event.clubId}`}>
                 <Button variant="outline" size="lg" className="flex items-center gap-2">
                   <Users className="w-4 h-4" />
@@ -310,6 +390,7 @@ export default function EventDetail() {
                 enrollmentNumber: student.enrollment,
                 department: student.department,
                 yearOfAdmission: student.yearOfAdmission,
+                currentSemester: student.currentSemester,
               } : undefined}
               onSubmit={async (data) => {
                 try {
@@ -361,6 +442,25 @@ export default function EventDetail() {
                 <p className="text-muted-foreground mb-6">
                   Help us improve by sharing your experience from this event.
                 </p>
+
+                <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Average Rating</p>
+                    <p className="mt-1 text-2xl font-bold">
+                      {eventFeedbackData?.summary?.averageRating?.toFixed(1) || "0.0"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Based on {eventFeedbackData?.summary?.totalRatings || 0} feedback entries
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Your status</p>
+                    <p className="mt-1 text-2xl font-bold">Registered</p>
+                    <p className="text-xs text-muted-foreground">
+                      Feedback is reserved for students who registered for the event.
+                    </p>
+                  </div>
+                </div>
 
                 <form onSubmit={handleFeedbackSubmit} className="space-y-6">
                   {/* Rating */}
@@ -418,15 +518,34 @@ export default function EventDetail() {
               {/* Recent Feedback Display */}
               <div className="bg-card border border-card-border rounded-lg p-8">
                 <h3 className="text-xl font-bold mb-4">Recent Feedback</h3>
-                <div className="text-center py-8">
-                  <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    Feedback from attendees will appear here after the event.
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Check back after the event date to see what others thought!
-                  </p>
-                </div>
+                {eventFeedbackData?.feedbacks?.length ? (
+                  <div className="space-y-3">
+                    {eventFeedbackData.feedbacks.map((entry) => (
+                      <div key={entry.id} className="rounded-lg border border-border bg-background/60 p-4">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold">{entry.studentName}</p>
+                          <Badge variant="outline" className="text-[10px]">
+                            {entry.rating}/5
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{entry.comment || "No comment provided."}</p>
+                        <p className="mt-2 text-[11px] text-muted-foreground">
+                          {entry.submittedAt ? new Date(entry.submittedAt).toLocaleDateString() : "Recent"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">
+                      Feedback from attendees will appear here after the event.
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Check back after the event date to see what others thought!
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>

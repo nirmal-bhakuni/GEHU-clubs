@@ -16,6 +16,9 @@ import { startUpcomingEventReminderScheduler } from "./services/emailService";
 
 const app = express();
 
+// Global flag to track MongoDB connection status
+export let isMongoDBConnected = false;
+
 const configuredCorsOrigins = String(process.env.CORS_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -36,7 +39,11 @@ app.use(express.urlencoded({ extended: false }));
 
 const SessionMemoryStore = MemoryStore(session);
 
-let sessionStore: session.Store | undefined;
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET is required in production");
+}
+
+let sessionStore: ReturnType<typeof MongoStore.create> | InstanceType<typeof SessionMemoryStore>;
 if (process.env.MONGO_URI) {
   try {
     sessionStore = MongoStore.create({
@@ -75,10 +82,10 @@ app.use(
 
 (async () => {
   try {
-    const connected = await connectDB();
+    isMongoDBConnected = await connectDB();
 
     const disableAutoSeed = String(process.env.DISABLE_AUTO_SEED || "").toLowerCase() === "true";
-    if (connected && !disableAutoSeed) {
+    if (isMongoDBConnected && !disableAutoSeed) {
       await seedDatabase();
     }
 

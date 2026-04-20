@@ -241,6 +241,8 @@ export default function ClubAdmin() {
   const [attendanceSearch, setAttendanceSearch] = useState("");
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
   const [attendanceMarkFilter, setAttendanceMarkFilter] = useState<"all" | "pending" | "present" | "absent">("all");
+  const [attendanceYearFilter, setAttendanceYearFilter] = useState("all");
+  const [attendanceSemesterFilter, setAttendanceSemesterFilter] = useState("all");
   const [selectedAttendanceIds, setSelectedAttendanceIds] = useState<string[]>([]);
   const [selectedEventGridId, setSelectedEventGridId] = useState<string | null>(null);
   const [selectedMemberGridId, setSelectedMemberGridId] = useState<string | null>(null);
@@ -437,6 +439,8 @@ export default function ClubAdmin() {
       attendanceSearch,
       attendanceStatusFilter,
       attendanceMarkFilter,
+      attendanceYearFilter,
+      attendanceSemesterFilter,
       activeTab,
     ],
     queryFn: async () => {
@@ -459,6 +463,12 @@ export default function ClubAdmin() {
       if (attendanceMarkFilter !== "all") {
         params.set("attendanceStatus", attendanceMarkFilter);
       }
+      if (attendanceYearFilter !== "all") {
+        params.set("year", attendanceYearFilter);
+      }
+      if (attendanceSemesterFilter !== "all") {
+        params.set("semester", attendanceSemesterFilter);
+      }
 
       const res = await apiRequest("GET", `/api/admin/event-registrations/${admin.clubId}?${params.toString()}`);
       const data = await res.json();
@@ -475,10 +485,52 @@ export default function ClubAdmin() {
     totalPages: 0,
   };
 
+  const attendanceYearOptions = useMemo(() => {
+    const source = (eventRegistrations || []).filter((registration: any) => registration.eventId === expandedEventId);
+    const uniqueYears = new Set(
+      source
+        .map((registration: any) => String(registration.year || "").trim())
+        .filter(Boolean),
+    );
+
+    return Array.from(uniqueYears).sort((a, b) => {
+      const aNum = Number.parseInt(a, 10);
+      const bNum = Number.parseInt(b, 10);
+
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
+        return aNum - bNum;
+      }
+
+      return a.localeCompare(b);
+    });
+  }, [eventRegistrations, expandedEventId]);
+
+  const attendanceSemesterOptions = useMemo(() => {
+    const source = (eventRegistrations || []).filter((registration: any) => registration.eventId === expandedEventId);
+    const uniqueSemesters = new Set(
+      source
+        .map((registration: any) => String(registration.semester || "").trim())
+        .filter(Boolean),
+    );
+
+    return Array.from(uniqueSemesters).sort((a, b) => {
+      const aNumMatch = a.match(/\d+/);
+      const bNumMatch = b.match(/\d+/);
+      const aNum = aNumMatch ? Number.parseInt(aNumMatch[0], 10) : Number.NaN;
+      const bNum = bNumMatch ? Number.parseInt(bNumMatch[0], 10) : Number.NaN;
+
+      if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
+        return aNum - bNum;
+      }
+
+      return a.localeCompare(b);
+    });
+  }, [eventRegistrations, expandedEventId]);
+
   useEffect(() => {
     setAttendancePage(1);
     setSelectedAttendanceIds([]);
-  }, [expandedEventId, attendanceSearch, attendanceStatusFilter, attendanceMarkFilter]);
+  }, [expandedEventId, attendanceSearch, attendanceStatusFilter, attendanceMarkFilter, attendanceYearFilter, attendanceSemesterFilter]);
 
   const { data: announcements = [] } = useQuery<any[]>({
     queryKey: ["/api/admin/announcements"],
@@ -2482,6 +2534,8 @@ export default function ClubAdmin() {
                       setAttendanceSearch("");
                       setAttendanceStatusFilter("all");
                       setAttendanceMarkFilter("all");
+                      setAttendanceYearFilter("all");
+                      setAttendanceSemesterFilter("all");
                       setSelectedAttendanceIds([]);
                     }}
                   />
@@ -2503,7 +2557,7 @@ export default function ClubAdmin() {
                   </div>
 
                   <div className="space-y-3 mt-4 pt-4 border-t border-border">
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
                       <Input
                         placeholder="Search by name, email, enrollment"
                         value={attendanceSearch}
@@ -2532,9 +2586,48 @@ export default function ClubAdmin() {
                           <SelectItem value="absent">Absent</SelectItem>
                         </SelectContent>
                       </Select>
+                      <Select value={attendanceYearFilter} onValueChange={(value: string) => setAttendanceYearFilter(value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Year" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All years</SelectItem>
+                          {attendanceYearOptions.map((year) => (
+                            <SelectItem key={year} value={year}>
+                              {year}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={attendanceSemesterFilter} onValueChange={(value: string) => setAttendanceSemesterFilter(value)}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Semester" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All semesters</SelectItem>
+                          {attendanceSemesterOptions.map((semester) => (
+                            <SelectItem key={semester} value={semester}>
+                              {semester}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setAttendanceSearch("");
+                          setAttendanceStatusFilter("all");
+                          setAttendanceMarkFilter("all");
+                          setAttendanceYearFilter("all");
+                          setAttendanceSemesterFilter("all");
+                        }}
+                      >
+                        Reset Filters
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"

@@ -48,6 +48,7 @@ export interface EventRegistration {
   rollNumber: string;
   department: string;
   year: string;
+  semester?: string;
   interests: string[];
   experience?: string;
   attended?: boolean;
@@ -57,6 +58,25 @@ export interface EventRegistration {
   attendanceMarkedBy?: string;
   registeredAt: Date;
   isFallback?: boolean;
+}
+
+export interface AttendanceDispute {
+  id: string;
+  registrationId: string;
+  eventId: string;
+  eventTitle: string;
+  clubName: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  enrollmentNumber: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  adminResponse?: string;
+  reviewedBy?: string;
+  reviewedAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface ClubMembership {

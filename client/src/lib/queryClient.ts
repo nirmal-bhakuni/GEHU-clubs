@@ -1,8 +1,22 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+export class ApiError extends Error {
+  status: number;
+  retryAfterSeconds?: number;
+
+  constructor(message: string, status: number, retryAfterSeconds?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const contentType = res.headers.get("content-type") || "";
+    const retryAfterHeader = Number(res.headers.get("retry-after"));
+    const headerRetryAfterSeconds = Number.isFinite(retryAfterHeader) ? retryAfterHeader : undefined;
 
     if (contentType.includes("application/json")) {
       const body = await res.json().catch(() => null);
@@ -11,11 +25,15 @@ async function throwIfResNotOk(res: Response) {
         (body && typeof body.message === "string" && body.message) ||
         res.statusText ||
         "Request failed";
-      throw new Error(message);
+      const bodyRetryAfterSeconds =
+        body && typeof body.retryAfterSeconds === "number" && Number.isFinite(body.retryAfterSeconds)
+          ? body.retryAfterSeconds
+          : undefined;
+      throw new ApiError(message, res.status, bodyRetryAfterSeconds ?? headerRetryAfterSeconds);
     }
 
     const text = (await res.text()) || res.statusText;
-    throw new Error(text);
+    throw new ApiError(text, res.status, headerRetryAfterSeconds);
   }
 }
 

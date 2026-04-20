@@ -16,6 +16,7 @@ const eventRegistrationSchema = new mongoose.Schema({
   course: { type: String, required: true },
   department: { type: String, required: true },
   year: { type: String, required: true },
+  semester: { type: String, required: false, default: "" },
   section: { type: String, required: true },
   interests: [{ type: String }],
   experience: { type: String },
@@ -24,13 +25,14 @@ const eventRegistrationSchema = new mongoose.Schema({
   attendanceStatus: { type: String, enum: ['pending', 'present', 'absent'], default: 'pending' },
   attendanceMarkedAt: { type: Date },
   attendanceMarkedBy: { type: String },
+  reminder24hSentAt: { type: Date },
   registeredAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
 eventRegistrationSchema.index({ eventId: 1, registeredAt: -1 });
 eventRegistrationSchema.index({ eventId: 1, status: 1, registeredAt: -1 });
 eventRegistrationSchema.index({ eventId: 1, attendanceStatus: 1, registeredAt: -1 });
-eventRegistrationSchema.index({ section: 1, year: 1, registeredAt: -1 });
+eventRegistrationSchema.index({ section: 1, year: 1, semester: 1, registeredAt: -1 });
 eventRegistrationSchema.index({ enrollmentNumber: 1 });
 eventRegistrationSchema.index({ studentEmail: 1 });
 

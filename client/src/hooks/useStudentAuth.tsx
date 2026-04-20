@@ -13,6 +13,7 @@ interface Student {
   profilePicture?: string;
   yearOfAdmission?: number;
   yearOfCourse?: number;
+  currentSemester?: string;
 }
 
 // Static student data for when API is not available

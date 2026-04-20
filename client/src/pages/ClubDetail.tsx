@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Calendar, Star, BookOpen, Award, Mail, Phone, Share2, ExternalLink, Trophy, Megaphone, Clock3 } from "lucide-react";
+import { Users, Calendar, Star, BookOpen, Award, Mail, Phone, Share2, ExternalLink, Trophy, Megaphone, Clock3, Bookmark } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Club, Event } from "@shared/schema";
 import type { ClubLeadership } from "@shared/schema";
@@ -62,6 +62,40 @@ export default function ClubDetail() {
   });
   const { toast } = useToast();
   const { student, isAuthenticated, isLoading: studentAuthLoading } = useStudentAuth();
+
+  const { data: watchlistData } = useQuery<{
+    savedClubIds: string[];
+  }>({
+    queryKey: ["/api/student/watchlist"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/student/watchlist");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
+  const toggleWatchlistMutation = useMutation({
+    mutationFn: async (payload: { type: "club"; itemId: string }) => {
+      const res = await apiRequest("PATCH", "/api/student/watchlist/toggle", payload);
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/student/watchlist"] });
+      toast({
+        title: result?.saved ? "Saved to watchlist" : "Removed from watchlist",
+        description: result?.saved ? "This club is now in your saved list." : "This club was removed from your saved list.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Watchlist update failed",
+        description: "Could not update your saved clubs.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isSavedClub = !!watchlistData?.savedClubIds?.includes(id);
   const missingProfileFields = [
     !student?.name ? "name" : null,
     !student?.email ? "email" : null,
@@ -489,6 +523,35 @@ export default function ClubDetail() {
 
             <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-background/50 p-3 shadow-sm lg:justify-self-end lg:min-w-[260px]">
               <div className="grid grid-cols-1 gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={isSavedClub ? "secondary" : "outline"}
+                      size="sm"
+                      className="w-full justify-center"
+                      onClick={() => {
+                        if (!isAuthenticated) {
+                          toast({
+                            title: "Login Required",
+                            description: "Please login as a student to save clubs.",
+                            variant: "destructive",
+                          });
+                          setLocation("/student/login");
+                          return;
+                        }
+                        toggleWatchlistMutation.mutate({ type: "club", itemId: id });
+                      }}
+                      disabled={toggleWatchlistMutation.isPending}
+                    >
+                      <Bookmark className={`w-4 h-4 mr-2 ${isSavedClub ? "fill-current" : ""}`} />
+                      {isSavedClub ? "Saved" : "Save Club"}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isSavedClub ? "Remove this club from your saved list" : "Save this club for later"}
+                  </TooltipContent>
+                </Tooltip>
+
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

@@ -886,8 +886,9 @@ export default function FloatingChat() {
   }, [allClubs, normalizedSearch, identity?.role, studentMemberships]);
 
   const visibleEvents = useMemo(() => {
+    const registrations = Array.isArray(studentRegistrations) ? studentRegistrations : [];
     const allowedEventIds = new Set(
-      studentRegistrations
+      registrations
         .filter((registration) => registration.status !== "rejected")
         .map((registration) => registration.eventId)
     );
@@ -913,19 +914,23 @@ export default function FloatingChat() {
   );
 
   const allowedStudentEventIds = useMemo(
-    () =>
-      new Set(
-        studentRegistrations
+    () => {
+      const registrations = Array.isArray(studentRegistrations) ? studentRegistrations : [];
+      return new Set(
+        registrations
           .filter((registration) => registration.status !== "rejected")
           .map((registration) => registration.eventId)
-      ),
+      );
+    },
     [studentRegistrations]
   );
 
   const studentEventStatusByEventId = useMemo(() => {
     const map = new Map<string, "pending" | "approved">();
 
-    for (const registration of studentRegistrations) {
+    const registrations = Array.isArray(studentRegistrations) ? studentRegistrations : [];
+
+    for (const registration of registrations) {
       if (registration.status === "rejected") continue;
       if (registration.status === "approved") {
         map.set(registration.eventId, "approved");

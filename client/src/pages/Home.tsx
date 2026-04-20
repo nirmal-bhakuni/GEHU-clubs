@@ -227,6 +227,11 @@ export default function Home() {
       return Number.isNaN(parsed) ? 0 : parsed;
     };
 
+    const toDateOrUndefined = (value?: string | Date) => {
+      const timestamp = toTimestamp(value);
+      return timestamp ? new Date(timestamp) : undefined;
+    };
+
     const eventCards = events
       .filter((event) => {
         const club = clubMap.get(event.clubId);
@@ -250,7 +255,7 @@ export default function Home() {
             { icon: "clock" as const, label: event.time || "TBA" },
             { icon: "map" as const, label: event.location || "Campus" },
           ],
-          createdAt: eventTime,
+          createdAt: toDateOrUndefined(event.createdAt || event.date),
         };
       });
 
@@ -269,7 +274,7 @@ export default function Home() {
         { icon: "calendar" as const, label: formatFeedDate(announcement.createdAt) },
         { icon: "tag" as const, label: announcement.target === "all" ? "All Clubs" : "Club Update" },
       ],
-      createdAt: toTimestamp(announcement.createdAt),
+      createdAt: toDateOrUndefined(announcement.createdAt),
     }));
 
     const achievementCards = achievements.map((achievement) => ({
@@ -287,11 +292,11 @@ export default function Home() {
         { icon: "sparkles" as const, label: achievement.category || "Milestone" },
         { icon: "author" as const, label: achievement.clubName || clubMap.get(achievement.clubId)?.name || "Club" },
       ],
-      createdAt: toTimestamp(achievement.createdAt || achievement.achievementDate),
+      createdAt: toDateOrUndefined(achievement.createdAt || achievement.achievementDate),
     }));
 
     return [...eventCards, ...announcementCards, ...achievementCards]
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt))
       .slice(0, 8);
   }, [events, clubs, announcements, achievements]);
 

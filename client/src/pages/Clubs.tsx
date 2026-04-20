@@ -137,7 +137,7 @@ export default function Clubs() {
         </div>
 
         {/* View Controls and Sorting */}
-        <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="mb-6 flex flex-col sm:flex-row sm:flex-wrap justify-between items-start sm:items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">View:</span>
             <div className="flex rounded-lg border">
@@ -160,7 +160,7 @@ export default function Clubs() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">Sort by:</span>
             <Select value={sortBy} onValueChange={(value: "name" | "members" | "category") => setSortBy(value)}>
               <SelectTrigger className="w-32">
@@ -183,14 +183,14 @@ export default function Clubs() {
         </div>
 
         {/* Results Summary */}
-        <div className="mb-6 flex items-center justify-between">
-          <p className="text-muted-foreground">
+        <div className="mb-6 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-3">
+          <p className="text-muted-foreground whitespace-nowrap">
             Showing {filteredClubs.length} of {clubs.length} clubs
           </p>
           {filteredClubs.length > 0 && (
-            <div className="flex gap-2">
+            <div className="flex max-w-full flex-wrap gap-2 sm:justify-end">
               {Array.from(new Set(filteredClubs.map(club => club.category))).slice(0, 3).map(category => (
-                <Badge key={category} variant="outline" className="text-xs">
+                <Badge key={category} variant="outline" className="text-xs whitespace-nowrap">
                   {category}
                 </Badge>
               ))}
@@ -215,7 +215,7 @@ export default function Clubs() {
           <>
             <div className={
               viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8"
+                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
                 : "space-y-4"
             }>
               {filteredClubs.map((club) => (

@@ -13,4 +13,6 @@ const clubMembershipSchema = new mongoose.Schema({
   joinedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
+clubMembershipSchema.index({ clubId: 1, enrollmentNumber: 1 }, { unique: true });
+
 export const ClubMembership = mongoose.model("ClubMembership", clubMembershipSchema);

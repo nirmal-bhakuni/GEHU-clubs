@@ -15,6 +15,7 @@ interface StudentData {
   enrollmentNumber?: string;
   department?: string;
   yearOfAdmission?: number;
+  currentSemester?: string;
 }
 
 interface RegistrationFormProps {
@@ -36,6 +37,7 @@ export interface StudentRegistration {
   course: string;
   department: string;
   year: string;
+  semester: string;
   section: string;
   eventDurationMinutes?: number;
   enrollmentNumber: string;
@@ -78,6 +80,7 @@ export default function RegistrationForm({
     course: studentData?.department || "",
     department: studentData?.department || "",
     year: studentData?.yearOfAdmission ? getYearLabel(studentData.yearOfAdmission) : "First Year",
+    semester: studentData?.currentSemester || "",
     section: "",
     eventDurationMinutes,
     enrollmentNumber: studentData?.enrollmentNumber || "",
@@ -103,6 +106,7 @@ export default function RegistrationForm({
           course: studentData.department || prev.course || "",
           department: studentData.department || prev.department || "",
           year: academicYear,
+          semester: studentData.currentSemester || prev.semester || "",
           eventDurationMinutes,
         };
         console.log("Updated form data:", updated);
@@ -252,6 +256,7 @@ export default function RegistrationForm({
           course: "",
           department: "",
           year: "First Year",
+          semester: "Semester 1",
           section: "A1",
           eventDurationMinutes,
           enrollmentNumber: "",
@@ -434,6 +439,26 @@ export default function RegistrationForm({
                 {years.map((year) => (
                   <option key={year} value={year}>
                     {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Semester <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="semester"
+                value={formData.semester}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                required
+              >
+                <option value="">Select Semester</option>
+                {Array.from({ length: 8 }, (_, index) => `Semester ${index + 1}`).map((semester) => (
+                  <option key={semester} value={semester}>
+                    {semester}
                   </option>
                 ))}
               </select>

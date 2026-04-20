@@ -54,7 +54,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from "recharts";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Event, Club } from "@shared/schema";
+import type { Event, Club, AttendanceDispute } from "@shared/schema";
 
 // Interfaces for Campus Feed
 interface StoryHighlight {
@@ -301,6 +301,17 @@ export default function Dashboard() {
   const [eventImagePreview, setEventImagePreview] = useState<string | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null);
   const [isStudentProfileOpen, setIsStudentProfileOpen] = useState(false);
+  const [isEditingStudent, setIsEditingStudent] = useState(false);
+  const [studentEditForm, setStudentEditForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    rollNumber: "",
+    enrollment: "",
+    department: "",
+    yearOfAdmission: "",
+  });
+  const [studentEditErrors, setStudentEditErrors] = useState<Record<string, string>>({});
   const [selectedAdmin, setSelectedAdmin] = useState<any | null>(null);
   const [isAdminProfileOpen, setIsAdminProfileOpen] = useState(false);
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
@@ -314,6 +325,9 @@ export default function Dashboard() {
   const [eventGridSearch, setEventGridSearch] = useState("");
   const [eventGridStatusFilter, setEventGridStatusFilter] = useState<"all" | "upcoming" | "past">("all");
   const [studentStatusFilter, setStudentStatusFilter] = useState<"all" | "active" | "disabled">("all");
+  const [disputeStatusFilter, setDisputeStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending");
+  const [attendanceResolutionStatus, setAttendanceResolutionStatus] = useState<Record<string, "present" | "absent" | "pending">>({});
+  const [attendanceResolutionNote, setAttendanceResolutionNote] = useState<Record<string, string>>({});
   const [clubAdminSearch, setClubAdminSearch] = useState("");
   const [clubAdminStatusFilter, setClubAdminStatusFilter] = useState<"all" | "active" | "frozen">("all");
   const eligibilityYearOptions = ["1st", "2nd", "3rd", "4th", "5th"];
@@ -518,6 +532,24 @@ export default function Dashboard() {
     enabled: isAuthenticated && activeTab === "analytics",
   });
 
+  const { data: attendanceDisputesData, isLoading: attendanceDisputesLoading } = useQuery<{
+    disputes: AttendanceDispute[];
+    pagination?: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
+  }>({
+    queryKey: ["/api/admin/attendance-disputes", disputeStatusFilter],
+    queryFn: async () => {
+      const statusParam = disputeStatusFilter === "all" ? "all" : disputeStatusFilter;
+      const res = await apiRequest("GET", `/api/admin/attendance-disputes?status=${encodeURIComponent(statusParam)}&page=1&limit=30`);
+      return res.json();
+    },
+    enabled: isAuthenticated && activeTab === "dashboard",
+  });
+
   // Admin profile data queries
   const { data: adminDetails } = useQuery<AdminDetails>({
     queryKey: ["/api/admin/club-admin", selectedAdmin?.id],
@@ -593,6 +625,79 @@ export default function Dashboard() {
     },
   });
 
+  const updateStudentDetailsMutation = useMutation({
+    mutationFn: async (payload: {
+      studentId: string;
+      name: string;
+      email: string;
+      phone: string;
+      rollNumber: string;
+      enrollment: string;
+      department: string;
+      yearOfAdmission?: number;
+    }) => {
+      const { studentId, ...body } = payload;
+      const res = await apiRequest("PATCH", `/api/admin/students/${studentId}`, body);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      const updated = data?.student;
+      if (!updated?.id) return;
+
+      queryClient.setQueryData(["api", "admin", "students"], (oldData: any[] = []) => {
+        return oldData.map((student) =>
+          student.id === updated.id
+            ? {
+                ...student,
+                ...updated,
+                branch: updated.department || "",
+              }
+            : student,
+        );
+      });
+
+      setSelectedStudent((prev: any) =>
+        prev && prev.id === updated.id
+          ? {
+              ...prev,
+              ...updated,
+              branch: updated.department || "",
+            }
+          : prev,
+      );
+
+      setIsEditingStudent(false);
+      setStudentEditErrors({});
+      toast({
+        title: "Student updated",
+        description: "Student details have been saved successfully.",
+      });
+    },
+    onError: (error: any) => {
+      const rawMessage = String(error?.message || "Could not update student details.");
+      let parsedError: any = null;
+      const normalizedMessage = rawMessage.replace(/^\d+:\s*/, "");
+      try {
+        parsedError = JSON.parse(normalizedMessage);
+      } catch {
+        parsedError = null;
+      }
+
+      const field = String(parsedError?.field || "").trim();
+      const message = String(parsedError?.error || rawMessage || "Could not update student details.");
+
+      if (field && ["name", "email", "phone", "rollNumber", "enrollment", "department", "yearOfAdmission"].includes(field)) {
+        setStudentEditErrors({ [field]: message });
+      }
+
+      toast({
+        title: "Update failed",
+        description: message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Reset admin password mutation
   const resetAdminPasswordMutation = useMutation({
     mutationFn: async ({ clubId, newPassword }: { clubId: string; newPassword: string }) => {
@@ -616,6 +721,32 @@ export default function Dashboard() {
     },
   });
 
+  const resolveAttendanceDisputeMutation = useMutation({
+    mutationFn: async (payload: {
+      disputeId: string;
+      status: "approved" | "rejected";
+      resolvedAttendanceStatus?: "present" | "absent" | "pending";
+      adminResponse?: string;
+    }) => {
+      const res = await apiRequest("PATCH", `/api/admin/attendance-disputes/${payload.disputeId}`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/attendance-disputes"] });
+      toast({
+        title: "Dispute updated",
+        description: "Attendance dispute status has been updated.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Update failed",
+        description: "Could not update attendance dispute.",
+        variant: "destructive",
+      });
+    },
+  });
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       setLocation("/admin/login");
@@ -626,6 +757,20 @@ export default function Dashboard() {
       setLocation("/club-admin");
     }
   }, [authLoading, isAuthenticated, admin?.clubId, setLocation]);
+
+  useEffect(() => {
+    if (!selectedStudent || !isStudentProfileOpen) return;
+    setStudentEditForm({
+      name: selectedStudent.name || "",
+      email: selectedStudent.email || "",
+      phone: selectedStudent.phone || "",
+      rollNumber: selectedStudent.rollNumber || "",
+      enrollment: selectedStudent.enrollment || "",
+      department: selectedStudent.department || selectedStudent.branch || "",
+      yearOfAdmission: selectedStudent.yearOfAdmission ? String(selectedStudent.yearOfAdmission) : "",
+    });
+    setStudentEditErrors({});
+  }, [selectedStudent, isStudentProfileOpen]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -661,6 +806,27 @@ export default function Dashboard() {
       toast({
         title: "Error",
         description: "Failed to create announcement.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const dispatchEventReminderMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/reminders/events-24h/dispatch", {});
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      const summary = result?.summary || {};
+      toast({
+        title: "24h reminders dispatched",
+        description: `Sent: ${summary.sentCount ?? 0} | Skipped: ${summary.skippedCount ?? 0} | Failed: ${summary.failedCount ?? 0}`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Dispatch failed",
+        description: "Could not dispatch 24-hour reminders.",
         variant: "destructive",
       });
     },
@@ -1254,67 +1420,154 @@ export default function Dashboard() {
     [clubs, selectedClubAdminGridId],
   );
 
+  const recentDashboardAnnouncements = useMemo(() => {
+    if (announcements.length > 0) {
+      return [...announcements]
+        .sort((a: any, b: any) => {
+          const aTime = new Date(a?.createdAt || 0).getTime();
+          const bTime = new Date(b?.createdAt || 0).getTime();
+          return bTime - aTime;
+        })
+        .slice(0, 4)
+        .map((item: any, index: number) => ({
+          id: item.id || `announcement-${index}`,
+          title: item.title || "Platform Update",
+          description: item.description || "A new update has been published for clubs and students.",
+          createdAt: item.createdAt,
+          category: item.category || "General",
+          pinned: Boolean(item.pinned),
+        }));
+    }
+
+    return [
+      {
+        id: "fallback-welcome",
+        title: "Welcome to GEHU Clubs Platform",
+        description: "The platform is live with improved club workflows and event management.",
+        createdAt: new Date().toISOString(),
+        category: "General",
+        pinned: true,
+      },
+      {
+        id: "fallback-milestone",
+        title: "Event Registration Milestone",
+        description: "The campus community crossed 1000 event registrations this semester.",
+        createdAt: new Date(Date.now() - 86400000).toISOString(),
+        category: "Milestone",
+        pinned: false,
+      },
+    ];
+  }, [announcements]);
+
   const renderMainContent = () => {
     switch (activeTab) {
       case "dashboard":
         return (
-          <div className="space-y-8">
-            {/* Global Statistics */}
-            <div>
-              <h2 className="text-2xl font-bold mb-6">Global Platform Statistics</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {globalStats.map((stat, index) => (
-                  <Card key={index} className="p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className={`w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center ${stat.color}`}>
-                        <stat.icon className="w-6 h-6" />
+          <div className="space-y-7">
+            <Card className="relative overflow-hidden border border-border/70 bg-card/80 p-6 md:p-7">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_55%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.12),transparent_48%)]" />
+              <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Admin Workspace</p>
+                  <h2 className="text-2xl font-semibold leading-tight md:text-3xl">Platform Command Center</h2>
+                  <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
+                    Track club momentum, event turnout, and member engagement from one unified surface.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="rounded-full px-3 py-1 text-xs">{clubs.length} clubs active</Badge>
+                  <Badge variant="outline" className="rounded-full px-3 py-1 text-xs">{events.length} total events</Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    disabled={dispatchEventReminderMutation.isPending}
+                    onClick={() => dispatchEventReminderMutation.mutate()}
+                  >
+                    <Bell className="mr-2 h-3.5 w-3.5" />
+                    {dispatchEventReminderMutation.isPending ? "Dispatching..." : "Dispatch 24h Reminders"}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight">Global Platform Statistics</h3>
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Live Snapshot</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                {globalStats.map((stat, index) => {
+                  const accentStyles = [
+                    "from-blue-500/20 via-blue-500/5 to-transparent",
+                    "from-emerald-500/20 via-emerald-500/5 to-transparent",
+                    "from-violet-500/20 via-violet-500/5 to-transparent",
+                    "from-orange-500/20 via-orange-500/5 to-transparent",
+                  ];
+
+                  return (
+                    <Card
+                      key={index}
+                      className="group relative overflow-hidden border border-border/70 bg-card/85 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                    >
+                      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accentStyles[index % accentStyles.length]}`} />
+                      <div className="relative space-y-5">
+                        <div className="flex items-center justify-between">
+                          <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-background/70 ring-1 ring-border/70 ${stat.color}`}>
+                            <stat.icon className="h-5 w-5" />
+                          </div>
+                          <span className="rounded-full bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground ring-1 ring-border/70">
+                            {stat.trend}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{stat.label}</p>
+                          <p className="mt-2 text-3xl font-semibold leading-none">{stat.value}</p>
+                        </div>
                       </div>
-                      <span className="text-xs text-muted-foreground font-medium">
-                        {stat.trend}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-2">{stat.label}</p>
-                    <p className="text-3xl font-bold">{stat.value}</p>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Club Activity Overview */}
-            <div>
-              <h2 className="text-2xl font-bold mb-6">Club Activity Overview</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <Building2 className="w-5 h-5" />
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight">Club Activity Overview</h3>
+                <p className="text-sm text-muted-foreground">Distribution, trends, and performance</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <Card className="border border-border/70 bg-card/80 p-5">
+                  <h4 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    <Building2 className="h-4 w-4" />
                     Active Clubs by Category
-                  </h3>
-                  <div className="space-y-3">
+                  </h4>
+                  <div className="space-y-2.5">
                     {analyticsData?.distributions?.clubCategories ? (
                       Object.entries(analyticsData.distributions.clubCategories)
-                        .sort(([,a], [,b]) => (b as number) - (a as number))
+                        .sort(([, a], [, b]) => (b as number) - (a as number))
                         .map(([category, count]: [string, any]) => {
                           const total = analyticsData.overview.totalClubs || clubs.length;
                           const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
                           return (
-                            <div key={category} className="flex justify-between items-center">
+                            <div key={category} className="flex items-center justify-between rounded-lg bg-background/60 px-3 py-2 ring-1 ring-border/60">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm capitalize">{category}</span>
-                                <Badge variant="secondary" className="text-xs">
+                                <Badge variant="secondary" className="text-[10px]">
                                   {percentage}%
                                 </Badge>
                               </div>
-                              <span className="font-semibold">{count}</span>
+                              <span className="text-sm font-semibold">{count}</span>
                             </div>
                           );
                         })
                     ) : (
                       ["Technology", "Academic", "Arts", "Business", "Social"].map((category) => {
-                        const count = clubs.filter(club => club.category === category.toLowerCase()).length;
+                        const count = clubs.filter((club) => club.category === category.toLowerCase()).length;
                         return (
-                          <div key={category} className="flex justify-between items-center">
+                          <div key={category} className="flex items-center justify-between rounded-lg bg-background/60 px-3 py-2 ring-1 ring-border/60">
                             <span className="text-sm">{category}</span>
-                            <span className="font-semibold">{count}</span>
+                            <span className="text-sm font-semibold">{count}</span>
                           </div>
                         );
                       })
@@ -1322,27 +1575,20 @@ export default function Dashboard() {
                   </div>
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <Users className="w-5 h-5" />
+                <Card className="border border-border/70 bg-card/80 p-5">
+                  <h4 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    <Users className="h-4 w-4" />
                     Club Membership Trends
-                  </h3>
+                  </h4>
                   {analyticsData?.membershipTrends && analyticsData.membershipTrends.length > 0 ? (
-                    <div className="h-32">
+                    <div className="h-40 rounded-lg bg-background/55 p-2 ring-1 ring-border/60">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={analyticsData.membershipTrends}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis
-                            dataKey="month"
-                            fontSize={12}
-                            tick={{ fontSize: 10 }}
-                          />
-                          <YAxis
-                            fontSize={12}
-                            tick={{ fontSize: 10 }}
-                          />
+                          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.35} />
+                          <XAxis dataKey="month" fontSize={11} tick={{ fontSize: 10 }} />
+                          <YAxis fontSize={11} tick={{ fontSize: 10 }} />
                           <Tooltip
-                            formatter={(value) => [value, 'New Members']}
+                            formatter={(value) => [value, "New Members"]}
                             labelFormatter={(label, payload) => {
                               if (payload && payload[0]) {
                                 const data = payload[0].payload;
@@ -1354,38 +1600,38 @@ export default function Dashboard() {
                           <Line
                             type="monotone"
                             dataKey="newMembers"
-                            stroke="#8884d8"
-                            strokeWidth={2}
-                            dot={{ fill: '#8884d8', strokeWidth: 2, r: 4 }}
-                            activeDot={{ r: 6 }}
+                            stroke="#6366f1"
+                            strokeWidth={2.5}
+                            dot={{ fill: "#6366f1", strokeWidth: 2, r: 3.5 }}
+                            activeDot={{ r: 5 }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
                   ) : (
-                    <div className="h-32 bg-muted/50 rounded flex items-center justify-center">
-                      <p className="text-muted-foreground text-sm">No membership data available</p>
+                    <div className="flex h-40 items-center justify-center rounded-lg bg-muted/45 ring-1 ring-border/55">
+                      <p className="text-sm text-muted-foreground">No membership data available yet</p>
                     </div>
                   )}
                 </Card>
 
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
+                <Card className="border border-border/70 bg-card/80 p-5">
+                  <h4 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    <TrendingUp className="h-4 w-4" />
                     Top Performing Clubs
-                  </h3>
-                  <div className="space-y-3">
+                  </h4>
+                  <div className="space-y-2.5">
                     {(analyticsData?.topClubs || clubs
                       .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0))
                       .slice(0, 5)
                     ).map((club: any, index: number) => (
-                      <div key={club.id || index} className="flex justify-between items-center">
+                      <div key={club.id || index} className="flex items-center justify-between rounded-lg bg-background/60 px-3 py-2 ring-1 ring-border/60">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
                             {index + 1}
                           </div>
                           <div>
-                            <p className="text-sm font-medium">{club.name}</p>
+                            <p className="text-sm font-medium leading-tight">{club.name}</p>
                             <p className="text-xs text-muted-foreground capitalize">{club.category}</p>
                           </div>
                         </div>
@@ -1400,104 +1646,259 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Event Analytics */}
-            <div>
-              <h2 className="text-2xl font-bold mb-6">Event Registrations vs Attendance</h2>
-              <Card className="p-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold tracking-tight">Event Registrations vs Attendance</h3>
+                <Badge variant="outline" className="text-xs">Top 10 events</Badge>
+              </div>
+              <Card className="border border-border/70 bg-card/80 p-5 md:p-6">
                 {eventAnalytics?.registrationVsAttendance && eventAnalytics.registrationVsAttendance.length > 0 ? (
-                  <div className="h-80">
+                  <div className="h-80 rounded-xl bg-background/55 p-3 ring-1 ring-border/60">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
-                        data={eventAnalytics.registrationVsAttendance.slice(0, 10)} // Show top 10 events
+                        data={eventAnalytics.registrationVsAttendance.slice(0, 10)}
                         margin={{
                           top: 20,
-                          right: 30,
-                          left: 20,
+                          right: 20,
+                          left: 8,
                           bottom: 60,
                         }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="eventTitle"
-                          angle={-45}
-                          textAnchor="end"
-                          height={80}
-                          fontSize={12}
-                        />
+                        <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.35} />
+                        <XAxis dataKey="eventTitle" angle={-45} textAnchor="end" height={80} fontSize={12} />
                         <YAxis />
                         <Tooltip
                           formatter={(value, name) => [
                             value,
-                            name === 'registrations' ? 'Registrations' : 'Attendance'
+                            name === "registrations" ? "Registrations" : "Attendance",
                           ]}
                           labelFormatter={(label) => `Event: ${label}`}
                         />
                         <Legend />
-                        <Bar dataKey="registrations" fill="#8884d8" name="Registrations" />
-                        <Bar dataKey="attendance" fill="#82ca9d" name="Attendance" />
+                        <Bar dataKey="registrations" fill="#6366f1" name="Registrations" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="attendance" fill="#14b8a6" name="Attendance" radius={[6, 6, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-64 bg-muted/50 rounded flex items-center justify-center">
+                  <div className="flex h-64 items-center justify-center rounded-xl bg-muted/45 ring-1 ring-border/55">
                     <div className="text-center">
-                      <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                      <BarChart3 className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
                       <p className="text-muted-foreground">No event registration data available</p>
-                      <p className="text-xs text-muted-foreground mt-2">Events need registrations to show analytics</p>
+                      <p className="mt-2 text-xs text-muted-foreground">Registrations and attendance will appear once events receive responses.</p>
                     </div>
                   </div>
                 )}
               </Card>
             </div>
 
-            {/* User Management Overview */}
-            <div>
-              <h2 className="text-2xl font-bold mb-6">User Management Overview</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4">Student Users</h3>
-                  <p className="text-3xl font-bold text-blue-500">{studentCount.count || 0}</p>
-                  <p className="text-sm text-muted-foreground">Active students</p>
-                </Card>
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4">Club Admins</h3>
-                  <p className="text-3xl font-bold text-green-500">6</p>
-                  <p className="text-sm text-muted-foreground">Active club administrators</p>
-                </Card>
-                <Card className="p-6">
-                  <h3 className="font-semibold mb-4">System Admins</h3>
-                  <p className="text-3xl font-bold text-purple-500">1</p>
-                  <p className="text-sm text-muted-foreground">University administrators</p>
-                </Card>
-              </div>
-            </div>
-
-            {/* System-wide Announcements Panel */}
-            <div>
-              <h2 className="text-2xl font-bold mb-6">System-wide Announcements</h2>
-              <Card className="p-6">
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                    <Bell className="w-5 h-5 text-blue-500 mt-0.5" />
-                    <div>
-                      <h4 className="font-semibold text-blue-900 dark:text-blue-100">Welcome to GEHU Clubs Platform</h4>
-                      <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                        The new clubs management system is now live. All club administrators have been notified.
-                      </p>
-                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">2 hours ago</p>
-                    </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <Card className="border border-border/70 bg-card/80 p-5 lg:col-span-2">
+                <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-tight">Attendance Disputes Review</h3>
+                    <p className="text-xs text-muted-foreground">Resolve student correction requests and optionally update attendance status.</p>
                   </div>
-
-                  <div className="flex items-start gap-3 p-4 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                    <TrendingUp className="w-5 h-5 text-green-500 mt-0.5" />
-                    <div>
-                      <h4 className="font-semibold text-green-900 dark:text-green-100">Event Registration Milestone</h4>
-                      <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                        Congratulations! We've reached 1000+ event registrations this semester.
-                      </p>
-                      <p className="text-xs text-green-600 dark:text-green-400 mt-2">1 day ago</p>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <Select value={disputeStatusFilter} onValueChange={(value: any) => setDisputeStatusFilter(value)}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Dispute status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/attendance-disputes"] })}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Refresh
+                    </Button>
                   </div>
+                </div>
+
+                {attendanceDisputesLoading ? (
+                  <div className="rounded-lg border border-border/70 bg-background/50 p-6 text-sm text-muted-foreground">Loading disputes...</div>
+                ) : attendanceDisputesData?.disputes?.length ? (
+                  <div className="space-y-3">
+                    {attendanceDisputesData.disputes.map((dispute) => {
+                      const resolutionStatus = attendanceResolutionStatus[dispute.id] || "present";
+                      const note = attendanceResolutionNote[dispute.id] || "";
+
+                      return (
+                        <div key={dispute.id} className="rounded-lg border border-border/70 bg-background/55 p-4">
+                          <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold">{dispute.eventTitle}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {dispute.studentName} ({dispute.enrollmentNumber}) • {dispute.clubName}
+                              </p>
+                            </div>
+                            <Badge
+                              variant={
+                                dispute.status === "approved"
+                                  ? "default"
+                                  : dispute.status === "rejected"
+                                    ? "destructive"
+                                    : "secondary"
+                              }
+                              className="capitalize"
+                            >
+                              {dispute.status}
+                            </Badge>
+                          </div>
+
+                          <div className="rounded-md border border-border/70 bg-card/70 p-3 text-xs text-muted-foreground">
+                            <p className="font-medium text-foreground">Student reason</p>
+                            <p className="mt-1 whitespace-pre-wrap">{dispute.reason}</p>
+                            {dispute.adminResponse && (
+                              <>
+                                <p className="mt-3 font-medium text-foreground">Admin response</p>
+                                <p className="mt-1 whitespace-pre-wrap">{dispute.adminResponse}</p>
+                              </>
+                            )}
+                          </div>
+
+                          {dispute.status === "pending" && (
+                            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-center">
+                              <Select
+                                value={resolutionStatus}
+                                onValueChange={(value: any) =>
+                                  setAttendanceResolutionStatus((prev) => ({
+                                    ...prev,
+                                    [dispute.id]: value,
+                                  }))
+                                }
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Resolved attendance" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="present">Set Present</SelectItem>
+                                  <SelectItem value="absent">Set Absent</SelectItem>
+                                  <SelectItem value="pending">Keep Pending</SelectItem>
+                                </SelectContent>
+                              </Select>
+
+                              <Input
+                                value={note}
+                                onChange={(e) =>
+                                  setAttendanceResolutionNote((prev) => ({
+                                    ...prev,
+                                    [dispute.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Optional admin response"
+                              />
+
+                              <div className="flex items-center gap-2 md:justify-end">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={resolveAttendanceDisputeMutation.isPending}
+                                  onClick={() =>
+                                    resolveAttendanceDisputeMutation.mutate({
+                                      disputeId: dispute.id,
+                                      status: "approved",
+                                      resolvedAttendanceStatus: resolutionStatus,
+                                      adminResponse: note,
+                                    })
+                                  }
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="destructive"
+                                  disabled={resolveAttendanceDisputeMutation.isPending}
+                                  onClick={() =>
+                                    resolveAttendanceDisputeMutation.mutate({
+                                      disputeId: dispute.id,
+                                      status: "rejected",
+                                      adminResponse: note,
+                                    })
+                                  }
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border/70 bg-background/40 p-6 text-center text-sm text-muted-foreground">
+                    No attendance disputes found for this filter.
+                  </div>
+                )}
+              </Card>
+
+              <Card className="border border-border/70 bg-card/80 p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold tracking-tight">User Management Overview</h3>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current distribution</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border border-blue-500/25 bg-blue-500/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-500">Student Users</p>
+                    <p className="mt-2 text-3xl font-semibold text-blue-500">{studentCount.count || 0}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Active students</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-500">Club Admins</p>
+                    <p className="mt-2 text-3xl font-semibold text-emerald-500">6</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Active club administrators</p>
+                  </div>
+                  <div className="rounded-xl border border-violet-500/25 bg-violet-500/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-500">System Admins</p>
+                    <p className="mt-2 text-3xl font-semibold text-violet-500">1</p>
+                    <p className="mt-1 text-xs text-muted-foreground">University administrators</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="border border-border/70 bg-card/80 p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-base font-semibold tracking-tight">System Announcements</h3>
+                  <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">Live feed</Badge>
+                </div>
+                <div className="space-y-3">
+                  {recentDashboardAnnouncements.map((item: any) => (
+                    <div key={item.id} className="relative rounded-lg border border-border/70 bg-background/55 p-3.5">
+                      <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-primary/80" />
+                      <div className="pl-3">
+                        <div className="mb-1 flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold leading-tight">{item.title}</p>
+                          <div className="flex items-center gap-1.5">
+                            {item.pinned && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                Pinned
+                              </Badge>
+                            )}
+                            <span className="text-[11px] text-muted-foreground">
+                              {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "Recent"}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                        <div className="mt-2">
+                          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                            {item.category}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </Card>
             </div>
@@ -1507,16 +1908,25 @@ export default function Dashboard() {
       case "clubs":
         return (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Clubs Management</h2>
-              <Button onClick={() => setShowCreateClub(true)}>
+            <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/75 p-5 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operations</p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight">Clubs Management</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Manage club profiles, credentials, and activity controls from one place.</p>
+              </div>
+              <Button onClick={() => setShowCreateClub(true)} className="md:self-end">
                 <Plus className="w-4 h-4 mr-2" />
                 Add New Club
               </Button>
             </div>
 
             {/* Search Bar */}
-            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-center">
+            <Card className="border border-border/70 bg-card/80 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground">Find Clubs</h3>
+                <Badge variant="outline" className="text-[10px]">{clubsGridRows.length} visible</Badge>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-center">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
@@ -1537,14 +1947,16 @@ export default function Dashboard() {
                   <SelectItem value="frozen">Frozen</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+              </div>
+            </Card>
 
             {/* Create/Edit Club Modal */}
             {(showCreateClub || editingClub) && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">
+              <Card className="border border-border/70 bg-card/80 p-6">
+                <h3 className="text-lg font-semibold mb-1">
                   {editingClub ? "Edit Club" : "Create New Club"}
                 </h3>
+                <p className="mb-5 text-sm text-muted-foreground">Use structured details to create a complete, discoverable club profile.</p>
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -1572,8 +1984,11 @@ export default function Dashboard() {
                       });
                     }
                   }}
-                  className="space-y-4"
+                  className="space-y-5"
                 >
+                  <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Basic Details</p>
+                  </div>
                   <div>
                     <Label htmlFor="clubName">Club Name</Label>
                     <Input
@@ -1613,6 +2028,11 @@ export default function Dashboard() {
                       required
                     />
                   </div>
+                  {!editingClub && (
+                    <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Login Credentials</p>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {!editingClub && (
                       <>
@@ -1747,6 +2167,9 @@ export default function Dashboard() {
                       })}
                     </div>
                   </div>
+                  <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Brand Assets</p>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="clubLogo">Club Logo</Label>
@@ -1877,6 +2300,11 @@ export default function Dashboard() {
                       defaultColDef={{ sortable: true, filter: true, resizable: true }}
                       animateRows
                       rowSelection="single"
+                      getRowClass={(params) =>
+                        params.data?.id === selectedClubGridId
+                          ? "dashboard-grid-row-selected"
+                          : "dashboard-grid-row"
+                      }
                       pagination
                       paginationPageSize={8}
                       onRowClicked={(event: RowClickedEvent<ClubsGridRow>) => {
@@ -2003,8 +2431,12 @@ export default function Dashboard() {
       case "events":
         return (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Events Management</h2>
+            <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/75 p-5 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Calendar Ops</p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight">Events Management</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Create events, monitor status, and manage associated chat spaces.</p>
+              </div>
               <Button onClick={() => setShowCreateEvent(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 Create Event
@@ -2013,10 +2445,11 @@ export default function Dashboard() {
 
             {/* Create/Edit Event Modal */}
             {(showCreateEvent || editingEvent) && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">
+              <Card className="border border-border/70 bg-card/80 p-6">
+                <h3 className="text-lg font-semibold mb-1">
                   {editingEvent ? "Edit Event" : "Create New Event"}
                 </h3>
+                <p className="mb-5 text-sm text-muted-foreground">Capture complete event details so students can discover and register quickly.</p>
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -2051,8 +2484,11 @@ export default function Dashboard() {
                       createEventMutation.mutate(formData);
                     }
                   }}
-                  className="space-y-4"
+                  className="space-y-5"
                 >
+                  <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Core Event Details</p>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="eventTitle">Event Title</Label>
@@ -2135,6 +2571,9 @@ export default function Dashboard() {
                   </div>
 
                   <div>
+                    <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2 mb-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Club Ownership</p>
+                    </div>
                     <Label htmlFor="eventClub">Club</Label>
                     <select
                       id="eventClub"
@@ -2153,6 +2592,9 @@ export default function Dashboard() {
                   </div>
 
                   <div>
+                    <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2 mb-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Poster / Media</p>
+                    </div>
                     <Label htmlFor="eventImage">Event Poster/Image</Label>
                     <div className="flex gap-4">
                       <Input
@@ -2251,6 +2693,11 @@ export default function Dashboard() {
                       defaultColDef={{ sortable: true, filter: true, resizable: true }}
                       animateRows
                       rowSelection="single"
+                      getRowClass={(params) =>
+                        params.data?.id === selectedEventGridId
+                          ? "dashboard-grid-row-selected"
+                          : "dashboard-grid-row"
+                      }
                       pagination
                       paginationPageSize={8}
                       onRowClicked={(event: RowClickedEvent<EventsGridRow>) => {
@@ -2263,7 +2710,7 @@ export default function Dashboard() {
                 </Card>
 
                 {selectedEventFromGrid && (
-                  <Card className="p-6">
+                  <Card className="p-6 border border-border/70 bg-card/80">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
@@ -2273,11 +2720,11 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <p className="text-muted-foreground mb-3">{selectedEventFromGrid.description}</p>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>📅 {new Date(selectedEventFromGrid.date).toLocaleDateString()}</span>
-                          <span>🕐 {selectedEventFromGrid.time}</span>
-                          <span>📍 {selectedEventFromGrid.location}</span>
-                          <span>🏛️ {selectedEventFromGrid.clubName || "Unknown Club"}</span>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                          <span className="inline-flex items-center gap-1.5"><Calendar className="h-4 w-4" /> {new Date(selectedEventFromGrid.date).toLocaleDateString()}</span>
+                          <span className="inline-flex items-center gap-1.5"><Activity className="h-4 w-4" /> {selectedEventFromGrid.time}</span>
+                          <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4" /> {selectedEventFromGrid.location}</span>
+                          <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4" /> {selectedEventFromGrid.clubName || "Unknown Club"}</span>
                         </div>
                       </div>
                       <div className="flex gap-2">
@@ -2360,21 +2807,25 @@ export default function Dashboard() {
       case "users":
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold">User Management</h2>
+            <div className="rounded-2xl border border-border/70 bg-card/75 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Identity & Access</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight">User Management</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Review students and club administrators, then take action from contextual detail panels.</p>
+            </div>
 
             {/* User Statistics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="p-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Card className="border border-blue-500/25 bg-blue-500/10 p-5">
                 <h3 className="font-semibold mb-4">Total Students</h3>
                 <p className="text-3xl font-bold text-blue-500">{studentCount.count || 0}</p>
                 <p className="text-sm text-muted-foreground">Registered students</p>
               </Card>
-              <Card className="p-6">
+              <Card className="border border-green-500/25 bg-green-500/10 p-5">
                 <h3 className="font-semibold mb-4">Club Administrators</h3>
                 <p className="text-3xl font-bold text-green-500">{clubs.length}</p>
                 <p className="text-sm text-muted-foreground">Active club admins</p>
               </Card>
-              <Card className="p-6">
+              <Card className="border border-violet-500/25 bg-violet-500/10 p-5">
                 <h3 className="font-semibold mb-4">System Administrators</h3>
                 <p className="text-3xl font-bold text-purple-500">1</p>
                 <p className="text-sm text-muted-foreground">University admins</p>
@@ -2426,6 +2877,11 @@ export default function Dashboard() {
                         defaultColDef={{ sortable: true, filter: true, resizable: true }}
                         animateRows
                         rowSelection="single"
+                        getRowClass={(params) =>
+                          params.data?.id === selectedStudentGridId
+                            ? "dashboard-grid-row-selected"
+                            : "dashboard-grid-row"
+                        }
                         pagination
                         paginationPageSize={10}
                         onRowClicked={(event: RowClickedEvent<StudentsGridRow>) => {
@@ -2438,7 +2894,7 @@ export default function Dashboard() {
                   </Card>
 
                   {selectedStudentFromGrid && (
-                    <Card className="p-6 mt-4">
+                    <Card className="mt-4 border border-border/70 bg-card/80 p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
@@ -2477,7 +2933,8 @@ export default function Dashboard() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              setSelectedStudent(selectedStudentFromGrid);
+                              const fullStudentRecord = students.find((student: any) => student.id === selectedStudentFromGrid.id);
+                              setSelectedStudent(fullStudentRecord || selectedStudentFromGrid);
                               setIsStudentProfileOpen(true);
                             }}
                           >
@@ -2556,6 +3013,11 @@ export default function Dashboard() {
                         defaultColDef={{ sortable: true, filter: true, resizable: true }}
                         animateRows
                         rowSelection="single"
+                        getRowClass={(params) =>
+                          params.data?.id === selectedClubAdminGridId
+                            ? "dashboard-grid-row-selected"
+                            : "dashboard-grid-row"
+                        }
                         pagination
                         paginationPageSize={7}
                         onRowClicked={(event: RowClickedEvent<ClubAdminsGridRow>) => {
@@ -2568,7 +3030,7 @@ export default function Dashboard() {
                   </Card>
 
                   {selectedClubAdminFromGrid && (
-                    <Card className="p-6 mt-4">
+                    <Card className="mt-4 border border-border/70 bg-card/80 p-6">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h3 className="text-lg font-semibold mb-3">{selectedClubAdminFromGrid.name}</h3>
@@ -2627,11 +3089,15 @@ export default function Dashboard() {
       case "analytics":
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Analytics Dashboard</h2>
+            <div className="rounded-2xl border border-border/70 bg-card/75 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Insights</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight">Analytics Dashboard</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Monitor category spread, trend velocity, and engagement health with a cleaner analytical canvas.</p>
+            </div>
 
             {/* Key Metrics Overview */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card className="p-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card className="border border-border/70 bg-card/85 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
                     <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
@@ -2642,7 +3108,7 @@ export default function Dashboard() {
                 <p className="text-3xl font-bold">{analyticsData?.overview?.totalClubs || clubs.length}</p>
               </Card>
 
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/85 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
                     <Calendar className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -2653,7 +3119,7 @@ export default function Dashboard() {
                 <p className="text-3xl font-bold">{analyticsData?.overview?.totalEvents || events.length}</p>
               </Card>
 
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/85 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
                     <Users className="w-6 h-6 text-purple-600 dark:text-purple-400" />
@@ -2664,7 +3130,7 @@ export default function Dashboard() {
                 <p className="text-3xl font-bold">{analyticsData?.overview?.totalStudents || studentCount.count || 0}</p>
               </Card>
 
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/85 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-12 h-12 rounded-lg bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center">
                     <Activity className="w-6 h-6 text-orange-600 dark:text-orange-400" />
@@ -2677,9 +3143,9 @@ export default function Dashboard() {
             </div>
 
             {/* Charts and Detailed Analytics */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {/* Club Distribution by Category */}
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/80 p-5">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
                   Clubs by Category
@@ -2734,7 +3200,7 @@ export default function Dashboard() {
               </Card>
 
               {/* Event Status Distribution */}
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/80 p-5">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
                   <Calendar className="w-5 h-5" />
                   Event Status Overview
@@ -2794,7 +3260,7 @@ export default function Dashboard() {
               </Card>
 
               {/* Top Performing Clubs */}
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/80 p-5">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
                   <TrendingUp className="w-5 h-5" />
                   Top Performing Clubs
@@ -2823,7 +3289,7 @@ export default function Dashboard() {
               </Card>
 
               {/* Event Categories */}
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/80 p-5">
                 <h3 className="font-semibold mb-4 flex items-center gap-2">
                   <Activity className="w-5 h-5" />
                   Event Categories
@@ -2871,7 +3337,7 @@ export default function Dashboard() {
             </div>
 
             {/* Monthly Trends */}
-            <Card className="p-6">
+            <Card className="border border-border/70 bg-card/80 p-6">
               <h3 className="font-semibold mb-4 flex items-center gap-2">
                 <TrendingUp className="w-5 h-5" />
                 Monthly Activity Trends
@@ -2904,8 +3370,8 @@ export default function Dashboard() {
             </Card>
 
             {/* Data Insights */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="p-6">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Card className="border border-border/70 bg-card/80 p-5">
                 <h3 className="font-semibold mb-4">Platform Health</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
@@ -2930,7 +3396,7 @@ export default function Dashboard() {
                 </div>
               </Card>
 
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/80 p-5">
                 <h3 className="font-semibold mb-4">Recent Activity</h3>
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
@@ -2963,9 +3429,13 @@ export default function Dashboard() {
       case "announcements":
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold">System Announcements</h2>
+            <div className="rounded-2xl border border-border/70 bg-card/75 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Communication Hub</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight">System Announcements</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Publish notices and manage pinned updates with clearer targeting and action controls.</p>
+            </div>
             <div className="space-y-6">
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/80 p-6">
                 <h3 className="font-semibold mb-4">Create New Announcement</h3>
                 <form
                   onSubmit={(e) => {
@@ -3024,7 +3494,7 @@ export default function Dashboard() {
                 </form>
               </Card>
 
-              <Card className="p-6">
+              <Card className="border border-border/70 bg-card/80 p-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-semibold">Recent Announcements</h3>
@@ -3041,6 +3511,11 @@ export default function Dashboard() {
                         defaultColDef={{ sortable: true, filter: true, resizable: true }}
                         animateRows
                         rowSelection="single"
+                        getRowClass={(params) =>
+                          params.data?.id === selectedAnnouncementGridId
+                            ? "dashboard-grid-row-selected"
+                            : "dashboard-grid-row"
+                        }
                         pagination
                         paginationPageSize={5}
                         onRowClicked={(event: RowClickedEvent<AnnouncementsGridRow>) => {
@@ -3130,11 +3605,15 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen flex bg-transparent">
       {/* Sidebar */}
-      <div className="w-64 bg-card border-r border-border">
+      <div className="w-64 border-r border-border/70 bg-card/80 backdrop-blur-sm">
         <div className="p-6">
-          <h1 className="text-xl font-bold mb-8">University Admin</h1>
+          <div className="mb-8 rounded-xl border border-border/70 bg-background/60 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Admin Panel</p>
+            <h1 className="mt-2 text-xl font-semibold leading-tight">University Admin</h1>
+            <p className="mt-1 text-xs text-muted-foreground">Control clubs, events, users, and announcements</p>
+          </div>
           <nav className="space-y-2">
             {sidebarItems.map((item) => {
               const Icon = item.icon;
@@ -3142,10 +3621,10 @@ export default function Dashboard() {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
                     activeTab === item.id
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-background/70 hover:text-foreground"
                   }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -3155,11 +3634,11 @@ export default function Dashboard() {
             })}
           </nav>
 
-          <div className="mt-8 pt-6 border-t border-border">
+          <div className="mt-8 border-t border-border/70 pt-6">
             <Button
               variant="outline"
               onClick={() => logoutMutation.mutate()}
-              className="w-full"
+              className="w-full bg-background/70"
             >
               Logout
             </Button>
@@ -3168,14 +3647,19 @@ export default function Dashboard() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 p-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="flex-1 p-6 md:p-8">
+        <div className="mx-auto max-w-7xl">
           {renderMainContent()}
         </div>
       </div>
 
       {/* Student Profile Modal */}
-      <Dialog open={isStudentProfileOpen} onOpenChange={setIsStudentProfileOpen}>
+      <Dialog open={isStudentProfileOpen} onOpenChange={(open) => {
+        setIsStudentProfileOpen(open);
+        if (!open) {
+          setIsEditingStudent(false);
+        }
+      }}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Student Profile</DialogTitle>
@@ -3184,29 +3668,260 @@ export default function Dashboard() {
             <div className="space-y-6">
               {/* Basic Information */}
               <Card className="p-6">
-                <h3 className="text-lg font-semibold mb-4">Basic Information</h3>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Basic Information</h3>
+                  <div className="flex items-center gap-2">
+                    {isEditingStudent ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setIsEditingStudent(false);
+                            setStudentEditForm({
+                              name: selectedStudent.name || "",
+                              email: selectedStudent.email || "",
+                              phone: selectedStudent.phone || "",
+                              rollNumber: selectedStudent.rollNumber || "",
+                              enrollment: selectedStudent.enrollment || "",
+                              department: selectedStudent.department || selectedStudent.branch || "",
+                              yearOfAdmission: selectedStudent.yearOfAdmission ? String(selectedStudent.yearOfAdmission) : "",
+                            });
+                          }}
+                          disabled={updateStudentDetailsMutation.isPending}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            const normalizedName = studentEditForm.name.trim();
+                            const normalizedEmail = studentEditForm.email.trim();
+                            const normalizedEnrollment = studentEditForm.enrollment.trim();
+                            const normalizedPhone = studentEditForm.phone.trim();
+                            const normalizedRollNumber = studentEditForm.rollNumber.trim();
+                            const normalizedDepartment = studentEditForm.department.trim();
+                            const normalizedYear = studentEditForm.yearOfAdmission.trim();
+
+                            if (!normalizedName || !normalizedEmail || !normalizedEnrollment) {
+                              toast({
+                                title: "Missing required fields",
+                                description: "Name, email, and enrollment are required.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            if (normalizedPhone && !/^\+?[0-9]{10,15}$/.test(normalizedPhone)) {
+                              toast({
+                                title: "Invalid phone",
+                                description: "Phone must contain 10 to 15 digits (optional leading +).",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            const parsedAdmissionYear = normalizedYear ? Number(normalizedYear) : null;
+                            if (
+                              normalizedYear &&
+                              (parsedAdmissionYear === null ||
+                                !Number.isInteger(parsedAdmissionYear) ||
+                                parsedAdmissionYear < 2000 ||
+                                parsedAdmissionYear > new Date().getFullYear() + 1)
+                            ) {
+                              toast({
+                                title: "Invalid admission year",
+                                description: "Please provide a valid admission year.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            updateStudentDetailsMutation.mutate({
+                              studentId: selectedStudent.id,
+                              name: normalizedName,
+                              email: normalizedEmail,
+                              phone: normalizedPhone,
+                              rollNumber: normalizedRollNumber,
+                              enrollment: normalizedEnrollment,
+                              department: normalizedDepartment,
+                              yearOfAdmission: parsedAdmissionYear ?? undefined,
+                            });
+                          }}
+                          disabled={updateStudentDetailsMutation.isPending}
+                        >
+                          {updateStudentDetailsMutation.isPending ? "Saving..." : "Save"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => setIsEditingStudent(true)}>
+                        Edit Details
+                      </Button>
+                    )}
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium">Full Name</Label>
-                    <p className="text-foreground">{selectedStudent.name}</p>
+                    {isEditingStudent ? (
+                      <Input
+                        value={studentEditForm.name}
+                        onChange={(event) => {
+                          setStudentEditForm((prev) => ({ ...prev, name: event.target.value }));
+                          setStudentEditErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.name;
+                            return updated;
+                          });
+                        }}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground">{selectedStudent.name}</p>
+                    )}
+                    {isEditingStudent && studentEditErrors.name && (
+                      <p className="mt-1 text-xs text-destructive">{studentEditErrors.name}</p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Email</Label>
-                    <p className="text-foreground">{selectedStudent.email}</p>
+                    {isEditingStudent ? (
+                      <Input
+                        value={studentEditForm.email}
+                        onChange={(event) => {
+                          setStudentEditForm((prev) => ({ ...prev, email: event.target.value }));
+                          setStudentEditErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.email;
+                            return updated;
+                          });
+                        }}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground">{selectedStudent.email}</p>
+                    )}
+                    {isEditingStudent && studentEditErrors.email && (
+                      <p className="mt-1 text-xs text-destructive">{studentEditErrors.email}</p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Phone</Label>
-                    <p className="text-foreground">{selectedStudent.phone || "—"}</p>
+                    {isEditingStudent ? (
+                      <Input
+                        value={studentEditForm.phone}
+                        onChange={(event) => {
+                          setStudentEditForm((prev) => ({ ...prev, phone: event.target.value }));
+                          setStudentEditErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.phone;
+                            return updated;
+                          });
+                        }}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground">{selectedStudent.phone || "—"}</p>
+                    )}
+                    {isEditingStudent && studentEditErrors.phone && (
+                      <p className="mt-1 text-xs text-destructive">{studentEditErrors.phone}</p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Enrollment Number</Label>
-                    <p className="text-foreground">{selectedStudent.enrollment}</p>
+                    {isEditingStudent ? (
+                      <Input
+                        value={studentEditForm.enrollment}
+                        onChange={(event) => {
+                          setStudentEditForm((prev) => ({ ...prev, enrollment: event.target.value }));
+                          setStudentEditErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.enrollment;
+                            return updated;
+                          });
+                        }}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground">{selectedStudent.enrollment}</p>
+                    )}
+                    {isEditingStudent && studentEditErrors.enrollment && (
+                      <p className="mt-1 text-xs text-destructive">{studentEditErrors.enrollment}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Roll Number</Label>
+                    {isEditingStudent ? (
+                      <Input
+                        value={studentEditForm.rollNumber}
+                        onChange={(event) => {
+                          setStudentEditForm((prev) => ({ ...prev, rollNumber: event.target.value }));
+                          setStudentEditErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.rollNumber;
+                            return updated;
+                          });
+                        }}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground">{selectedStudent.rollNumber || "—"}</p>
+                    )}
+                    {isEditingStudent && studentEditErrors.rollNumber && (
+                      <p className="mt-1 text-xs text-destructive">{studentEditErrors.rollNumber}</p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Branch</Label>
-                    <p className="text-foreground">
-                      {selectedStudent.department || selectedStudent.branch || "—"}
-                    </p>
+                    {isEditingStudent ? (
+                      <Input
+                        value={studentEditForm.department}
+                        onChange={(event) => {
+                          setStudentEditForm((prev) => ({ ...prev, department: event.target.value }));
+                          setStudentEditErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.department;
+                            return updated;
+                          });
+                        }}
+                        className="mt-1"
+                      />
+                    ) : (
+                      <p className="text-foreground">
+                        {selectedStudent.department || selectedStudent.branch || "—"}
+                      </p>
+                    )}
+                    {isEditingStudent && studentEditErrors.department && (
+                      <p className="mt-1 text-xs text-destructive">{studentEditErrors.department}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Admission Year</Label>
+                    {isEditingStudent ? (
+                      <Input
+                        value={studentEditForm.yearOfAdmission}
+                        onChange={(event) => {
+                          setStudentEditForm((prev) => ({ ...prev, yearOfAdmission: event.target.value }));
+                          setStudentEditErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.yearOfAdmission;
+                            return updated;
+                          });
+                        }}
+                        className="mt-1"
+                        inputMode="numeric"
+                      />
+                    ) : (
+                      <p className="text-foreground">{selectedStudent.yearOfAdmission || "—"}</p>
+                    )}
+                    {isEditingStudent && studentEditErrors.yearOfAdmission && (
+                      <p className="mt-1 text-xs text-destructive">{studentEditErrors.yearOfAdmission}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Current Semester</Label>
+                    <p className="text-foreground">{selectedStudent.currentSemester || "Semester 1"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Auto-managed every 6 months.</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium">Last Active</Label>
@@ -3536,6 +4251,30 @@ export default function Dashboard() {
         .scrollbar-hide {
           -ms-overflow-style: none;
           scrollbar-width: none;
+        }
+
+        .ag-theme-quartz,
+        .ag-theme-quartz-dark {
+          --ag-borders: none;
+          --ag-border-color: hsl(var(--border) / 0.45);
+          --ag-row-border-color: hsl(var(--border) / 0.35);
+          --ag-header-background-color: hsl(var(--card) / 0.88);
+          --ag-background-color: hsl(var(--background) / 0.65);
+          border-radius: 0.85rem;
+          overflow: hidden;
+        }
+
+        .dashboard-grid-row .ag-cell {
+          transition: background-color 0.2s ease;
+        }
+
+        .ag-row.dashboard-grid-row:hover .ag-cell {
+          background-color: hsl(var(--muted) / 0.42) !important;
+        }
+
+        .ag-row.dashboard-grid-row-selected .ag-cell {
+          background-color: hsl(var(--primary) / 0.14) !important;
+          box-shadow: inset 0 1px 0 hsl(var(--primary) / 0.18), inset 0 -1px 0 hsl(var(--primary) / 0.18);
         }
       `}</style>
     </div>

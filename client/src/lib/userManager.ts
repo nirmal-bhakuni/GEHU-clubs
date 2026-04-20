@@ -7,6 +7,7 @@ export interface UserProfile {
   phone?: string;
   major?: string;
   yearOfCourse?: number;
+  currentSemester?: string;
   bio?: string;
   joinedDate: string;
   ranking: number;
@@ -59,13 +60,21 @@ const CURRENT_USER_KEY = "gehu_current_user";
 
 // Get all users from localStorage
 function getAllUsers(): { [key: string]: StoredUser } {
-  const usersJson = localStorage.getItem(USERS_STORAGE_KEY);
-  return usersJson ? JSON.parse(usersJson) : {};
+  try {
+    const usersJson = localStorage.getItem(USERS_STORAGE_KEY);
+    return usersJson ? JSON.parse(usersJson) : {};
+  } catch {
+    return {};
+  }
 }
 
 // Save all users to localStorage
 function saveAllUsers(users: { [key: string]: StoredUser }): void {
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  } catch {
+    // Ignore storage failures so startup does not break.
+  }
 }
 
 // Create a default profile for a new user
@@ -81,6 +90,7 @@ function createDefaultProfile(
     studentId,
     phone: "",
     major,
+    currentSemester: "",
     bio: "Welcome to GEHU Clubs! Update your profile to get started.",
     joinedDate: new Date().toLocaleDateString("en-US", {
       month: "short",
