@@ -750,6 +750,50 @@ function escapeRegexInput(input: string) {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+type PasswordResetOtpRecord = {
+  accountType: "club_admin" | "student";
+  accountId: string;
+  email: string;
+  otp: string;
+  expiresAt: number;
+  resendAvailableAt: number;
+};
+
+const OTP_EXPIRY_MS = 10 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const passwordResetOtpStore = new Map<string, PasswordResetOtpRecord>();
+
+function buildPasswordResetKey(accountType: "club_admin" | "student", accountId: string) {
+  return `${accountType}:${accountId}`;
+}
+
+function generateOtpCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function clearExpiredPasswordResetOtps() {
+  const now = Date.now();
+  for (const [key, record] of passwordResetOtpStore.entries()) {
+    if (record.expiresAt <= now) {
+      passwordResetOtpStore.delete(key);
+    }
+  }
+}
+
+async function sendPasswordResetOtpEmail(params: {
+  to: string;
+  otp: string;
+  accountType: "club_admin" | "student";
+}) {
+  const accountLabel = params.accountType === "club_admin" ? "Club Admin" : "Student";
+  await sendEmail({
+    to: params.to,
+    subject: `GEHU Clubs ${accountLabel} Password Reset OTP`,
+    text: `Your OTP for ${accountLabel} password reset is ${params.otp}. It will expire in 10 minutes.`,
+    html: `<p>Your OTP for <strong>${accountLabel}</strong> password reset is:</p><h2 style="letter-spacing:2px;">${params.otp}</h2><p>This code will expire in 10 minutes.</p>`,
+  });
+}
+
 async function findVenueConflict(params: {
   date: string;
   time: string;
@@ -1059,6 +1103,93 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Club admin forgot password - request OTP
+  app.post("/api/auth/club-admin/forgot-password/request", async (req: Request, res: Response) => {
+    try {
+      const username = String(req.body?.username || "").trim();
+      if (!username) {
+        return res.status(400).json({ error: "Username is required" });
+      }
+
+      clearExpiredPasswordResetOtps();
+
+      const escaped = escapeRegexInput(username);
+      const admin = await Admin.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
+      if (!admin || !admin.clubId) {
+        return res.json({ success: true, message: "If the account exists, OTP will be sent to registered email." });
+      }
+
+      const adminEmail = String(admin.email || "").trim();
+      if (!adminEmail) {
+        return res.status(400).json({ error: "No email found for this club admin. Contact university admin." });
+      }
+
+      const key = buildPasswordResetKey("club_admin", admin.id);
+      const existing = passwordResetOtpStore.get(key);
+      const now = Date.now();
+      if (existing && existing.resendAvailableAt > now) {
+        const retryAfterSeconds = Math.ceil((existing.resendAvailableAt - now) / 1000);
+        return res.status(429).json({ error: "Please wait before requesting another OTP.", retryAfterSeconds });
+      }
+
+      const otp = generateOtpCode();
+      passwordResetOtpStore.set(key, {
+        accountType: "club_admin",
+        accountId: admin.id,
+        email: adminEmail,
+        otp,
+        expiresAt: now + OTP_EXPIRY_MS,
+        resendAvailableAt: now + OTP_RESEND_COOLDOWN_MS,
+      });
+
+      await sendPasswordResetOtpEmail({ to: adminEmail, otp, accountType: "club_admin" });
+      return res.json({ success: true, message: "OTP sent to registered email." });
+    } catch (error) {
+      console.error("Club admin forgot-password OTP request failed:", error);
+      return res.status(500).json({ error: "Failed to send OTP" });
+    }
+  });
+
+  // Club admin forgot password - verify OTP and reset password
+  app.post("/api/auth/club-admin/forgot-password/reset", async (req: Request, res: Response) => {
+    try {
+      const username = String(req.body?.username || "").trim();
+      const otp = String(req.body?.otp || "").trim();
+      const newPassword = String(req.body?.newPassword || "");
+
+      if (!username || !otp || !newPassword) {
+        return res.status(400).json({ error: "Username, OTP and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+      }
+
+      const escaped = escapeRegexInput(username);
+      const admin = await Admin.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
+      if (!admin || !admin.clubId) {
+        return res.status(400).json({ error: "Invalid reset request" });
+      }
+
+      clearExpiredPasswordResetOtps();
+      const key = buildPasswordResetKey("club_admin", admin.id);
+      const record = passwordResetOtpStore.get(key);
+      if (!record || record.otp !== otp) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      admin.password = hashedPassword;
+      await admin.save();
+      passwordResetOtpStore.delete(key);
+
+      return res.json({ success: true, message: "Password reset successful" });
+    } catch (error) {
+      console.error("Club admin forgot-password reset failed:", error);
+      return res.status(500).json({ error: "Failed to reset password" });
     }
   });
 
@@ -1738,23 +1869,38 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   app.post("/api/auth/register", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { username, password, clubId } = req.body;
+      const { username, password, clubId, email } = req.body;
 
       const normalizedUsername = String(username || "").trim();
       if (!normalizedUsername) {
         return res.status(400).json({ error: "Username is required" });
       }
 
+      const normalizedEmail = String(email || "").trim().toLowerCase();
+      if (!normalizedEmail) {
+        return res.status(400).json({ error: "Email is required for club admin registration" });
+      }
+
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(normalizedEmail)) {
+        return res.status(400).json({ error: "Please provide a valid email address" });
+      }
+
       const escaped = normalizedUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const existing = await Admin.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
       if (existing) return res.status(400).json({ error: "Username already exists" });
+
+      const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const existingEmail = await Admin.findOne({ email: { $regex: `^${escapedEmail}$`, $options: "i" } });
+      if (existingEmail) return res.status(400).json({ error: "Email already exists" });
 
       const hashed = await bcrypt.hash(password, 10);
 
       const admin = await storage.createAdmin({
         username: normalizedUsername,
         password: hashed,
-        clubId
+        clubId,
+        email: normalizedEmail,
       });
 
       res.json({
@@ -1770,10 +1916,17 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     try {
       const { name, email, phone, rollNumber, password, enrollment, department, yearOfAdmission, currentSemester } = req.body;
 
-      if (!name || !email || !password || !enrollment || !department)
+      const normalizedEmail = String(email || "").trim().toLowerCase();
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (!name || !normalizedEmail || !password || !enrollment || !department)
         return res.status(400).json({ error: "All fields required" });
 
-      const exists = await Student.findOne({ email });
+      if (!emailPattern.test(normalizedEmail)) {
+        return res.status(400).json({ error: "Please provide a valid email address", field: "email" });
+      }
+
+      const exists = await Student.findOne({ email: { $regex: `^${escapeRegexInput(normalizedEmail)}$`, $options: "i" } });
       if (exists) return res.status(409).json({ error: "Email already exists", field: "email" });
 
       const enrollmentExists = await Student.findOne({ enrollment });
@@ -1799,7 +1952,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       const student = await Student.create({
         name,
-        email,
+        email: normalizedEmail,
         phone: phone || "",
         rollNumber: rollNumber || "",
         password: hashed,
@@ -2035,6 +2188,99 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Student forgot password - request OTP
+  app.post("/api/student/forgot-password/request", async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email || "").trim();
+      const enrollment = String(req.body?.enrollment || "").trim();
+
+      if (!email && !enrollment) {
+        return res.status(400).json({ error: "Provide enrollment number or email" });
+      }
+
+      clearExpiredPasswordResetOtps();
+
+      const student = enrollment
+        ? await Student.findOne({ enrollment })
+        : await Student.findOne({ email: { $regex: `^${escapeRegexInput(email)}$`, $options: "i" } });
+
+      if (!student) {
+        return res.json({ success: true, message: "If the account exists, OTP will be sent to registered email." });
+      }
+
+      const studentEmail = String(student.email || "").trim();
+      if (!studentEmail) {
+        return res.status(400).json({ error: "No email found for this student account." });
+      }
+
+      const key = buildPasswordResetKey("student", String(student._id));
+      const existing = passwordResetOtpStore.get(key);
+      const now = Date.now();
+      if (existing && existing.resendAvailableAt > now) {
+        const retryAfterSeconds = Math.ceil((existing.resendAvailableAt - now) / 1000);
+        return res.status(429).json({ error: "Please wait before requesting another OTP.", retryAfterSeconds });
+      }
+
+      const otp = generateOtpCode();
+      passwordResetOtpStore.set(key, {
+        accountType: "student",
+        accountId: String(student._id),
+        email: studentEmail,
+        otp,
+        expiresAt: now + OTP_EXPIRY_MS,
+        resendAvailableAt: now + OTP_RESEND_COOLDOWN_MS,
+      });
+
+      await sendPasswordResetOtpEmail({ to: studentEmail, otp, accountType: "student" });
+      return res.json({ success: true, message: "OTP sent to registered email." });
+    } catch (error) {
+      console.error("Student forgot-password OTP request failed:", error);
+      return res.status(500).json({ error: "Failed to send OTP" });
+    }
+  });
+
+  // Student forgot password - verify OTP and reset password
+  app.post("/api/student/forgot-password/reset", async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email || "").trim();
+      const enrollment = String(req.body?.enrollment || "").trim();
+      const otp = String(req.body?.otp || "").trim();
+      const newPassword = String(req.body?.newPassword || "");
+
+      if ((!email && !enrollment) || !otp || !newPassword) {
+        return res.status(400).json({ error: "Enrollment/email, OTP and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+      }
+
+      const student = enrollment
+        ? await Student.findOne({ enrollment })
+        : await Student.findOne({ email: { $regex: `^${escapeRegexInput(email)}$`, $options: "i" } });
+
+      if (!student) {
+        return res.status(400).json({ error: "Invalid reset request" });
+      }
+
+      clearExpiredPasswordResetOtps();
+      const key = buildPasswordResetKey("student", String(student._id));
+      const record = passwordResetOtpStore.get(key);
+      if (!record || record.otp !== otp) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      student.password = await bcrypt.hash(newPassword, 10);
+      await student.save();
+      passwordResetOtpStore.delete(key);
+
+      return res.json({ success: true, message: "Password reset successful" });
+    } catch (error) {
+      console.error("Student forgot-password reset failed:", error);
+      return res.status(500).json({ error: "Failed to reset password" });
     }
   });
 
@@ -2998,6 +3244,11 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   // Admin: reset admin password
   app.patch("/api/admin/reset-admin-password/:clubId", requireAuth, async (req: Request, res: Response) => {
     try {
+      const requester = await storage.getAdmin(req.session.adminId!);
+      if (!requester || requester.clubId) {
+        return res.status(403).json({ error: "Only university admins can reset club-admin passwords" });
+      }
+
       const { clubId } = req.params;
       const { newPassword } = req.body;
 

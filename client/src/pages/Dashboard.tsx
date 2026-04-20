@@ -890,10 +890,16 @@ export default function Dashboard() {
 
       if (clubLoginId && clubLoginPassword) {
         try {
+          const adminEmail = (clubData.email || "").trim();
+          if (!adminEmail) {
+            throw new Error("Club email is required to create club admin login and OTP recovery.");
+          }
+
           await apiRequest("POST", "/api/auth/register", {
             username: clubLoginId,
             password: clubLoginPassword,
             clubId: createdClub.id,
+            email: adminEmail,
           });
         } catch (error: any) {
           registerWarning = error?.message || "Failed to create club login credentials.";
@@ -2125,6 +2131,7 @@ export default function Dashboard() {
                         value={clubForm.email}
                         onChange={(e) => setClubForm(prev => ({ ...prev, email: e.target.value }))}
                         placeholder="Enter email"
+                        required={!editingClub}
                       />
                     </div>
                   </div>

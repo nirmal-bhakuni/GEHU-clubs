@@ -225,6 +225,15 @@ export default function StudentLogin() {
               disabled={isLoading}
               required
             />
+            <div className="mt-2 text-right">
+              <button
+                type="button"
+                className="text-sm text-primary hover:underline"
+                onClick={() => setLocation("/student/forgot-password")}
+              >
+                Forgot Password?
+              </button>
+            </div>
           </div>
 
           {/* Interactive Captcha */}

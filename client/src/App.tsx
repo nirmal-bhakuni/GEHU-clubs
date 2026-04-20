@@ -22,8 +22,10 @@ const EventDetail = lazy(() => import("@/pages/EventDetail"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const ClubAdmin = lazy(() => import("@/pages/ClubAdmin"));
 const ClubAdminLogin = lazy(() => import("@/pages/ClubAdminLogin"));
+const ClubAdminForgotPassword = lazy(() => import("@/pages/ClubAdminForgotPassword"));
 const Login = lazy(() => import("@/pages/Login"));
 const StudentLogin = lazy(() => import("@/pages/StudentLogin"));
+const StudentForgotPassword = lazy(() => import("@/pages/StudentForgotPassword"));
 const StudentSignup = lazy(() => import("@/pages/StudentSignup"));
 const StudentDashboard = lazy(() => import("@/pages/StudentDashboard"));
 const StudentProfile = lazy(() => import("@/pages/StudentProfile"));
@@ -43,12 +45,14 @@ const Router = () => (
     <Route path="/student" component={StudentProfile} />
     <Route path="/student-login" component={StudentLogin} />
     <Route path="/student/login" component={StudentLogin} />
+    <Route path="/student/forgot-password" component={StudentForgotPassword} />
     <Route path="/student-signup" component={StudentSignup} />
     <Route path="/student/signup" component={StudentSignup} />
     <Route path="/student-dashboard" component={StudentDashboard} />
     <Route path="/student/dashboard" component={StudentDashboard} />
     <Route path="/admin/login" component={Login} />
     <Route path="/club-admin/login" component={ClubAdminLogin} />
+    <Route path="/club-admin/forgot-password" component={ClubAdminForgotPassword} />
     <Route path="/dashboard" component={Dashboard} />
     <Route path="/club-admin" component={ClubAdmin} />
     <Route path="/clubs" component={Clubs} />

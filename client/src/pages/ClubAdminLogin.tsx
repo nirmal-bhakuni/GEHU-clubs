@@ -147,6 +147,15 @@ export default function ClubAdminLogin() {
               required
               disabled={loginMutation.isPending}
             />
+            <div className="text-right">
+              <button
+                type="button"
+                className="text-sm text-primary hover:underline"
+                onClick={() => setLocation("/club-admin/forgot-password")}
+              >
+                Forgot Password?
+              </button>
+            </div>
           </div>
 
           {/* Interactive Captcha */}
