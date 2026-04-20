@@ -1122,7 +1122,14 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.json({ success: true, message: "If the account exists, OTP will be sent to registered email." });
       }
 
-      const adminEmail = String(admin.email || "").trim();
+      // Try to get email from admin first, then fall back to club
+      let adminEmail = String(admin.email || "").trim();
+      if (!adminEmail) {
+        // Fetch club and get email from there
+        const club = await Club.findOne({ id: admin.clubId });
+        adminEmail = String(club?.email || "").trim();
+      }
+      
       if (!adminEmail) {
         return res.status(400).json({ error: "No email found for this club admin. Contact university admin." });
       }
