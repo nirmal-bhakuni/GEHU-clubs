@@ -48,7 +48,13 @@ if (process.env.MONGO_URI) {
   try {
     sessionStore = MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
-      collectionName: "sessions"
+      collectionName: "sessions",
+      touchAfter: 24 * 3600, // Lazy session update - only update if 24h has passed
+      stringify: false
+    });
+    // Add error handler for session store
+    sessionStore.on('error', (err: any) => {
+      console.error("MongoDB session store error:", err);
     });
   } catch (error) {
     console.error("Failed to initialize MongoDB session store, falling back to memory store:", error);
@@ -94,6 +100,13 @@ app.use(
     // Global error handler (placed AFTER routes)
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       console.error("Unhandled route error:", err);
+      
+      // Check if headers have already been sent
+      if (res.headersSent) {
+        console.error("Headers already sent, cannot send error response");
+        return;
+      }
+      
       res.status(500).json({ 
         error: "Internal Server Error",
         message: process.env.NODE_ENV === "development" ? err.message : undefined 
