@@ -3712,6 +3712,7 @@ export default function ClubAdmin() {
                     updateClubMutation.mutate({
                       clubData: {
                         name: formData.get("name") as string,
+                        email: formData.get("email") as string,
                         description: formData.get("description") as string,
                         category: formData.get("category") as string,
                         isHighlighted: formData.get("isHighlighted") === "on",
@@ -3775,6 +3776,19 @@ export default function ClubAdmin() {
                       placeholder="Enter club name..."
                       required
                       maxLength={100}
+                    />
+                  </div>
+
+                  {/* Club Email */}
+                  <div>
+                    <Label htmlFor="email">Club Email</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      defaultValue={displayClub?.email || ""}
+                      placeholder="Enter club email address..."
+                      required
                     />
                   </div>
 
