@@ -104,8 +104,8 @@ export default function ClubAdminLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center bg-background px-2 sm:px-4">
+      <Card className="w-full max-w-md p-4 sm:p-8 sm:rounded-2xl rounded-none shadow-none sm:shadow-md border-0 sm:border">
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
             <Users className="w-8 h-8 text-primary-foreground" />

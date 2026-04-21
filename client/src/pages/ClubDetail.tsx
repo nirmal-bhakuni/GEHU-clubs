@@ -448,7 +448,7 @@ export default function ClubDetail() {
 
   return (
     <TooltipProvider>
-      <div className="w-full max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-8">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 md:px-8 py-6 sm:py-8 space-y-8">
         {/* Cover Image */}
         {club.coverImageUrl && (
           <div className="relative w-full h-64 md:h-80 overflow-hidden rounded-2xl border border-border/60 shadow-lg">

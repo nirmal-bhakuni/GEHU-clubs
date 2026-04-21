@@ -191,8 +191,8 @@ export default function StudentLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-16 px-4">
-      <Card className="w-full max-w-md p-8">
+    <div className="min-h-screen flex items-center justify-center py-8 px-2 sm:py-16 sm:px-4">
+      <Card className="w-full max-w-md p-4 sm:p-8 sm:rounded-2xl rounded-none shadow-none sm:shadow-md border-0 sm:border">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold mb-2">Student Login</h1>
           <p className="text-muted-foreground font-body">
