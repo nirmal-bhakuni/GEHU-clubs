@@ -62,7 +62,7 @@ export default function Footer() {
   return (
     <footer className="bg-card border-t border-card-border">
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8 overflow-x-auto">
           <div>
             <h3 className="font-semibold text-lg mb-4">About</h3>
             <p className="text-sm text-muted-foreground font-body leading-relaxed">

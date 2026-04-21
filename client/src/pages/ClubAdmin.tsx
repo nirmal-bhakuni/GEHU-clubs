@@ -1921,7 +1921,7 @@ export default function ClubAdmin() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 overflow-x-auto">
           {stats.map((stat, index) => (
             <Card key={index} className="p-6">
               <div className="flex items-center justify-between">
@@ -1943,7 +1943,7 @@ export default function ClubAdmin() {
         </div>
 
         {/* Club Health & Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 overflow-x-auto">
           {/* Club Health Score */}
           <Card className="p-6">
             <h3 className="font-semibold mb-4 flex items-center gap-2">
@@ -2072,7 +2072,7 @@ export default function ClubAdmin() {
 
         <div ref={adminSectionsRef}>
         <Tabs value={activeTab} onValueChange={club?.isFrozen ? undefined : setActiveTab} className="space-y-6">
-          <TabsList className={`grid w-full grid-cols-11 relative transition-all duration-300 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
+          <TabsList className={`flex w-full overflow-x-auto whitespace-nowrap relative transition-all duration-300 rounded-xl border border-border/70 bg-muted/60 p-1 shadow-sm md:grid md:grid-cols-11 ${club?.isFrozen ? 'opacity-50 pointer-events-none' : ''}`}>
             <TabsTrigger value="dashboard" disabled={club?.isFrozen}>Dashboard</TabsTrigger>
             <TabsTrigger value="events" disabled={club?.isFrozen}>Events</TabsTrigger>
             <TabsTrigger value="attendance" disabled={club?.isFrozen}>Attendance</TabsTrigger>

@@ -873,7 +873,7 @@ export default function ClubDetail() {
 
       {/* Tabbed Content */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6 rounded-xl border border-border/70 bg-muted/60 p-1 shadow-sm">
+        <TabsList className="flex w-full overflow-x-auto whitespace-nowrap rounded-xl border border-border/70 bg-muted/60 p-1 shadow-sm md:grid md:grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="club-info">Club Info</TabsTrigger>
