@@ -53,7 +53,7 @@ if (process.env.MONGO_URI) {
       stringify: false
     });
     // Add error handler for session store
-    sessionStore.on('error', (err: any) => {
+    (sessionStore as any).on?.('error', (err: any) => {
       console.error("MongoDB session store error:", err);
     });
   } catch (error) {

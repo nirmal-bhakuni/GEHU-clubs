@@ -30,6 +30,11 @@ import { ChatReadState } from "./models/ChatReadState";
 import { v2 as cloudinary } from "cloudinary";
 import { notifyAnnouncement, notifyNewEvent, sendEmail } from "./services/emailService";
 import { isMongoDBConnected } from "./index";
+import jwt from "jsonwebtoken";
+import { z } from "zod";
+import { Faculty } from "./models/Faculty";
+import { Drive } from "./models/Drive";
+import { Submission } from "./models/Submission";
 
 const uploadsDirCandidates = [
   path.join(process.cwd(), "uploads"),
@@ -650,6 +655,95 @@ async function requireClubOwnership(req: Request, res: Response, next: NextFunct
   } catch (error) {
     console.error("Club ownership check error:", error);
     res.status(500).json({ error: "Authorization check failed" });
+  }
+}
+
+const FACULTY_ID_PROOF_MIME_TYPES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+const FACULTY_ID_PROOF_EXTENSIONS = new Set([".pdf", ".jpg", ".jpeg", ".png", ".webp"]);
+const DRIVE_FILE_EXT_TO_MIME: Record<string, string[]> = {
+  pdf: ["application/pdf"],
+  jpg: ["image/jpeg"],
+  jpeg: ["image/jpeg"],
+  png: ["image/png"],
+  webp: ["image/webp"],
+};
+
+const facultyRegisterSchema = z.object({
+  fullName: z.string().min(2).max(120),
+  email: z.string().email(),
+  department: z.string().min(2).max(120),
+  contactNumber: z.string().regex(/^\+?[0-9]{10,15}$/),
+  password: z.string().min(8).max(128),
+});
+
+const facultyLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+const driveCreateSchema = z.object({
+  title: z.string().min(3).max(200),
+  description: z.string().max(2000).optional().default(""),
+  deadline: z.string().datetime(),
+  allowedFileTypes: z.array(z.string().min(1)).min(1),
+  maxFileSize: z.number().int().positive().max(25 * 1024 * 1024),
+  allowMultipleSubmissions: z.boolean().optional().default(true),
+});
+
+const submissionSchema = z.object({
+  name: z.string().min(2).max(120),
+  section: z.string().min(1).max(40),
+  department: z.string().min(2).max(120),
+  year: z.number().int().min(1).max(8),
+  eventCategory: z.string().min(2).max(100),
+});
+
+function getFacultyJwtSecret() {
+  return process.env.FACULTY_JWT_SECRET || process.env.SESSION_SECRET || "faculty-dev-secret";
+}
+
+function parseFacultyBearerToken(req: Request): string | null {
+  const authHeader = String(req.headers.authorization || "");
+  if (!authHeader.startsWith("Bearer ")) return null;
+  return authHeader.slice(7).trim();
+}
+
+function isAllowedFacultyIdProof(file: Express.Multer.File) {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  return FACULTY_ID_PROOF_MIME_TYPES.has(file.mimetype) && FACULTY_ID_PROOF_EXTENSIONS.has(extension);
+}
+
+function normalizeAllowedFileTypes(rawTypes: string[]) {
+  const normalized = Array.from(
+    new Set(
+      rawTypes
+        .map((type) => String(type).trim().toLowerCase().replace(/^\./, ""))
+        .filter((type) => type in DRIVE_FILE_EXT_TO_MIME),
+    ),
+  );
+  return normalized;
+}
+
+async function requireFacultyAuth(req: Request, res: Response, next: NextFunction) {
+  try {
+    const token = parseFacultyBearerToken(req);
+    if (!token) return res.status(401).json({ error: "Faculty token is required" });
+
+    const payload = jwt.verify(token, getFacultyJwtSecret()) as { facultyId?: string; role?: string };
+    if (!payload?.facultyId || payload.role !== "faculty") {
+      return res.status(401).json({ error: "Invalid faculty token" });
+    }
+
+    const faculty = await Faculty.findOne({ id: payload.facultyId }).select("-password");
+    if (!faculty) return res.status(401).json({ error: "Faculty not found" });
+    if (faculty.status !== "approved") {
+      return res.status(403).json({ error: "Faculty is not approved" });
+    }
+
+    (req as any).faculty = faculty;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: "Unauthorized faculty access" });
   }
 }
 
@@ -5773,6 +5867,509 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error: any) {
       console.error("Error deleting student:", error);
       res.status(500).json({ error: "Failed to delete student" });
+    }
+  });
+
+  app.post("/api/faculty/register", upload.single("idProof"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "idProof file is required" });
+      }
+
+      if (!isAllowedFacultyIdProof(req.file)) {
+        return res.status(400).json({ error: "Only PDF/JPG/PNG/WEBP files are allowed for idProof" });
+      }
+
+      const parsed = facultyRegisterSchema.safeParse({
+        fullName: req.body.fullName,
+        email: String(req.body.email || "").toLowerCase().trim(),
+        department: req.body.department,
+        contactNumber: req.body.contactNumber,
+        password: req.body.password,
+      });
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid request data" });
+      }
+
+      const existingFaculty = await Faculty.findOne({ email: parsed.data.email }).select("id");
+      if (existingFaculty) {
+        return res.status(409).json({ error: "Faculty email already exists" });
+      }
+
+      const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+      const idProofUrl = await getUploadedFileUrl(req.file, "gehu-clubs/faculty-id-proofs");
+
+      const faculty = await Faculty.create({
+        fullName: parsed.data.fullName,
+        email: parsed.data.email,
+        department: parsed.data.department,
+        contactNumber: parsed.data.contactNumber,
+        password: passwordHash,
+        idProofUrl,
+        status: "pending",
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "Faculty registered successfully. Awaiting admin approval.",
+        faculty: {
+          id: faculty.id,
+          fullName: faculty.fullName,
+          email: faculty.email,
+          department: faculty.department,
+          contactNumber: faculty.contactNumber,
+          status: faculty.status,
+        },
+      });
+    } catch (error) {
+      console.error("Faculty registration failed:", error);
+      res.status(500).json({ error: "Failed to register faculty" });
+    }
+  });
+
+  app.post("/api/faculty/login", async (req: Request, res: Response) => {
+    try {
+      const parsed = facultyLoginSchema.safeParse({
+        email: String(req.body.email || "").toLowerCase().trim(),
+        password: req.body.password,
+      });
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid email or password format" });
+      }
+
+      const faculty = await Faculty.findOne({ email: parsed.data.email });
+      if (!faculty) return res.status(401).json({ error: "Invalid credentials" });
+
+      const validPassword = await bcrypt.compare(parsed.data.password, faculty.password);
+      if (!validPassword) return res.status(401).json({ error: "Invalid credentials" });
+
+      if (faculty.status !== "approved") {
+        return res.status(403).json({
+          error:
+            faculty.status === "rejected"
+              ? `Faculty registration rejected${faculty.rejectionReason ? `: ${faculty.rejectionReason}` : ""}`
+              : "Faculty registration is pending approval",
+        });
+      }
+
+      const token = jwt.sign(
+        { facultyId: faculty.id, role: "faculty", email: faculty.email },
+        getFacultyJwtSecret(),
+        { expiresIn: "7d" },
+      );
+
+      res.json({
+        success: true,
+        token,
+        faculty: {
+          id: faculty.id,
+          fullName: faculty.fullName,
+          email: faculty.email,
+          department: faculty.department,
+          contactNumber: faculty.contactNumber,
+          status: faculty.status,
+        },
+      });
+    } catch (error) {
+      console.error("Faculty login failed:", error);
+      res.status(500).json({ error: "Failed to login faculty" });
+    }
+  });
+
+  app.get("/api/faculty/me", requireFacultyAuth, async (req: Request, res: Response) => {
+    const faculty = (req as any).faculty;
+    res.json({ faculty });
+  });
+
+  app.get("/api/participation", requireFacultyAuth, async (req: Request, res: Response) => {
+    try {
+      const department = String(req.query.department || "").trim();
+      const section = String(req.query.section || "").trim();
+      const year = String(req.query.year || "").trim();
+      const semester = String(req.query.semester || "").trim();
+      const category = String(req.query.category || "").trim();
+      const club = String(req.query.club || "").trim();
+      const eventName = String(req.query.eventName || "").trim();
+      const eventStatus = String(req.query.eventStatus || "").trim().toLowerCase();
+      const dateFrom = String(req.query.dateFrom || "").trim();
+      const dateTo = String(req.query.dateTo || "").trim();
+      const time = String(req.query.time || "").trim();
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const limit = Math.min(100, Math.max(5, Number(req.query.limit) || 20));
+
+      const filter: Record<string, any> = {
+        status: { $ne: "rejected" },
+      };
+      if (department) filter.department = department;
+      if (section) filter.section = section;
+      if (year) filter.year = year;
+      if (semester) filter.semester = semester;
+      if (category) filter.eventCategory = category;
+      if (club) filter.clubName = club;
+      if (eventName) filter.eventTitle = eventName;
+      if (time) filter.eventTime = { $regex: time.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+      if (dateFrom || dateTo) {
+        filter.registeredAt = {};
+        if (dateFrom) filter.registeredAt.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
+        if (dateTo) filter.registeredAt.$lte = new Date(`${dateTo}T23:59:59.999Z`);
+      }
+
+      const allRows = await EventRegistration.find(filter).sort({ registeredAt: -1 }).lean();
+      const statusFilteredRows =
+        eventStatus === "upcoming" || eventStatus === "past"
+          ? allRows.filter((row: any) => {
+              const eventDate = new Date(String(row.eventDate || ""));
+              if (Number.isNaN(eventDate.getTime())) return false;
+              return eventStatus === "upcoming" ? eventDate >= new Date() : eventDate < new Date();
+            })
+          : allRows;
+      const total = statusFilteredRows.length;
+      const rows = statusFilteredRows.slice((page - 1) * limit, page * limit);
+
+      const participationCountAggregation = await EventRegistration.aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: "$enrollmentNumber",
+            participationCount: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const participationByEnrollment = new Map(
+        participationCountAggregation.map((entry: any) => [String(entry._id), Number(entry.participationCount)]),
+      );
+
+      const items = rows.map((row: any) => ({
+        id: row.id,
+        studentName: row.studentName,
+        department: row.department,
+        section: row.section,
+        year: row.year,
+        semester: row.semester || "",
+        eventName: row.eventTitle,
+        eventCategory: row.eventCategory || "",
+        club: row.clubName,
+        date: row.eventDate,
+        time: row.eventTime,
+        registeredAt: row.registeredAt,
+        participationCount: participationByEnrollment.get(String(row.enrollmentNumber)) || 0,
+      }));
+
+      const [summaryAgg, departmentAgg, categoryAgg, timelineAgg] = await Promise.all([
+        EventRegistration.aggregate([
+          { $match: filter },
+          {
+            $group: {
+              _id: null,
+              totalParticipations: { $sum: 1 },
+              uniqueStudentsSet: { $addToSet: "$enrollmentNumber" },
+            },
+          },
+        ]),
+        EventRegistration.aggregate([
+          { $match: filter },
+          { $group: { _id: "$department", value: { $sum: 1 } } },
+          { $sort: { value: -1 } },
+        ]),
+        EventRegistration.aggregate([
+          { $match: filter },
+          { $group: { _id: "$eventCategory", value: { $sum: 1 } } },
+          { $sort: { value: -1 } },
+        ]),
+        EventRegistration.aggregate([
+          { $match: filter },
+          {
+            $group: {
+              _id: {
+                $dateToString: { format: "%Y-%m-%d", date: "$registeredAt" },
+              },
+              value: { $sum: 1 },
+            },
+          },
+          { $sort: { _id: 1 } },
+        ]),
+      ]);
+
+      const mostActiveStudentAgg = await EventRegistration.aggregate([
+        { $match: filter },
+        { $group: { _id: "$studentName", value: { $sum: 1 } } },
+        { $sort: { value: -1 } },
+        { $limit: 1 },
+      ]);
+
+      const summary = {
+        totalParticipations: Number(summaryAgg[0]?.totalParticipations || 0),
+        uniqueStudents: Number(summaryAgg[0]?.uniqueStudentsSet?.length || 0),
+        mostActiveStudent: String(mostActiveStudentAgg[0]?._id || "N/A"),
+        mostPopularCategory: String(categoryAgg[0]?._id || "N/A"),
+      };
+
+      res.json({
+        items,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+        },
+        analytics: {
+          summary,
+          byDepartment: departmentAgg.map((d: any) => ({ name: d._id || "Unknown", value: d.value })),
+          byCategory: categoryAgg.map((c: any) => ({ name: c._id || "Unknown", value: c.value })),
+          byTimeline: timelineAgg.map((t: any) => ({ name: t._id, value: t.value })),
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch participation analytics:", error);
+      res.status(500).json({ error: "Failed to fetch participation analytics" });
+    }
+  });
+
+  app.get("/api/admin/faculty", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const status = String(req.query.status || "").trim();
+      const query = status && ["pending", "approved", "rejected"].includes(status) ? { status } : {};
+      const faculty = await Faculty.find(query).select("-password").sort({ createdAt: -1 });
+      res.json(faculty);
+    } catch (error) {
+      console.error("Failed to fetch faculty list:", error);
+      res.status(500).json({ error: "Failed to fetch faculty" });
+    }
+  });
+
+  app.put("/api/admin/faculty/:id/approve", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const faculty = await Faculty.findOneAndUpdate(
+        { id: req.params.id },
+        {
+          status: "approved",
+          rejectionReason: "",
+          approvedAt: new Date(),
+          rejectedAt: null,
+        },
+        { new: true },
+      ).select("-password");
+
+      if (!faculty) return res.status(404).json({ error: "Faculty not found" });
+
+      await sendEmail({
+        to: faculty.email,
+        subject: "Faculty Registration Approved",
+        text: `Hello ${faculty.fullName}, your faculty account has been approved. You can now log in.`,
+      });
+
+      res.json({ success: true, faculty });
+    } catch (error) {
+      console.error("Failed to approve faculty:", error);
+      res.status(500).json({ error: "Failed to approve faculty" });
+    }
+  });
+
+  app.put("/api/admin/faculty/:id/reject", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const reason = String(req.body.reason || "").trim();
+      const faculty = await Faculty.findOneAndUpdate(
+        { id: req.params.id },
+        {
+          status: "rejected",
+          rejectionReason: reason,
+          rejectedAt: new Date(),
+          approvedAt: null,
+        },
+        { new: true },
+      ).select("-password");
+
+      if (!faculty) return res.status(404).json({ error: "Faculty not found" });
+
+      await sendEmail({
+        to: faculty.email,
+        subject: "Faculty Registration Rejected",
+        text: `Hello ${faculty.fullName}, your faculty account was rejected.${reason ? ` Reason: ${reason}` : ""}`,
+      });
+
+      res.json({ success: true, faculty });
+    } catch (error) {
+      console.error("Failed to reject faculty:", error);
+      res.status(500).json({ error: "Failed to reject faculty" });
+    }
+  });
+
+  app.post("/api/drive/create", requireFacultyAuth, async (req: Request, res: Response) => {
+    try {
+      const parsed = driveCreateSchema.safeParse({
+        title: req.body.title,
+        description: req.body.description,
+        deadline: req.body.deadline,
+        allowedFileTypes: req.body.allowedFileTypes || [],
+        maxFileSize: Number(req.body.maxFileSize),
+        allowMultipleSubmissions:
+          typeof req.body.allowMultipleSubmissions === "boolean"
+            ? req.body.allowMultipleSubmissions
+            : String(req.body.allowMultipleSubmissions || "").toLowerCase() === "true",
+      });
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid request data" });
+
+      const allowedFileTypes = normalizeAllowedFileTypes(parsed.data.allowedFileTypes);
+      if (!allowedFileTypes.length) return res.status(400).json({ error: "No supported allowedFileTypes provided" });
+
+      const faculty = (req as any).faculty;
+      const drive = await Drive.create({
+        title: parsed.data.title,
+        description: parsed.data.description,
+        deadline: new Date(parsed.data.deadline),
+        allowedFileTypes,
+        maxFileSize: parsed.data.maxFileSize,
+        allowMultipleSubmissions: parsed.data.allowMultipleSubmissions,
+        createdBy: faculty.id,
+      });
+
+      res.status(201).json({
+        success: true,
+        drive,
+        publicLink: `/drive/${drive.id}/submit`,
+      });
+    } catch (error) {
+      console.error("Failed to create drive:", error);
+      res.status(500).json({ error: "Failed to create drive" });
+    }
+  });
+
+  app.get("/api/faculty/drives", requireFacultyAuth, async (req: Request, res: Response) => {
+    try {
+      const faculty = (req as any).faculty;
+      const drives = await Drive.find({ createdBy: faculty.id }).sort({ createdAt: -1 });
+      res.json(drives);
+    } catch (error) {
+      console.error("Failed to list drives:", error);
+      res.status(500).json({ error: "Failed to fetch drives" });
+    }
+  });
+
+  app.get("/api/drive/:driveId", async (req: Request, res: Response) => {
+    try {
+      const drive = await Drive.findOne({ id: req.params.driveId }).select("-createdBy");
+      if (!drive) return res.status(404).json({ error: "Drive not found" });
+      res.json(drive);
+    } catch (error) {
+      console.error("Failed to get drive:", error);
+      res.status(500).json({ error: "Failed to fetch drive" });
+    }
+  });
+
+  app.post("/api/drive/:driveId/submit", upload.single("certificateFile"), async (req: Request, res: Response) => {
+    try {
+      const drive = await Drive.findOne({ id: req.params.driveId, isActive: true });
+      if (!drive) return res.status(404).json({ error: "Drive not found" });
+      if (new Date() > new Date(drive.deadline)) return res.status(400).json({ error: "Drive deadline has passed" });
+      if (!req.file) return res.status(400).json({ error: "certificateFile is required" });
+
+      const parsed = submissionSchema.safeParse({
+        name: req.body.name,
+        section: req.body.section,
+        department: req.body.department,
+        year: Number(req.body.year),
+        eventCategory: req.body.eventCategory,
+      });
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid request data" });
+
+      const fileExt = path.extname(req.file.originalname || "").toLowerCase().replace(".", "");
+      if (!drive.allowedFileTypes.includes(fileExt)) {
+        return res.status(400).json({ error: `Invalid file type. Allowed: ${drive.allowedFileTypes.join(", ")}` });
+      }
+      if (req.file.size > drive.maxFileSize) {
+        return res.status(400).json({ error: `File exceeds max size limit (${Math.round(drive.maxFileSize / (1024 * 1024))}MB)` });
+      }
+
+      if (!drive.allowMultipleSubmissions) {
+        const existingSubmission = await Submission.findOne({
+          driveId: drive.id,
+          "studentDetails.name": parsed.data.name,
+          "studentDetails.section": parsed.data.section,
+          "studentDetails.department": parsed.data.department,
+          "studentDetails.year": parsed.data.year,
+        });
+        if (existingSubmission) {
+          return res.status(409).json({ error: "Multiple submissions are not allowed for this drive" });
+        }
+      }
+
+      const certificateUrl = await getUploadedFileUrl(req.file, "gehu-clubs/drive-submissions");
+      const submission = await Submission.create({
+        driveId: drive.id,
+        studentDetails: {
+          name: parsed.data.name,
+          section: parsed.data.section,
+          department: parsed.data.department,
+          year: parsed.data.year,
+        },
+        eventCategory: parsed.data.eventCategory,
+        certificateUrl,
+        status: "pending",
+        submittedAt: new Date(),
+      });
+
+      res.status(201).json({ success: true, submissionId: submission.id });
+    } catch (error) {
+      console.error("Failed to submit certificate:", error);
+      res.status(500).json({ error: "Failed to submit certificate" });
+    }
+  });
+
+  app.get("/api/drive/:driveId/submissions", requireFacultyAuth, async (req: Request, res: Response) => {
+    try {
+      const faculty = (req as any).faculty;
+      const drive = await Drive.findOne({ id: req.params.driveId, createdBy: faculty.id });
+      if (!drive) return res.status(404).json({ error: "Drive not found" });
+      const submissions = await Submission.find({ driveId: drive.id }).sort({ submittedAt: -1 });
+      res.json(submissions);
+    } catch (error) {
+      console.error("Failed to fetch drive submissions:", error);
+      res.status(500).json({ error: "Failed to fetch submissions" });
+    }
+  });
+
+  app.put("/api/submission/:id/verify", requireFacultyAuth, async (req: Request, res: Response) => {
+    try {
+      const faculty = (req as any).faculty;
+      const submission = await Submission.findOne({ id: req.params.id });
+      if (!submission) return res.status(404).json({ error: "Submission not found" });
+
+      const drive = await Drive.findOne({ id: submission.driveId, createdBy: faculty.id });
+      if (!drive) return res.status(403).json({ error: "You are not authorized to verify this submission" });
+
+      const updated = await Submission.findOneAndUpdate(
+        { id: req.params.id },
+        { status: "verified", rejectionReason: "", reviewedAt: new Date(), reviewedBy: faculty.id },
+        { new: true },
+      );
+      res.json({ success: true, submission: updated });
+    } catch (error) {
+      console.error("Failed to verify submission:", error);
+      res.status(500).json({ error: "Failed to verify submission" });
+    }
+  });
+
+  app.put("/api/submission/:id/reject", requireFacultyAuth, async (req: Request, res: Response) => {
+    try {
+      const faculty = (req as any).faculty;
+      const reason = String(req.body.reason || "").trim();
+      const submission = await Submission.findOne({ id: req.params.id });
+      if (!submission) return res.status(404).json({ error: "Submission not found" });
+
+      const drive = await Drive.findOne({ id: submission.driveId, createdBy: faculty.id });
+      if (!drive) return res.status(403).json({ error: "You are not authorized to reject this submission" });
+
+      const updated = await Submission.findOneAndUpdate(
+        { id: req.params.id },
+        { status: "rejected", rejectionReason: reason, reviewedAt: new Date(), reviewedBy: faculty.id },
+        { new: true },
+      );
+      res.json({ success: true, submission: updated });
+    } catch (error) {
+      console.error("Failed to reject submission:", error);
+      res.status(500).json({ error: "Failed to reject submission" });
     }
   });
 

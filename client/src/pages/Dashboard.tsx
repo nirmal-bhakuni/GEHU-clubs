@@ -1180,13 +1180,14 @@ export default function Dashboard() {
     },
   });
 
-  const sidebarItems = [
+  const sidebarItems: Array<{ id: string; label: string; icon: any; path?: string }> = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "clubs", label: "Clubs Management", icon: Building2 },
     { id: "events", label: "Events Management", icon: Calendar },
     { id: "users", label: "Users", icon: Users },
     { id: "analytics", label: "Analytics", icon: BarChart3 },
     { id: "announcements", label: "Announcements", icon: Megaphone },
+    { id: "facultyApproval", label: "Faculty Approval", icon: UserCheck, path: "/admin/faculty" },
   ];
 
   const globalStats = [
@@ -3627,7 +3628,13 @@ export default function Dashboard() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => {
+                    if (item.path) {
+                      setLocation(item.path);
+                      return;
+                    }
+                    setActiveTab(item.id);
+                  }}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
                     activeTab === item.id
                       ? "bg-primary text-primary-foreground shadow-sm"

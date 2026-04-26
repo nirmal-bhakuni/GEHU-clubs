@@ -54,7 +54,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     {
       key: "admin",
       title: "Admin / Faculty Actions",
-      subtitle: "Administrative and club management",
+      subtitle: "Faculty access",
       actionIcon: Shield,
       items: [
         {
@@ -68,6 +68,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           label: "Club Admin Dashboard",
           icon: Users,
           description: "Open club admin dashboard"
+        },
+        {
+          path: "/faculty/register",
+          label: "Faculty Register",
+          icon: UserPlus,
+          description: "Create a new faculty account"
+        },
+        {
+          path: "/faculty/login",
+          label: "Faculty Login",
+          icon: Building2,
+          description: "Sign in as approved faculty"
         }
       ]
     }
