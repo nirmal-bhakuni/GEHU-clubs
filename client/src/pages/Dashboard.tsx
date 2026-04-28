@@ -317,6 +317,11 @@ export default function Dashboard() {
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const { admin, isAuthenticated, isLoading: authLoading } = useAuth();
+  const [universityProfileForm, setUniversityProfileForm] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+  });
   const { toast } = useToast();
   const [targetForAnnouncement, setTargetForAnnouncement] = useState<string>("all");
   const [studentSearch, setStudentSearch] = useState("");
@@ -348,6 +353,14 @@ export default function Dashboard() {
   ];
   const trimmedClubLoginId = clubLoginId.trim();
   const suggestionBase = (trimmedClubLoginId || clubForm.name).trim();
+
+  useEffect(() => {
+    setUniversityProfileForm({
+      fullName: String((admin as any)?.fullName || ""),
+      email: String((admin as any)?.email || ""),
+      phone: String((admin as any)?.phone || ""),
+    });
+  }, [admin]);
 
   const { data: events = [] } = useQuery<Event[]>({
     queryKey: ["api", "events"],
@@ -1180,8 +1193,30 @@ export default function Dashboard() {
     },
   });
 
+  const updateUniversityProfileMutation = useMutation({
+    mutationFn: async (payload: { fullName: string; email: string; phone: string }) => {
+      const res = await apiRequest("PATCH", "/api/admin/profile", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({
+        title: "Profile updated",
+        description: "Your email is saved and will be used for OTP recovery.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update failed",
+        description: error?.message || "Could not update profile.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const sidebarItems: Array<{ id: string; label: string; icon: any; path?: string }> = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "profile", label: "My Profile", icon: Users },
     { id: "clubs", label: "Clubs Management", icon: Building2 },
     { id: "events", label: "Events Management", icon: Calendar },
     { id: "users", label: "Users", icon: Users },
@@ -1909,6 +1944,84 @@ export default function Dashboard() {
                 </div>
               </Card>
             </div>
+          </div>
+        );
+
+      case "profile":
+        return (
+          <div className="space-y-6">
+            <Card className="border border-border/70 bg-card/80 p-6">
+              <h2 className="text-2xl font-semibold tracking-tight">University Admin Profile</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Add your email here to receive forgot-password OTP.
+              </p>
+
+              <form
+                className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+
+                  const fullName = universityProfileForm.fullName.trim();
+                  const email = universityProfileForm.email.trim();
+                  const phone = universityProfileForm.phone.trim();
+
+                  if (!email) {
+                    toast({
+                      title: "Email required",
+                      description: "Please add your email for OTP recovery.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
+                  updateUniversityProfileMutation.mutate({ fullName, email, phone });
+                }}
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="university-admin-fullname">Full Name</Label>
+                  <Input
+                    id="university-admin-fullname"
+                    value={universityProfileForm.fullName}
+                    onChange={(e) =>
+                      setUniversityProfileForm((prev) => ({ ...prev, fullName: e.target.value }))
+                    }
+                    placeholder="Enter full name"
+                    disabled={updateUniversityProfileMutation.isPending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="university-admin-email">Email for OTP</Label>
+                  <Input
+                    id="university-admin-email"
+                    type="email"
+                    value={universityProfileForm.email}
+                    onChange={(e) =>
+                      setUniversityProfileForm((prev) => ({ ...prev, email: e.target.value }))
+                    }
+                    placeholder="admin@gehu.ac.in"
+                    required
+                    disabled={updateUniversityProfileMutation.isPending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="university-admin-phone">Phone</Label>
+                  <Input
+                    id="university-admin-phone"
+                    value={universityProfileForm.phone}
+                    onChange={(e) =>
+                      setUniversityProfileForm((prev) => ({ ...prev, phone: e.target.value }))
+                    }
+                    placeholder="Enter phone number"
+                    disabled={updateUniversityProfileMutation.isPending}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Button type="submit" disabled={updateUniversityProfileMutation.isPending}>
+                    {updateUniversityProfileMutation.isPending ? "Saving..." : "Save Profile"}
+                  </Button>
+                </div>
+              </form>
+            </Card>
           </div>
         );
 

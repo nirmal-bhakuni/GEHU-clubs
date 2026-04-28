@@ -24,6 +24,7 @@ const ClubAdmin = lazy(() => import("@/pages/ClubAdmin"));
 const ClubAdminLogin = lazy(() => import("@/pages/ClubAdminLogin"));
 const ClubAdminForgotPassword = lazy(() => import("@/pages/ClubAdminForgotPassword"));
 const Login = lazy(() => import("@/pages/Login"));
+const AdminForgotPassword = lazy(() => import("@/pages/AdminForgotPassword"));
 const StudentLogin = lazy(() => import("@/pages/StudentLogin"));
 const StudentForgotPassword = lazy(() => import("@/pages/StudentForgotPassword"));
 const StudentSignup = lazy(() => import("@/pages/StudentSignup"));
@@ -31,6 +32,7 @@ const StudentDashboard = lazy(() => import("@/pages/StudentDashboard"));
 const StudentProfile = lazy(() => import("@/pages/StudentProfile"));
 const FacultyRegister = lazy(() => import("@/pages/FacultyRegister"));
 const FacultyLogin = lazy(() => import("@/pages/FacultyLogin"));
+const FacultyForgotPassword = lazy(() => import("@/pages/FacultyForgotPassword"));
 const FacultyDashboard = lazy(() => import("@/pages/FacultyDashboard"));
 const AdminFacultyDashboard = lazy(() => import("@/pages/AdminFacultyDashboard"));
 const DriveSubmission = lazy(() => import("@/pages/DriveSubmission"));
@@ -57,10 +59,12 @@ const Router = () => (
     <Route path="/student/dashboard" component={StudentDashboard} />
     <Route path="/faculty/register" component={FacultyRegister} />
     <Route path="/faculty/login" component={FacultyLogin} />
+    <Route path="/faculty/forgot-password" component={FacultyForgotPassword} />
     <Route path="/faculty/dashboard" component={FacultyDashboard} />
     <Route path="/admin/faculty" component={AdminFacultyDashboard} />
     <Route path="/drive/:driveId/submit" component={DriveSubmission} />
     <Route path="/admin/login" component={Login} />
+    <Route path="/admin/forgot-password" component={AdminForgotPassword} />
     <Route path="/club-admin/login" component={ClubAdminLogin} />
     <Route path="/club-admin/forgot-password" component={ClubAdminForgotPassword} />
     <Route path="/dashboard" component={Dashboard} />

@@ -7,6 +7,7 @@ const submissionSchema = new mongoose.Schema(
     driveId: { type: String, required: true, index: true },
     studentDetails: {
       name: { type: String, required: true, trim: true },
+      course: { type: String, required: true, trim: true },
       section: { type: String, required: true, trim: true },
       department: { type: String, required: true, trim: true },
       year: { type: Number, required: true },

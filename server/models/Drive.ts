@@ -10,6 +10,8 @@ const driveSchema = new mongoose.Schema(
     allowedFileTypes: [{ type: String, required: true }],
     maxFileSize: { type: Number, required: true }, // bytes
     createdBy: { type: String, required: true, index: true }, // facultyId
+    targetCourse: { type: String, required: true, trim: true, index: true },
+    targetSection: { type: String, required: true, trim: true, index: true },
     allowMultipleSubmissions: { type: Boolean, default: true },
     isActive: { type: Boolean, default: true },
   },
@@ -17,5 +19,6 @@ const driveSchema = new mongoose.Schema(
 );
 
 driveSchema.index({ createdBy: 1, createdAt: -1 });
+driveSchema.index({ targetCourse: 1, targetSection: 1, createdAt: -1 });
 
 export const Drive = mongoose.model("Drive", driveSchema);

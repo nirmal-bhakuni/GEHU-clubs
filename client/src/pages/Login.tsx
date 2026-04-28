@@ -135,6 +135,15 @@ export default function Login() {
               required
               data-testid="input-password"
             />
+            <div className="text-right">
+              <button
+                type="button"
+                className="text-sm text-primary hover:underline"
+                onClick={() => setLocation("/admin/forgot-password")}
+              >
+                Forgot Password?
+              </button>
+            </div>
           </div>
 
           {/* Interactive Captcha */}

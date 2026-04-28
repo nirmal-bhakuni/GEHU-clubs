@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
 import { 
   LayoutDashboard, 
   Building2, 
@@ -33,9 +32,21 @@ type Faculty = {
 export default function AdminFacultyDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { logoutMutation } = useAuth();
   const [status, setStatus] = useState<"pending" | "approved" | "rejected">("pending");
   const [reasons, setReasons] = useState<Record<string, string>>({});
+
+  const handleLogout = async () => {
+    try {
+      await apiRequest("POST", "/api/auth/logout");
+    } catch {
+      // Continue local cleanup even if API logout fails.
+    } finally {
+      localStorage.removeItem("currentAdmin");
+      localStorage.removeItem("adminCache");
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setLocation("/admin/login");
+    }
+  };
 
   const sidebarItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -116,7 +127,7 @@ export default function AdminFacultyDashboard() {
           <div className="mt-8 border-t border-border/70 pt-6">
             <Button
               variant="outline"
-              onClick={() => logoutMutation.mutate()}
+              onClick={handleLogout}
               className="w-full bg-background/70"
             >
               <LogOut className="w-4 h-4 mr-2" />

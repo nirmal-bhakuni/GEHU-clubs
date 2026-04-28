@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Activity, Loader2, Star, TrendingUp, Users } from "lucide-react";
+import { Activity, CheckCircle2, Clock3, Loader2, Star, TrendingUp, Users, XCircle } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
@@ -67,6 +67,8 @@ type Drive = {
   title: string;
   description: string;
   deadline: string;
+  targetCourse: string;
+  targetSection: string;
 };
 
 type Submission = {
@@ -159,10 +161,18 @@ export default function FacultyDashboard() {
     title: "",
     description: "",
     deadline: "",
+    targetCourse: "",
+    targetSection: "",
     allowedFileTypes: "pdf,jpg,png",
     maxFileSize: "5242880",
   });
   const [selectedDriveId, setSelectedDriveId] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
+  const [studentSort, setStudentSort] = useState<"recent" | "participations">("recent");
+  const [submissionStatusFilter, setSubmissionStatusFilter] = useState<"all" | "pending" | "verified" | "rejected">("all");
+  const [submissionsPage, setSubmissionsPage] = useState(1);
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<string[]>([]);
+  const [isBulkReviewing, setIsBulkReviewing] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -243,8 +253,65 @@ export default function FacultyDashboard() {
   }
 
   const tableRows = participationQuery.data?.items || [];
+  const filteredTableRows = useMemo(() => {
+    const term = studentSearch.trim().toLowerCase();
+    if (!term) return tableRows;
+    return tableRows.filter((row) =>
+      [row.studentName, row.eventName, row.club, row.department, row.section]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(term)),
+    );
+  }, [tableRows, studentSearch]);
+  const sortedTableRows = useMemo(() => {
+    const rows = [...filteredTableRows];
+    if (studentSort === "participations") {
+      rows.sort((a, b) => (b.participationCount || 0) - (a.participationCount || 0));
+      return rows;
+    }
+    rows.sort((a, b) => {
+      const aDate = new Date(`${a.date} ${a.time || ""}`).getTime();
+      const bDate = new Date(`${b.date} ${b.time || ""}`).getTime();
+      return bDate - aDate;
+    });
+    return rows;
+  }, [filteredTableRows, studentSort]);
   const analytics = participationQuery.data?.analytics;
   const gridThemeClass = theme === "dark" ? "ag-theme-quartz-dark" : "ag-theme-quartz";
+  const submissions = submissionsQuery.data || [];
+  const submissionSummary = useMemo(() => {
+    const summary = { total: submissions.length, pending: 0, verified: 0, rejected: 0 };
+    submissions.forEach((s) => {
+      if (s.status === "pending") summary.pending += 1;
+      if (s.status === "verified") summary.verified += 1;
+      if (s.status === "rejected") summary.rejected += 1;
+    });
+    return summary;
+  }, [submissions]);
+  const visibleSubmissions = useMemo(() => {
+    if (submissionStatusFilter === "all") return submissions;
+    return submissions.filter((s) => s.status === submissionStatusFilter);
+  }, [submissions, submissionStatusFilter]);
+  const submissionsPageSize = 8;
+  const totalSubmissionPages = Math.max(1, Math.ceil(visibleSubmissions.length / submissionsPageSize));
+  const paginatedVisibleSubmissions = useMemo(() => {
+    const start = (submissionsPage - 1) * submissionsPageSize;
+    return visibleSubmissions.slice(start, start + submissionsPageSize);
+  }, [visibleSubmissions, submissionsPage]);
+  const pendingIdsOnPage = useMemo(
+    () => paginatedVisibleSubmissions.filter((s) => s.status === "pending").map((s) => s.id),
+    [paginatedVisibleSubmissions],
+  );
+
+  useEffect(() => {
+    setSubmissionsPage(1);
+    setSelectedSubmissionIds([]);
+  }, [selectedDriveId, submissionStatusFilter]);
+
+  useEffect(() => {
+    if (submissionsPage > totalSubmissionPages) {
+      setSubmissionsPage(totalSubmissionPages);
+    }
+  }, [submissionsPage, totalSubmissionPages]);
 
   const participationColumns = useMemo<ColDef<ParticipationRow>[]>(() => [
     { field: "studentName", headerName: "Student Name", minWidth: 180, flex: 1.1 },
@@ -296,6 +363,53 @@ export default function FacultyDashboard() {
   const reloadDrives = () => drivesQuery.refetch();
   const reloadSubmissions = () => submissionsQuery.refetch();
 
+  const downloadParticipationCsv = () => {
+    if (sortedTableRows.length === 0) {
+      toast({ title: "No data to export", description: "Apply different filters or search.", variant: "destructive" });
+      return;
+    }
+
+    const headers = [
+      "Student Name",
+      "Department",
+      "Section",
+      "Year",
+      "Semester",
+      "Event Name",
+      "Event Category",
+      "Club",
+      "Date",
+      "Time",
+      "Participation Count",
+    ];
+    const escapeCsv = (value: string | number) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = sortedTableRows.map((row) =>
+      [
+        row.studentName,
+        row.department,
+        row.section,
+        row.year,
+        row.semester,
+        row.eventName,
+        row.eventCategory,
+        row.club,
+        row.date,
+        row.time,
+        row.participationCount,
+      ].map(escapeCsv).join(","),
+    );
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `faculty-participation-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  };
+
   const createDrive = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -312,8 +426,19 @@ export default function FacultyDashboard() {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Failed to create drive");
-      toast({ title: "Drive created", description: `Link: /drive/${body.drive.id}/submit` });
-      setDriveForm({ title: "", description: "", deadline: "", allowedFileTypes: "pdf,jpg,png", maxFileSize: "5242880" });
+      toast({
+        title: "Drive created",
+        description: `Link: /drive/${body.drive.id}/submit | Notified: ${body.notifiedStudents ?? 0} students`,
+      });
+      setDriveForm({
+        title: "",
+        description: "",
+        deadline: "",
+        targetCourse: "",
+        targetSection: "",
+        allowedFileTypes: "pdf,jpg,png",
+        maxFileSize: "5242880",
+      });
       reloadDrives();
     } catch (error: any) {
       toast({ title: "Drive create failed", description: error.message, variant: "destructive" });
@@ -330,9 +455,46 @@ export default function FacultyDashboard() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Failed");
       toast({ title: `Submission ${action}d` });
+      setSelectedSubmissionIds((prev) => prev.filter((v) => v !== id));
       reloadSubmissions();
     } catch (error: any) {
       toast({ title: "Review failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const bulkReviewSubmissions = async (action: "verify" | "reject") => {
+    const pendingSelectedIds = selectedSubmissionIds.filter((id) =>
+      visibleSubmissions.some((s) => s.id === id && s.status === "pending"),
+    );
+    if (pendingSelectedIds.length === 0) {
+      toast({
+        title: "No pending submissions selected",
+        description: "Select pending rows to run bulk actions.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsBulkReviewing(true);
+    try {
+      await Promise.all(
+        pendingSelectedIds.map(async (id) => {
+          const response = await facultyApiFetch(`/api/submission/${id}/${action}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(action === "reject" ? { reason: "Rejected by faculty (bulk action)" } : {}),
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || `Failed for submission ${id}`);
+        }),
+      );
+      toast({ title: `Bulk ${action} complete`, description: `${pendingSelectedIds.length} submissions updated.` });
+      setSelectedSubmissionIds([]);
+      reloadSubmissions();
+    } catch (error: any) {
+      toast({ title: "Bulk review failed", description: error.message || "Try again.", variant: "destructive" });
+    } finally {
+      setIsBulkReviewing(false);
     }
   };
 
@@ -433,6 +595,33 @@ export default function FacultyDashboard() {
                 });
               }}>Reset Filters</Button>
             </div>
+            <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <Input
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                placeholder="Search student, event, club, department..."
+                className="md:max-w-md"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant={studentSort === "recent" ? "default" : "outline"}
+                  onClick={() => setStudentSort("recent")}
+                >
+                  Most Recent
+                </Button>
+                <Button
+                  size="sm"
+                  variant={studentSort === "participations" ? "default" : "outline"}
+                  onClick={() => setStudentSort("participations")}
+                >
+                  Most Participations
+                </Button>
+                <Button variant="outline" onClick={downloadParticipationCsv}>
+                  Export CSV ({sortedTableRows.length})
+                </Button>
+              </div>
+            </div>
           </Card>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -485,12 +674,16 @@ export default function FacultyDashboard() {
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Loading participation analytics...
               </div>
+            ) : participationQuery.isError ? (
+              <div className="py-12 text-center text-sm text-destructive">
+                Failed to load participation analytics. Try changing filters or reloading.
+              </div>
             ) : tableRows.length === 0 ? (
               <div className="py-12 text-center text-sm text-muted-foreground">No Data Found</div>
             ) : (
               <div className={`${gridThemeClass} attendance-ag-grid`} style={{ height: 460, width: "100%" }}>
                 <AgGridReact<ParticipationRow>
-                  rowData={tableRows}
+                  rowData={sortedTableRows}
                   columnDefs={participationColumns}
                   pagination={true}
                   paginationPageSize={10}
@@ -516,6 +709,8 @@ export default function FacultyDashboard() {
             <form className="grid md:grid-cols-2 gap-3" onSubmit={createDrive}>
               <div className="space-y-2"><Label>Title</Label><Input value={driveForm.title} onChange={(e) => setDriveForm((p) => ({ ...p, title: e.target.value }))} required /></div>
               <div className="space-y-2"><Label>Deadline</Label><Input type="datetime-local" value={driveForm.deadline} onChange={(e) => setDriveForm((p) => ({ ...p, deadline: e.target.value }))} required /></div>
+              <div className="space-y-2"><Label>Target Course</Label><Input value={driveForm.targetCourse} onChange={(e) => setDriveForm((p) => ({ ...p, targetCourse: e.target.value }))} placeholder="B.Tech CSE" required /></div>
+              <div className="space-y-2"><Label>Target Section</Label><Input value={driveForm.targetSection} onChange={(e) => setDriveForm((p) => ({ ...p, targetSection: e.target.value }))} placeholder="A1" required /></div>
               <div className="space-y-2"><Label>Allowed File Types (comma separated)</Label><Input value={driveForm.allowedFileTypes} onChange={(e) => setDriveForm((p) => ({ ...p, allowedFileTypes: e.target.value }))} required /></div>
               <div className="space-y-2"><Label>Max File Size (bytes)</Label><Input value={driveForm.maxFileSize} onChange={(e) => setDriveForm((p) => ({ ...p, maxFileSize: e.target.value }))} required /></div>
               <div className="md:col-span-2 space-y-2"><Label>Description</Label><Input value={driveForm.description} onChange={(e) => setDriveForm((p) => ({ ...p, description: e.target.value }))} /></div>
@@ -530,8 +725,21 @@ export default function FacultyDashboard() {
                   <div>
                     <p className="font-medium">{drive.title}</p>
                     <p className="text-xs text-muted-foreground">Submit Link: /drive/{drive.id}/submit</p>
+                    <p className="text-xs text-muted-foreground">Target: {drive.targetCourse} | Section {drive.targetSection}</p>
                   </div>
-                  <Button variant="outline" onClick={() => setSelectedDriveId(drive.id)}>View Submissions</Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const link = `${window.location.origin}/drive/${drive.id}/submit`;
+                        navigator.clipboard.writeText(link);
+                        toast({ title: "Link copied", description: "Drive submission link copied to clipboard." });
+                      }}
+                    >
+                      Copy Link
+                    </Button>
+                    <Button variant="outline" onClick={() => setSelectedDriveId(drive.id)}>View Submissions</Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -542,9 +750,70 @@ export default function FacultyDashboard() {
           <Card className="p-4 space-y-3">
             <p className="text-sm text-muted-foreground">Select a drive in Drives tab to inspect submissions.</p>
             {selectedDriveId ? <p className="text-sm">Current drive: {selectedDriveId}</p> : null}
+            {!!selectedDriveId && (
+              <div className="grid gap-3 md:grid-cols-4">
+                <Card className="p-3"><p className="text-xs text-muted-foreground">Total</p><p className="text-xl font-semibold">{submissionSummary.total}</p></Card>
+                <Card className="p-3"><p className="text-xs text-muted-foreground flex items-center gap-1"><Clock3 className="w-4 h-4" /> Pending</p><p className="text-xl font-semibold">{submissionSummary.pending}</p></Card>
+                <Card className="p-3"><p className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> Verified</p><p className="text-xl font-semibold">{submissionSummary.verified}</p></Card>
+                <Card className="p-3"><p className="text-xs text-muted-foreground flex items-center gap-1"><XCircle className="w-4 h-4" /> Rejected</p><p className="text-xl font-semibold">{submissionSummary.rejected}</p></Card>
+              </div>
+            )}
+            {!!selectedDriveId && (
+              <div className="max-w-xs">
+                <Label>Filter by status</Label>
+                <Select value={submissionStatusFilter} onValueChange={(v: "all" | "pending" | "verified" | "rejected") => setSubmissionStatusFilter(v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="verified">Verified</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {!!selectedDriveId && (
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={pendingIdsOnPage.length > 0 && pendingIdsOnPage.every((id) => selectedSubmissionIds.includes(id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedSubmissionIds((prev) => Array.from(new Set([...prev, ...pendingIdsOnPage])));
+                      } else {
+                        setSelectedSubmissionIds((prev) => prev.filter((id) => !pendingIdsOnPage.includes(id)));
+                      }
+                    }}
+                  />
+                  Select all pending on page
+                </label>
+                <Button size="sm" onClick={() => bulkReviewSubmissions("verify")} disabled={isBulkReviewing}>
+                  {isBulkReviewing ? "Processing..." : `Bulk Approve (${selectedSubmissionIds.length})`}
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => bulkReviewSubmissions("reject")} disabled={isBulkReviewing}>
+                  {isBulkReviewing ? "Processing..." : `Bulk Reject (${selectedSubmissionIds.length})`}
+                </Button>
+              </div>
+            )}
             <div className="space-y-2">
-              {(submissionsQuery.data || []).map((submission) => (
+              {paginatedVisibleSubmissions.map((submission) => (
                 <div key={submission.id} className="border rounded p-3 space-y-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      disabled={submission.status !== "pending"}
+                      checked={selectedSubmissionIds.includes(submission.id)}
+                      onChange={(e) => {
+                        setSelectedSubmissionIds((prev) =>
+                          e.target.checked ? Array.from(new Set([...prev, submission.id])) : prev.filter((id) => id !== submission.id),
+                        );
+                      }}
+                    />
+                    Select for bulk action
+                  </label>
                   <p className="font-medium">{submission.studentDetails.name} ({submission.studentDetails.department})</p>
                   <p className="text-sm">Section: {submission.studentDetails.section} | Year: {submission.studentDetails.year}</p>
                   <p className="text-sm">Event Category: {submission.eventCategory}</p>
@@ -560,6 +829,31 @@ export default function FacultyDashboard() {
                 </div>
               ))}
             </div>
+            {!!selectedDriveId && visibleSubmissions.length > submissionsPageSize && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-sm text-muted-foreground">
+                  Page {submissionsPage} of {totalSubmissionPages}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={submissionsPage <= 1}
+                    onClick={() => setSubmissionsPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={submissionsPage >= totalSubmissionPages}
+                    onClick={() => setSubmissionsPage((p) => Math.min(totalSubmissionPages, p + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </TabsContent>
       </Tabs>

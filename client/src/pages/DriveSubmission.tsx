@@ -12,6 +12,8 @@ type Drive = {
   title: string;
   description: string;
   deadline: string;
+  targetCourse: string;
+  targetSection: string;
   allowedFileTypes: string[];
   maxFileSize: number;
 };
@@ -23,7 +25,6 @@ export default function DriveSubmission() {
   const [file, setFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     name: "",
-    section: "",
     department: "",
     year: 1,
     eventCategory: "",
@@ -49,7 +50,8 @@ export default function DriveSubmission() {
       setIsLoading(true);
       const payload = new FormData();
       payload.append("name", form.name);
-      payload.append("section", form.section);
+      payload.append("course", driveQuery.data?.targetCourse || "");
+      payload.append("section", driveQuery.data?.targetSection || "");
       payload.append("department", form.department);
       payload.append("year", String(form.year));
       payload.append("eventCategory", form.eventCategory);
@@ -60,7 +62,7 @@ export default function DriveSubmission() {
       if (!response.ok) throw new Error(body.error || "Submission failed");
 
       toast({ title: "Submitted", description: "Certificate submitted successfully." });
-      setForm({ name: "", section: "", department: "", year: 1, eventCategory: "" });
+      setForm({ name: "", department: "", year: 1, eventCategory: "" });
       setFile(null);
     } catch (error: any) {
       toast({ title: "Submission failed", description: error.message, variant: "destructive" });
@@ -80,12 +82,16 @@ export default function DriveSubmission() {
               <p className="text-xs text-muted-foreground mt-1">
                 Deadline: {driveQuery.data ? new Date(driveQuery.data.deadline).toLocaleString() : ""}
               </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Eligible for: {driveQuery.data?.targetCourse || "-"} | Section {driveQuery.data?.targetSection || "-"}
+              </p>
             </div>
 
             <form className="grid md:grid-cols-2 gap-3" onSubmit={submit}>
               <Input placeholder="Student Name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required />
-              <Input placeholder="Section" value={form.section} onChange={(e) => setForm((p) => ({ ...p, section: e.target.value }))} required />
+              <Input placeholder="Course" value={driveQuery.data?.targetCourse || ""} disabled />
               <Input placeholder="Department" value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} required />
+              <Input placeholder="Section" value={driveQuery.data?.targetSection || ""} disabled />
               <Input type="number" min={1} max={8} placeholder="Year" value={form.year} onChange={(e) => setForm((p) => ({ ...p, year: Number(e.target.value) }))} required />
               <Input className="md:col-span-2" placeholder="Event Category" value={form.eventCategory} onChange={(e) => setForm((p) => ({ ...p, eventCategory: e.target.value }))} required />
               <div className="md:col-span-2 space-y-2">

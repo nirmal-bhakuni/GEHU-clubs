@@ -54,6 +54,15 @@ export default function FacultyLogin() {
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
             <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <div className="text-right">
+              <button
+                type="button"
+                className="text-sm text-primary hover:underline"
+                onClick={() => setLocation("/faculty/forgot-password")}
+              >
+                Forgot Password?
+              </button>
+            </div>
           </div>
           <Button className="w-full" disabled={isLoading}>
             {isLoading ? "Signing in..." : "Sign In"}

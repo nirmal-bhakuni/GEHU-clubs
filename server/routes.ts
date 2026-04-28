@@ -685,6 +685,8 @@ const driveCreateSchema = z.object({
   title: z.string().min(3).max(200),
   description: z.string().max(2000).optional().default(""),
   deadline: z.string().datetime(),
+  targetCourse: z.string().min(2).max(120),
+  targetSection: z.string().min(1).max(40),
   allowedFileTypes: z.array(z.string().min(1)).min(1),
   maxFileSize: z.number().int().positive().max(25 * 1024 * 1024),
   allowMultipleSubmissions: z.boolean().optional().default(true),
@@ -692,6 +694,7 @@ const driveCreateSchema = z.object({
 
 const submissionSchema = z.object({
   name: z.string().min(2).max(120),
+  course: z.string().min(2).max(120),
   section: z.string().min(1).max(40),
   department: z.string().min(2).max(120),
   year: z.number().int().min(1).max(8),
@@ -722,6 +725,64 @@ function normalizeAllowedFileTypes(rawTypes: string[]) {
     ),
   );
   return normalized;
+}
+
+function normalizeComparableValue(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function notifyDriveToTargetStudents(params: {
+  driveId: string;
+  title: string;
+  description: string;
+  deadline: Date;
+  targetCourse: string;
+  targetSection: string;
+}) {
+  const normalizedCourse = normalizeComparableValue(params.targetCourse);
+  const normalizedSection = normalizeComparableValue(params.targetSection);
+  const registrations = await EventRegistration.find({
+    status: { $ne: "rejected" },
+  })
+    .select("studentEmail course section")
+    .lean();
+
+  const recipients = Array.from(
+    new Set(
+      registrations
+        .filter(
+          (row: any) =>
+            normalizeComparableValue(row.course) === normalizedCourse &&
+            normalizeComparableValue(row.section) === normalizedSection,
+        )
+        .map((row: any) => String(row.studentEmail || "").trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+
+  if (!recipients.length) return 0;
+
+  const appBaseUrl = (process.env.APP_BASE_URL || "http://localhost:5173").replace(/\/+$/, "");
+  const publicLink = `${appBaseUrl}/drive/${params.driveId}/submit`;
+  const deadlineText = new Date(params.deadline).toLocaleString();
+
+  await sendEmail({
+    to: recipients,
+    subject: `New Faculty Drive: ${params.title} (${params.targetCourse} - ${params.targetSection})`,
+    text: `A new drive has been assigned for ${params.targetCourse}, section ${params.targetSection}.
+
+Title: ${params.title}
+Description: ${params.description || "No description provided."}
+Deadline: ${deadlineText}
+Submit here: ${publicLink}`,
+    html: `<p>A new drive has been assigned for <strong>${params.targetCourse}</strong>, section <strong>${params.targetSection}</strong>.</p>
+<p><strong>Title:</strong> ${params.title}</p>
+<p><strong>Description:</strong> ${params.description || "No description provided."}</p>
+<p><strong>Deadline:</strong> ${deadlineText}</p>
+<p><a href="${publicLink}">Open submission form</a></p>`,
+  });
+
+  return recipients.length;
 }
 
 async function requireFacultyAuth(req: Request, res: Response, next: NextFunction) {
@@ -845,7 +906,7 @@ function escapeRegexInput(input: string) {
 }
 
 type PasswordResetOtpRecord = {
-  accountType: "club_admin" | "student";
+  accountType: "club_admin" | "student" | "university_admin" | "faculty";
   accountId: string;
   email: string;
   otp: string;
@@ -857,7 +918,10 @@ const OTP_EXPIRY_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const passwordResetOtpStore = new Map<string, PasswordResetOtpRecord>();
 
-function buildPasswordResetKey(accountType: "club_admin" | "student", accountId: string) {
+function buildPasswordResetKey(
+  accountType: "club_admin" | "student" | "university_admin" | "faculty",
+  accountId: string,
+) {
   return `${accountType}:${accountId}`;
 }
 
@@ -877,9 +941,15 @@ function clearExpiredPasswordResetOtps() {
 async function sendPasswordResetOtpEmail(params: {
   to: string;
   otp: string;
-  accountType: "club_admin" | "student";
+  accountType: "club_admin" | "student" | "university_admin" | "faculty";
 }) {
-  const accountLabel = params.accountType === "club_admin" ? "Club Admin" : "Student";
+  const accountLabelMap: Record<PasswordResetOtpRecord["accountType"], string> = {
+    club_admin: "Club Admin",
+    student: "Student",
+    university_admin: "University Admin",
+    faculty: "Faculty",
+  };
+  const accountLabel = accountLabelMap[params.accountType];
   await sendEmail({
     to: params.to,
     subject: `GEHU Clubs ${accountLabel} Password Reset OTP`,
@@ -1290,6 +1360,93 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       return res.json({ success: true, message: "Password reset successful" });
     } catch (error) {
       console.error("Club admin forgot-password reset failed:", error);
+      return res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
+  // University admin forgot password - request OTP
+  app.post("/api/auth/university-admin/forgot-password/request", async (req: Request, res: Response) => {
+    try {
+      const username = String(req.body?.username || "").trim();
+      if (!username) {
+        return res.status(400).json({ error: "Username is required" });
+      }
+
+      clearExpiredPasswordResetOtps();
+
+      const escaped = escapeRegexInput(username);
+      const admin = await Admin.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
+      if (!admin || admin.clubId) {
+        return res.json({ success: true, message: "If the account exists, OTP will be sent to registered email." });
+      }
+
+      const adminEmail = String(admin.email || "").toLowerCase().trim();
+      if (!adminEmail) {
+        return res.status(400).json({ error: "No email found. Please add your email in University Admin Profile first." });
+      }
+
+      const key = buildPasswordResetKey("university_admin", admin.id);
+      const existing = passwordResetOtpStore.get(key);
+      const now = Date.now();
+      if (existing && existing.resendAvailableAt > now) {
+        const retryAfterSeconds = Math.ceil((existing.resendAvailableAt - now) / 1000);
+        return res.status(429).json({ error: "Please wait before requesting another OTP.", retryAfterSeconds });
+      }
+
+      const otp = generateOtpCode();
+      passwordResetOtpStore.set(key, {
+        accountType: "university_admin",
+        accountId: admin.id,
+        email: adminEmail,
+        otp,
+        expiresAt: now + OTP_EXPIRY_MS,
+        resendAvailableAt: now + OTP_RESEND_COOLDOWN_MS,
+      });
+
+      await sendPasswordResetOtpEmail({ to: adminEmail, otp, accountType: "university_admin" });
+      return res.json({ success: true, message: "OTP sent to registered email." });
+    } catch (error) {
+      console.error("University admin forgot-password OTP request failed:", error);
+      return res.status(500).json({ error: "Failed to send OTP" });
+    }
+  });
+
+  // University admin forgot password - verify OTP and reset password
+  app.post("/api/auth/university-admin/forgot-password/reset", async (req: Request, res: Response) => {
+    try {
+      const username = String(req.body?.username || "").trim();
+      const otp = String(req.body?.otp || "").trim();
+      const newPassword = String(req.body?.newPassword || "");
+
+      if (!username || !otp || !newPassword) {
+        return res.status(400).json({ error: "Username, OTP and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+      }
+
+      const escaped = escapeRegexInput(username);
+      const admin = await Admin.findOne({ username: { $regex: `^${escaped}$`, $options: "i" } });
+      if (!admin || admin.clubId) {
+        return res.status(400).json({ error: "Invalid reset request" });
+      }
+
+      clearExpiredPasswordResetOtps();
+      const key = buildPasswordResetKey("university_admin", admin.id);
+      const record = passwordResetOtpStore.get(key);
+      if (!record || record.otp !== otp) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      admin.password = hashedPassword;
+      await admin.save();
+      passwordResetOtpStore.delete(key);
+
+      return res.json({ success: true, message: "Password reset successful" });
+    } catch (error) {
+      console.error("University admin forgot-password reset failed:", error);
       return res.status(500).json({ error: "Failed to reset password" });
     }
   });
@@ -5977,6 +6134,84 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     }
   });
 
+  app.post("/api/faculty/forgot-password/request", async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      clearExpiredPasswordResetOtps();
+
+      const faculty = await Faculty.findOne({ email }).select("id email");
+      if (!faculty) {
+        return res.json({ success: true, message: "If the account exists, OTP will be sent to registered email." });
+      }
+
+      const key = buildPasswordResetKey("faculty", faculty.id);
+      const existing = passwordResetOtpStore.get(key);
+      const now = Date.now();
+      if (existing && existing.resendAvailableAt > now) {
+        const retryAfterSeconds = Math.ceil((existing.resendAvailableAt - now) / 1000);
+        return res.status(429).json({ error: "Please wait before requesting another OTP.", retryAfterSeconds });
+      }
+
+      const otp = generateOtpCode();
+      passwordResetOtpStore.set(key, {
+        accountType: "faculty",
+        accountId: faculty.id,
+        email: faculty.email,
+        otp,
+        expiresAt: now + OTP_EXPIRY_MS,
+        resendAvailableAt: now + OTP_RESEND_COOLDOWN_MS,
+      });
+
+      await sendPasswordResetOtpEmail({ to: faculty.email, otp, accountType: "faculty" });
+      return res.json({ success: true, message: "OTP sent to registered email." });
+    } catch (error) {
+      console.error("Faculty forgot-password OTP request failed:", error);
+      return res.status(500).json({ error: "Failed to send OTP" });
+    }
+  });
+
+  app.post("/api/faculty/forgot-password/reset", async (req: Request, res: Response) => {
+    try {
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      const otp = String(req.body?.otp || "").trim();
+      const newPassword = String(req.body?.newPassword || "");
+
+      if (!email || !otp || !newPassword) {
+        return res.status(400).json({ error: "Email, OTP and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+      }
+
+      const faculty = await Faculty.findOne({ email });
+      if (!faculty) {
+        return res.status(400).json({ error: "Invalid reset request" });
+      }
+
+      clearExpiredPasswordResetOtps();
+      const key = buildPasswordResetKey("faculty", faculty.id);
+      const record = passwordResetOtpStore.get(key);
+      if (!record || record.otp !== otp) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      faculty.password = hashedPassword;
+      await faculty.save();
+      passwordResetOtpStore.delete(key);
+
+      return res.json({ success: true, message: "Password reset successful" });
+    } catch (error) {
+      console.error("Faculty forgot-password reset failed:", error);
+      return res.status(500).json({ error: "Failed to reset password" });
+    }
+  });
+
   app.get("/api/faculty/me", requireFacultyAuth, async (req: Request, res: Response) => {
     const faculty = (req as any).faculty;
     res.json({ faculty });
@@ -6202,6 +6437,8 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         title: req.body.title,
         description: req.body.description,
         deadline: req.body.deadline,
+        targetCourse: req.body.targetCourse,
+        targetSection: req.body.targetSection,
         allowedFileTypes: req.body.allowedFileTypes || [],
         maxFileSize: Number(req.body.maxFileSize),
         allowMultipleSubmissions:
@@ -6219,16 +6456,28 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         title: parsed.data.title,
         description: parsed.data.description,
         deadline: new Date(parsed.data.deadline),
+        targetCourse: parsed.data.targetCourse,
+        targetSection: parsed.data.targetSection,
         allowedFileTypes,
         maxFileSize: parsed.data.maxFileSize,
         allowMultipleSubmissions: parsed.data.allowMultipleSubmissions,
         createdBy: faculty.id,
       });
 
+      const notifiedStudents = await notifyDriveToTargetStudents({
+        driveId: drive.id,
+        title: drive.title,
+        description: drive.description,
+        deadline: drive.deadline,
+        targetCourse: drive.targetCourse,
+        targetSection: drive.targetSection,
+      });
+
       res.status(201).json({
         success: true,
         drive,
         publicLink: `/drive/${drive.id}/submit`,
+        notifiedStudents,
       });
     } catch (error) {
       console.error("Failed to create drive:", error);
@@ -6267,6 +6516,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       const parsed = submissionSchema.safeParse({
         name: req.body.name,
+        course: req.body.course,
         section: req.body.section,
         department: req.body.department,
         year: Number(req.body.year),
@@ -6282,10 +6532,18 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(400).json({ error: `File exceeds max size limit (${Math.round(drive.maxFileSize / (1024 * 1024))}MB)` });
       }
 
+      if (normalizeComparableValue(parsed.data.course) !== normalizeComparableValue((drive as any).targetCourse)) {
+        return res.status(400).json({ error: "This drive is not assigned to the provided course" });
+      }
+      if (normalizeComparableValue(parsed.data.section) !== normalizeComparableValue((drive as any).targetSection)) {
+        return res.status(400).json({ error: "This drive is not assigned to the provided section" });
+      }
+
       if (!drive.allowMultipleSubmissions) {
         const existingSubmission = await Submission.findOne({
           driveId: drive.id,
           "studentDetails.name": parsed.data.name,
+          "studentDetails.course": parsed.data.course,
           "studentDetails.section": parsed.data.section,
           "studentDetails.department": parsed.data.department,
           "studentDetails.year": parsed.data.year,
@@ -6300,6 +6558,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         driveId: drive.id,
         studentDetails: {
           name: parsed.data.name,
+          course: parsed.data.course,
           section: parsed.data.section,
           department: parsed.data.department,
           year: parsed.data.year,
