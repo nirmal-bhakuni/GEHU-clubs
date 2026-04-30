@@ -9,6 +9,7 @@ import { SwipeActivityCard, type FeedItem } from "@/components/SwipeActivityCard
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Calendar, Users, Flame, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { formatEventTimeRange } from "@/lib/eventTime";
 import type { Event, Club, ClubStory, Achievement } from "@shared/schema";
 
 const eventPlaceholder = "https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&q=80";
@@ -252,7 +253,7 @@ export default function Home() {
           badges: [isUpcoming ? "UPCOMING" : "LATEST", event.category || "EVENT"],
           meta: [
             { icon: "calendar" as const, label: formatFeedDate(event.date) },
-            { icon: "clock" as const, label: event.time || "TBA" },
+            { icon: "clock" as const, label: formatEventTimeRange(event.time, event.durationMinutes) },
             { icon: "map" as const, label: event.location || "Campus" },
           ],
           createdAt: toDateOrUndefined(event.createdAt || event.date),

@@ -47,6 +47,7 @@ export interface EventRegistration {
   phone: string;
   rollNumber: string;
   department: string;
+  section?: string;
   year: string;
   semester?: string;
   interests: string[];

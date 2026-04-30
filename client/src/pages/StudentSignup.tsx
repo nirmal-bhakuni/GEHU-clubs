@@ -10,6 +10,8 @@ import { UNIVERSITY_BRANCH_OPTIONS } from "@/lib/branchOptions";
 import CaptchaComponent from "@/components/CaptchaComponent";
 import { UserPlus } from "lucide-react";
 
+const SECTION_OPTIONS = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2", "E1", "E2", "F1", "F2", "G1", "G2", "H1", "H2", "I1", "I2", "J1", "J2", "K1", "K2", "L1", "L2", "AI/DS", "AI/ML-1", "AI/ML-2", "AI/ML-3", "Cyber Security"];
+
 export default function StudentSignup() {
   const [, setLocation] = useLocation();
   const [formData, setFormData] = useState({
@@ -21,6 +23,7 @@ export default function StudentSignup() {
     yearOfAdmission: new Date().getFullYear(),
     currentSemester: "",
     department: "",
+    section: "",
     password: "",
   });
   const [captchaVerified, setCaptchaVerified] = useState(false);
@@ -70,7 +73,7 @@ export default function StudentSignup() {
           const field = parsed.field || parsedField;
           const message = parsed.error || "Please try again";
 
-          if (field && ["email", "phone", "rollNumber", "enrollment"].includes(field)) {
+          if (field && ["email", "phone", "rollNumber", "enrollment", "section"].includes(field)) {
             setValidationErrors({ [field]: message });
             toast({
               title: `${field.charAt(0).toUpperCase() + field.slice(1)} Error`,
@@ -129,6 +132,7 @@ export default function StudentSignup() {
           rollNumber: formData.rollNumber,
           enrollment: formData.enrollment,
           department: formData.department,
+          section: formData.section,
           yearOfAdmission: formData.yearOfAdmission,
           currentSemester: formData.currentSemester
         };
@@ -272,6 +276,28 @@ export default function StudentSignup() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <Label htmlFor="section">Section</Label>
+            <select
+              id="section"
+              name="section"
+              value={formData.section}
+              onChange={handleChange}
+              required
+              className={`w-full px-3 py-2 border rounded-md bg-background text-foreground ${validationErrors.section ? "border-red-500" : "border-input"}`}
+            >
+              <option value="">Select Section</option>
+              {SECTION_OPTIONS.map((section) => (
+                <option key={section} value={section}>
+                  {section}
+                </option>
+              ))}
+            </select>
+            {validationErrors.section && (
+              <p className="text-red-500 text-sm mt-1">{validationErrors.section}</p>
+            )}
           </div>
 
           <div>

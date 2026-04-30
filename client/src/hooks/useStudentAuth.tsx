@@ -10,6 +10,7 @@ interface Student {
   enrollment: string;
   department?: string;
   branch?: string;
+  section?: string;
   profilePicture?: string;
   yearOfAdmission?: number;
   yearOfCourse?: number;

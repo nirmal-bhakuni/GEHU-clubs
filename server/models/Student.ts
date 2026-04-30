@@ -7,6 +7,7 @@ const studentSchema = new mongoose.Schema({
   rollNumber: { type: String, required: false, unique: true, sparse: true },
   enrollment: { type: String, required: true, unique: true },
   department: { type: String, required: false },
+  section: { type: String, required: false, default: "" },
   yearOfAdmission: { type: Number, required: false },
   currentSemester: { type: String, required: false, default: "" },
   password: { type: String, required: true },

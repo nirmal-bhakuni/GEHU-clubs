@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Activity, CheckCircle2, Clock3, Loader2, Star, TrendingUp, Users, XCircle } from "lucide-react";
+import { Activity, Calendar, CheckCircle2, Clock3, Loader2, Star, TrendingUp, Users, XCircle } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { clearFacultyToken, facultyApiFetch, getFacultyToken } from "@/lib/facultyAuth";
 import { useTheme } from "@/components/ThemeProvider";
+import { formatEventTimeRange } from "@/lib/eventTime";
 
 type ParticipationRow = {
   id: string;
@@ -29,6 +30,7 @@ type ParticipationRow = {
   club: string;
   date: string;
   time: string;
+  eventDurationMinutes?: number;
   participationCount: number;
 };
 
@@ -57,8 +59,7 @@ type FiltersState = {
   club: string;
   eventName: string;
   eventStatus: string;
-  dateFrom: string;
-  dateTo: string;
+  dateRange: string;
   time: string;
 };
 
@@ -137,6 +138,26 @@ const MASTER_CURRENT_CLUBS = ["IEEE", "ARYAVRAT", "PAPERTECH-GEHU", "Entrepreneu
 const MASTER_FUTURE_CLUBS = ["AI Innovators Guild", "Cyber Security Council", "Robotics & Automation Cell", "Green Energy Society", "Media & Podcast Club"];
 const MASTER_EVENT_NAMES = ["Winter Tech Fest", "Hackathon", "Financial Literacy", "Web Development Bootcamp", "Startup Expo", "AI Summit", "Robotics Challenge", "Cyber Drill", "Green Future Conclave"];
 
+const formatDateForRange = (date: Date) => {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}-${month}-${date.getFullYear()}`;
+};
+
+const formatDateRangeInput = (value: string) => {
+  const digits = value.replace(/\D/g, "").slice(0, 16);
+  const formatDate = (dateDigits: string) =>
+    [dateDigits.slice(0, 2), dateDigits.slice(2, 4), dateDigits.slice(4, 8)]
+      .filter(Boolean)
+      .join("-");
+
+  const firstDate = formatDate(digits.slice(0, 8));
+  const secondDate = formatDate(digits.slice(8, 16));
+
+  if (!secondDate) return firstDate;
+  return `${firstDate} to ${secondDate}`;
+};
+
 export default function FacultyDashboard() {
   const token = getFacultyToken();
   const [, setLocation] = useLocation();
@@ -152,8 +173,7 @@ export default function FacultyDashboard() {
     club: "",
     eventName: "",
     eventStatus: "",
-    dateFrom: "",
-    dateTo: "",
+    dateRange: "",
     time: "",
   });
   const [debouncedFilters, setDebouncedFilters] = useState<FiltersState>(rawFilters);
@@ -189,16 +209,14 @@ export default function FacultyDashboard() {
       start.setDate(now.getDate() - 6);
       setRawFilters((prev) => ({
         ...prev,
-        dateFrom: start.toISOString().slice(0, 10),
-        dateTo: now.toISOString().slice(0, 10),
+        dateRange: `${formatDateForRange(start)} to ${formatDateForRange(now)}`,
       }));
       return;
     }
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     setRawFilters((prev) => ({
       ...prev,
-      dateFrom: start.toISOString().slice(0, 10),
-      dateTo: now.toISOString().slice(0, 10),
+      dateRange: `${formatDateForRange(start)} to ${formatDateForRange(now)}`,
     }));
   }, [quickRange]);
 
@@ -323,7 +341,12 @@ export default function FacultyDashboard() {
     { field: "eventCategory", headerName: "Event Category", minWidth: 150 },
     { field: "club", headerName: "Club", minWidth: 150 },
     { field: "date", headerName: "Date", minWidth: 120 },
-    { field: "time", headerName: "Time", minWidth: 110 },
+    {
+      field: "time",
+      headerName: "Time",
+      minWidth: 170,
+      valueFormatter: (params) => formatEventTimeRange(params.data?.time || "", params.data?.eventDurationMinutes),
+    },
     { field: "participationCount", headerName: "Participation Count", minWidth: 170 },
   ], []);
 
@@ -334,7 +357,6 @@ export default function FacultyDashboard() {
     const sem = new Set<string>();
     const c = new Set<string>();
     const cl = new Set<string>();
-    const t = new Set<string>();
     const e = new Set<string>();
     tableRows.forEach((row) => {
       if (row.department) d.add(row.department);
@@ -344,7 +366,6 @@ export default function FacultyDashboard() {
       if (row.eventCategory) c.add(row.eventCategory);
       if (row.club) cl.add(row.club);
       if (row.eventName) e.add(row.eventName);
-      if (row.time) t.add(row.time);
     });
     const mergeOptions = (master: string[], dynamic: string[]) =>
       Array.from(new Set([...master, ...dynamic])).filter(Boolean).sort();
@@ -356,7 +377,6 @@ export default function FacultyDashboard() {
       categories: mergeOptions(MASTER_EVENT_CATEGORIES, Array.from(c)),
       clubs: mergeOptions([...MASTER_CURRENT_CLUBS, ...MASTER_FUTURE_CLUBS], Array.from(cl)),
       eventNames: mergeOptions(MASTER_EVENT_NAMES, Array.from(e)),
-      times: mergeOptions([], Array.from(t)),
     };
   }, [tableRows]);
 
@@ -394,7 +414,7 @@ export default function FacultyDashboard() {
         row.eventCategory,
         row.club,
         row.date,
-        row.time,
+        formatEventTimeRange(row.time, row.eventDurationMinutes),
         row.participationCount,
       ].map(escapeCsv).join(","),
     );
@@ -525,7 +545,7 @@ export default function FacultyDashboard() {
               <Button size="sm" variant={quickRange === "month" ? "default" : "outline"} onClick={() => setQuickRange("month")}>This Month</Button>
               <Button size="sm" variant={quickRange === "custom" ? "default" : "outline"} onClick={() => setQuickRange("custom")}>Custom Range</Button>
             </div>
-            <div className="grid md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div className="grid items-end gap-3 md:grid-cols-4 lg:grid-cols-5">
               <Select value={rawFilters.department || "all"} onValueChange={(v) => setRawFilters((p) => ({ ...p, department: v === "all" ? "" : v }))}>
                 <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
                 <SelectContent><SelectItem value="all">All Departments</SelectItem>{distinct.departments.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
@@ -563,21 +583,36 @@ export default function FacultyDashboard() {
                 <SelectContent><SelectItem value="all">All Clubs</SelectItem>{distinct.clubs.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
               </Select>
               <div className="space-y-1">
-                <Input
-                  type="text"
-                  list="faculty-time-suggestions"
-                  placeholder="Time slot (any, e.g. 13:30 or 1:30 PM)"
-                  value={rawFilters.time}
-                  onChange={(e) => setRawFilters((p) => ({ ...p, time: e.target.value }))}
-                />
-                <datalist id="faculty-time-suggestions">
-                  {distinct.times.map((v) => (
-                    <option key={v} value={v} />
-                  ))}
-                </datalist>
+                <Label className="text-sm font-medium">Time</Label>
+                <div className="relative">
+                  <Input
+                    type="text"
+                    placeholder="--:-- AM/PM to --:-- AM/PM"
+                    value={rawFilters.time}
+                    onChange={(e) => setRawFilters((p) => ({ ...p, time: e.target.value }))}
+                    className="pr-10"
+                  />
+                  <Clock3 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
               </div>
-              <Input type="date" value={rawFilters.dateFrom} onChange={(e) => setRawFilters((p) => ({ ...p, dateFrom: e.target.value }))} />
-              <Input type="date" value={rawFilters.dateTo} onChange={(e) => setRawFilters((p) => ({ ...p, dateTo: e.target.value }))} />
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Date</Label>
+                <div className="relative">
+                  <Input
+                    type="text"
+                    placeholder="dd-mm-yyyy to dd-mm-yyyy"
+                    value={rawFilters.dateRange}
+                    onChange={(e) => {
+                      setQuickRange("custom");
+                      setRawFilters((p) => ({ ...p, dateRange: formatDateRangeInput(e.target.value) }));
+                    }}
+                    inputMode="numeric"
+                    maxLength={28}
+                    className="pr-10"
+                  />
+                  <Calendar className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+              </div>
               <Button variant="outline" onClick={() => {
                 setQuickRange("custom");
                 setRawFilters({
@@ -589,8 +624,7 @@ export default function FacultyDashboard() {
                   club: "",
                   eventName: "",
                   eventStatus: "",
-                  dateFrom: "",
-                  dateTo: "",
+                  dateRange: "",
                   time: "",
                 });
               }}>Reset Filters</Button>

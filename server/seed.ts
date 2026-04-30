@@ -104,7 +104,7 @@ export async function seedDatabase() {
       name: "IEEE",
       description: "Building innovative solutions...",
       category: "Technology",
-      memberCount: 125,
+      memberCount: 0,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRGCvDLx2YLXsTqnLYhQPbyv6wDRXXhNkU7ww&s",
       coverImageUrl: "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop",
       createdAt: new Date()
@@ -114,7 +114,7 @@ export async function seedDatabase() {
       name: "ARYAVRAT",
       description: "Sharpen your argumentation skills...",
       category: "Academic",
-      memberCount: 85,
+      memberCount: 0,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQHSQ26pPoXAi8YKQZQPoLwPeETRdh9ywhCAQ&s",
       coverImageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&h=400&fit=crop",
       createdAt: new Date()
@@ -124,7 +124,7 @@ export async function seedDatabase() {
       name: "PAPERTECH-GEHU",
       description: "Express yourself through various art forms...",
       category: "Arts",
-      memberCount: 95,
+      memberCount: 0,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRN4okYreu0Yak1U5bjkWeSCRBUuagbLTanHg&s",
       coverImageUrl: "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=800&h=400&fit=crop",
       createdAt: new Date()
@@ -134,7 +134,7 @@ export async function seedDatabase() {
       name: "Entrepreneurship Hub",
       description: "Connect with fellow entrepreneurs...",
       category: "Business",
-      memberCount: 150,
+      memberCount: 0,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRkdkjI3VT0FR0WkyDb_xIOPfPpoULRDPybNA&s",
       coverImageUrl: "https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=400&fit=crop",
       createdAt: new Date()
@@ -144,7 +144,7 @@ export async function seedDatabase() {
       name: "CODE_HUNTERS",
       description: "Discover the wonders of science...",
       category: "Academic",
-      memberCount: 110,
+      memberCount: 0,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR-SeTgtHQSr0YhjNgYKbk3y_arKfREH0DdNA&s",
       coverImageUrl: "https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=800&h=400&fit=crop",
       createdAt: new Date()
@@ -154,7 +154,7 @@ export async function seedDatabase() {
       name: "RANGMANCH",
       description: "Make a difference in our community...",
       category: "Social",
-      memberCount: 175,
+      memberCount: 0,
       logoUrl: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxB5o3X1zEYYTEL6XAalXWOiubGY_mrVJCvA&s",
       coverImageUrl: "https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800&h=400&fit=crop",
       createdAt: new Date()

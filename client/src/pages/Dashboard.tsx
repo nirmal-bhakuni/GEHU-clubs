@@ -55,6 +55,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Event, Club, AttendanceDispute } from "@shared/schema";
+import { formatEventTimeRange } from "@/lib/eventTime";
 
 // Interfaces for Campus Feed
 interface StoryHighlight {
@@ -104,6 +105,7 @@ type EventsGridRow = {
   category: string;
   date: string;
   time: string;
+  durationMinutes?: number;
   location: string;
   clubName: string;
   status: "Upcoming" | "Past";
@@ -131,6 +133,7 @@ type StudentsGridRow = {
   enrollment: string;
   phone: string;
   department: string;
+  section: string;
   status: string;
   lastLogin: string;
 }
@@ -309,6 +312,7 @@ export default function Dashboard() {
     rollNumber: "",
     enrollment: "",
     department: "",
+    section: "",
     yearOfAdmission: "",
   });
   const [studentEditErrors, setStudentEditErrors] = useState<Record<string, string>>({});
@@ -349,6 +353,27 @@ export default function Dashboard() {
     "Leadership",
     "NGO",
     "Entrepreneurship",
+    "Other",
+  ];
+  const eventCategoryOptions = [
+    "Workshop",
+    "Bootcamp",
+    "Seminar",
+    "Competition",
+    "Conference",
+    "Hackathon",
+    "Meetup",
+    "Webinar",
+    "Exhibition",
+    "Festival",
+    "Training",
+    "Networking",
+    "Sports",
+    "Technical",
+    "Cultural",
+    "Finance",
+    "Research",
+    "Social",
     "Other",
   ];
   const trimmedClubLoginId = clubLoginId.trim();
@@ -463,7 +488,8 @@ export default function Dashboard() {
     ? students.filter((s) => {
         const name = (s?.name || "").toLowerCase();
         const enrollment = (s?.enrollment || "").toLowerCase();
-        return name.includes(normalizedStudentSearch) || enrollment.includes(normalizedStudentSearch);
+        const section = (s?.section || "").toLowerCase();
+        return name.includes(normalizedStudentSearch) || enrollment.includes(normalizedStudentSearch) || section.includes(normalizedStudentSearch);
       })
     : students;
 
@@ -647,6 +673,7 @@ export default function Dashboard() {
       rollNumber: string;
       enrollment: string;
       department: string;
+      section: string;
       yearOfAdmission?: number;
     }) => {
       const { studentId, ...body } = payload;
@@ -699,7 +726,7 @@ export default function Dashboard() {
       const field = String(parsedError?.field || "").trim();
       const message = String(parsedError?.error || rawMessage || "Could not update student details.");
 
-      if (field && ["name", "email", "phone", "rollNumber", "enrollment", "department", "yearOfAdmission"].includes(field)) {
+      if (field && ["name", "email", "phone", "rollNumber", "enrollment", "department", "section", "yearOfAdmission"].includes(field)) {
         setStudentEditErrors({ [field]: message });
       }
 
@@ -780,6 +807,7 @@ export default function Dashboard() {
       rollNumber: selectedStudent.rollNumber || "",
       enrollment: selectedStudent.enrollment || "",
       department: selectedStudent.department || selectedStudent.branch || "",
+      section: selectedStudent.section || "",
       yearOfAdmission: selectedStudent.yearOfAdmission ? String(selectedStudent.yearOfAdmission) : "",
     });
     setStudentEditErrors({});
@@ -1330,6 +1358,7 @@ export default function Dashboard() {
           category: event.category || "",
           date: new Date(event.date || new Date()).toLocaleDateString(),
           time: event.time || "TBA",
+          durationMinutes: event.durationMinutes,
           location: event.location || "TBA",
           clubName: club?.name || "Unknown",
           status: new Date(event.date || new Date()) > new Date() ? "Upcoming" : "Past",
@@ -1342,7 +1371,12 @@ export default function Dashboard() {
     { field: "title", headerName: "Event", flex: 1.2, minWidth: 200 },
     { field: "category", headerName: "Category", minWidth: 140 },
     { field: "date", headerName: "Date", minWidth: 120 },
-    { field: "time", headerName: "Time", minWidth: 110 },
+    {
+      field: "time",
+      headerName: "Time",
+      minWidth: 170,
+      valueFormatter: (params) => formatEventTimeRange(params.data?.time, params.data?.durationMinutes),
+    },
     { field: "clubName", headerName: "Club", minWidth: 140 },
     { field: "status", headerName: "Status", minWidth: 110 },
   ], []);
@@ -1401,6 +1435,7 @@ export default function Dashboard() {
         enrollment: student.enrollment || "",
         phone: student.phone || "—",
         department: student.department || student.branch || "—",
+        section: student.section || "N/A",
         status: student.isDisabled ? "Disabled" : "Active",
         lastLogin: student.lastLogin ? new Date(student.lastLogin).toLocaleString() : "—",
       }));
@@ -1413,6 +1448,7 @@ export default function Dashboard() {
     { field: "enrollment", headerName: "Enrollment", minWidth: 140 },
     { field: "phone", headerName: "Phone", minWidth: 130 },
     { field: "department", headerName: "Department", minWidth: 150 },
+    { field: "section", headerName: "Section", minWidth: 110 },
     { field: "status", headerName: "Status", minWidth: 110 },
     { field: "lastLogin", headerName: "Last Active", flex: 1.2, minWidth: 180 },
   ], []);
@@ -1667,19 +1703,19 @@ export default function Dashboard() {
                       .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0))
                       .slice(0, 5)
                     ).map((club: any, index: number) => (
-                      <div key={club.id || index} className="flex items-center justify-between rounded-lg bg-background/60 px-3 py-2 ring-1 ring-border/60">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+                      <div key={club.id || index} className="flex items-center justify-between rounded-lg bg-background/60 px-3 py-2 ring-1 ring-border/60 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0 flex-shrink">
+                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary flex-shrink-0">
                             {index + 1}
                           </div>
-                          <div>
-                            <p className="text-sm font-medium leading-tight">{club.name}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{club.category}</p>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium leading-tight truncate">{club.name}</p>
+                            <p className="text-xs text-muted-foreground capitalize truncate">{club.category}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-semibold">{club.memberCount || 0}</p>
-                          <p className="text-xs text-muted-foreground">{club.eventCount || 0} events</p>
+                        <div className="text-right flex-shrink-0 ml-2">
+                          <p className="text-sm font-semibold whitespace-nowrap">{club.memberCount || 0}</p>
+                          <p className="text-xs text-muted-foreground whitespace-nowrap">{club.eventCount || 0} events</p>
                         </div>
                       </div>
                     ))}
@@ -2623,13 +2659,21 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <Label htmlFor="eventCategory">Category</Label>
-                      <Input
-                        id="eventCategory"
+                      <Select
                         value={eventForm.category}
-                        onChange={(e) => setEventForm(prev => ({ ...prev, category: e.target.value }))}
-                        placeholder="e.g., Technical, Cultural"
-                        required
-                      />
+                        onValueChange={(value) => setEventForm(prev => ({ ...prev, category: value }))}
+                      >
+                        <SelectTrigger id="eventCategory">
+                          <SelectValue placeholder="Select event category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {eventCategoryOptions.map((category) => (
+                            <SelectItem key={category} value={category}>
+                              {category}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
 
@@ -2960,7 +3004,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-3 items-center">
                   <div className="relative">
                     <Input
-                      placeholder="Search by name or student ID..."
+                      placeholder="Search by name, student ID, or section..."
                       value={studentSearch}
                       onChange={(e) => setStudentSearch(e.target.value)}
                       className="pl-9"
@@ -3043,7 +3087,11 @@ export default function Dashboard() {
                               <p className="text-muted-foreground">Department:</p>
                               <p className="font-medium">{selectedStudentFromGrid.department}</p>
                             </div>
-                            <div className="col-span-2">
+                            <div>
+                              <p className="text-muted-foreground">Section:</p>
+                              <p className="font-medium">{selectedStudentFromGrid.section}</p>
+                            </div>
+                            <div>
                               <p className="text-muted-foreground">Last Active:</p>
                               <p className="font-medium">{selectedStudentFromGrid.lastLogin}</p>
                             </div>
@@ -3390,19 +3438,19 @@ export default function Dashboard() {
                   {(analyticsData?.topClubs || clubs
                     .sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0))
                     .slice(0, 5)).map((club: any, index: number) => (
-                      <div key={club.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold">
+                      <div key={club.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg min-w-0">
+                        <div className="flex items-center gap-3 min-w-0 flex-shrink">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold flex-shrink-0">
                             {index + 1}
                           </div>
-                          <div>
-                            <p className="font-medium text-sm">{club.name}</p>
-                            <p className="text-xs text-muted-foreground">{club.category}</p>
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm truncate">{club.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{club.category}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold">{club.memberCount || 0}</p>
-                          <p className="text-xs text-muted-foreground">members</p>
+                        <div className="text-right flex-shrink-0 ml-2">
+                          <p className="font-semibold whitespace-nowrap">{club.memberCount || 0}</p>
+                          <p className="text-xs text-muted-foreground whitespace-nowrap">{club.eventCount || 0} events</p>
                         </div>
                       </div>
                     ))}
@@ -3812,6 +3860,7 @@ export default function Dashboard() {
                               rollNumber: selectedStudent.rollNumber || "",
                               enrollment: selectedStudent.enrollment || "",
                               department: selectedStudent.department || selectedStudent.branch || "",
+                              section: selectedStudent.section || "",
                               yearOfAdmission: selectedStudent.yearOfAdmission ? String(selectedStudent.yearOfAdmission) : "",
                             });
                           }}
@@ -3828,6 +3877,7 @@ export default function Dashboard() {
                             const normalizedPhone = studentEditForm.phone.trim();
                             const normalizedRollNumber = studentEditForm.rollNumber.trim();
                             const normalizedDepartment = studentEditForm.department.trim();
+                            const normalizedSection = studentEditForm.section.trim().toUpperCase();
                             const normalizedYear = studentEditForm.yearOfAdmission.trim();
 
                             if (!normalizedName || !normalizedEmail || !normalizedEnrollment) {
@@ -3872,6 +3922,7 @@ export default function Dashboard() {
                               rollNumber: normalizedRollNumber,
                               enrollment: normalizedEnrollment,
                               department: normalizedDepartment,
+                              section: normalizedSection,
                               yearOfAdmission: parsedAdmissionYear ?? undefined,
                             });
                           }}
@@ -4023,6 +4074,29 @@ export default function Dashboard() {
                     )}
                   </div>
                   <div>
+                    <Label className="text-sm font-medium">Section</Label>
+                    {isEditingStudent ? (
+                      <Input
+                        value={studentEditForm.section}
+                        onChange={(event) => {
+                          setStudentEditForm((prev) => ({ ...prev, section: event.target.value }));
+                          setStudentEditErrors((prev) => {
+                            const updated = { ...prev };
+                            delete updated.section;
+                            return updated;
+                          });
+                        }}
+                        className="mt-1"
+                        placeholder="e.g. A1"
+                      />
+                    ) : (
+                      <p className="text-foreground">{selectedStudent.section || "N/A"}</p>
+                    )}
+                    {isEditingStudent && studentEditErrors.section && (
+                      <p className="mt-1 text-xs text-destructive">{studentEditErrors.section}</p>
+                    )}
+                  </div>
+                  <div>
                     <Label className="text-sm font-medium">Admission Year</Label>
                     {isEditingStudent ? (
                       <Input
@@ -4131,7 +4205,7 @@ export default function Dashboard() {
                           <h4 className="font-medium">{registration.eventTitle}</h4>
                           <p className="text-sm text-muted-foreground">{registration.clubName}</p>
                           <p className="text-xs text-muted-foreground">
-                            Date: {new Date(registration.eventDate).toLocaleDateString()} at {registration.eventTime}
+                            Date: {new Date(registration.eventDate).toLocaleDateString()} at {formatEventTimeRange(registration.eventTime, registration.eventDurationMinutes)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             Registered: {new Date(registration.registeredAt).toLocaleDateString()}

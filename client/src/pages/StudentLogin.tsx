@@ -130,7 +130,8 @@ export default function StudentLogin() {
           enrollment: offlineStudent.enrollment,
           phone: offlineStudent.phone || "",
           rollNumber: offlineStudent.rollNumber || "",
-          department: offlineStudent.department || ""
+          department: offlineStudent.department || "",
+          section: offlineStudent.section || ""
         };
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], studentData);

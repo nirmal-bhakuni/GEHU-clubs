@@ -1617,7 +1617,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         clubs = fallbackClubs as any;
       }
 
-      // Only fetch memberships if MongoDB is connected to avoid timeouts
+      // Fetch real member counts from ClubMembership records
       let clubsWithMemberCounts: any = clubs;
       if (isMongoDBConnected) {
         try {
@@ -1632,29 +1632,35 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
             memberCountMap.set(membership.clubId, current + 1);
           });
 
-          // Add actual member counts to clubs
+          // Add actual member counts to clubs - always use real count from memberships
           clubsWithMemberCounts = clubs.map((club) => {
             const clubObj = club.toObject ? club.toObject() : club;
-            // Use actual membership count if available, otherwise use club's existing memberCount
-            const actualCount = memberCountMap.get(club.id);
+            // Always use the actual count from memberships (defaults to 0 if no members)
+            const memberCount = memberCountMap.get(club.id) || 0;
             return normalizeClubMedia({
               ...clubObj,
-              memberCount: actualCount !== undefined ? actualCount : (clubObj.memberCount || 0)
+              memberCount: memberCount
             }, req);
           }) as any;
         } catch (dbError) {
           console.error("Error fetching memberships:", dbError);
-          // Fall back to club data without membership counts
+          // Fall back to club data with 0 members if DB error
           clubsWithMemberCounts = clubs.map((club) => {
             const clubObj = club.toObject ? club.toObject() : club;
-            return normalizeClubMedia(clubObj, req);
+            return normalizeClubMedia({
+              ...clubObj,
+              memberCount: 0
+            }, req);
           }) as any;
         }
       } else {
-        // MongoDB not connected, return clubs with normalized media
+        // MongoDB not connected, return clubs with 0 members
         clubsWithMemberCounts = clubs.map((club) => {
           const clubObj = club.toObject ? club.toObject() : club;
-          return normalizeClubMedia(clubObj, req);
+          return normalizeClubMedia({
+            ...clubObj,
+            memberCount: 0
+          }, req);
         }) as any;
       }
 
@@ -1942,12 +1948,31 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         events = events.filter(e => e.category === category);
       }
 
-      // Ensure all events have an id field
+      // Fetch registration counts for each event if MongoDB is connected
+      let registrationCountMap = new Map<string, number>();
+      if (isMongoDBConnected) {
+        try {
+          const { EventRegistration } = await import("./models/EventRegistration.js");
+          const allRegistrations = await EventRegistration.find({ status: { $ne: 'rejected' } });
+          
+          allRegistrations.forEach(registration => {
+            const current = registrationCountMap.get(registration.eventId) || 0;
+            registrationCountMap.set(registration.eventId, current + 1);
+          });
+        } catch (dbError) {
+          console.error("Error fetching event registrations:", dbError);
+        }
+      }
+
+      // Ensure all events have an id field and registration count
       const eventsWithId = events.map(e => {
         const eventObj = e.toObject ? e.toObject() : e;
+        const eventId = eventObj.id || eventObj._id?.toString();
+        const registrationCount = registrationCountMap.get(eventId) || 0;
         return normalizeEventMedia({
           ...eventObj,
-          id: eventObj.id || eventObj._id?.toString() // Use id if present, fallback to _id
+          id: eventId,
+          registrationCount: registrationCount
         }, req);
       });
 
@@ -1962,11 +1987,26 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const event = await storage.getEvent(req.params.id);
       if (!event) return res.status(404).json({ error: "Event not found" });
       
+      // Get registration count for this event
+      let registrationCount = 0;
+      if (isMongoDBConnected) {
+        try {
+          const { EventRegistration } = await import("./models/EventRegistration.js");
+          registrationCount = await EventRegistration.countDocuments({ 
+            eventId: req.params.id,
+            status: { $ne: 'rejected' }
+          });
+        } catch (dbError) {
+          console.error("Error fetching event registrations:", dbError);
+        }
+      }
+      
       // Ensure the event object includes an id field
       const eventObj = event.toObject ? event.toObject() : event;
       const responseEvent = normalizeEventMedia({
         ...eventObj,
-        id: eventObj.id || eventObj._id?.toString()
+        id: eventObj.id || eventObj._id?.toString(),
+        registrationCount: registrationCount
       }, req);
       
       res.json(responseEvent);
@@ -2220,13 +2260,19 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   app.post("/api/student/signup", async (req: Request, res: Response) => {
     try {
-      const { name, email, phone, rollNumber, password, enrollment, department, yearOfAdmission, currentSemester } = req.body;
+      const { name, email, phone, rollNumber, password, enrollment, department, section, yearOfAdmission, currentSemester } = req.body;
 
       const normalizedEmail = String(email || "").trim().toLowerCase();
       const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-      if (!name || !normalizedEmail || !password || !enrollment || !department)
+      const normalizedSection = typeof section === "string" ? section.trim().toUpperCase() : "";
+
+      if (!name || !normalizedEmail || !password || !enrollment || !department || !normalizedSection)
         return res.status(400).json({ error: "All fields required" });
+
+      if (normalizedSection.length > 40) {
+        return res.status(400).json({ error: "Section must be 40 characters or less", field: "section" });
+      }
 
       if (!emailPattern.test(normalizedEmail)) {
         return res.status(400).json({ error: "Please provide a valid email address", field: "email" });
@@ -2264,6 +2310,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         password: hashed,
         enrollment,
         department: department || "",
+        section: normalizedSection,
         yearOfAdmission: normalizedAdmissionYear,
         currentSemester: autoSemester,
         lastLogin: new Date()
@@ -2292,6 +2339,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
             rollNumber: student.rollNumber,
             enrollment: student.enrollment,
             department: student.department,
+            section: (student as any).section || "",
             yearOfAdmission: student.yearOfAdmission,
             currentSemester: student.currentSemester,
             yearOfCourse,
@@ -2618,6 +2666,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       rollNumber: student.rollNumber,
       enrollment: student.enrollment,
       department: student.department,
+      section: (student as any).section || "",
       yearOfAdmission: student.yearOfAdmission,
       currentSemester: student.currentSemester,
       yearOfCourse,
@@ -3044,9 +3093,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const student = await Student.findById(req.session.studentId);
       if (!student) return res.status(404).json({ error: "Student not found" });
 
-      const { phone, department, yearOfAdmission, rollNumber, currentSemester, email, enrollment } = req.body as {
+      const { phone, department, section, yearOfAdmission, rollNumber, currentSemester, email, enrollment } = req.body as {
         phone?: string;
         department?: string;
+        section?: string;
         yearOfAdmission?: number;
         rollNumber?: string;
         currentSemester?: string;
@@ -3085,6 +3135,14 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           return res.status(400).json({ error: "Department must be at least 2 characters" });
         }
         student.department = normalizedDepartment;
+      }
+
+      if (typeof section === "string") {
+        const normalizedSection = section.trim().toUpperCase();
+        if (normalizedSection.length > 40) {
+          return res.status(400).json({ error: "Section must be 40 characters or less", field: "section" });
+        }
+        student.set("section", normalizedSection);
       }
 
       if (typeof rollNumber === "string") {
@@ -3133,6 +3191,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           rollNumber: student.rollNumber,
           enrollment: student.enrollment,
           department: student.department,
+          section: (student as any).section || "",
           yearOfAdmission: student.yearOfAdmission,
           currentSemester: student.currentSemester,
           yearOfCourse,
@@ -3310,6 +3369,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         enrollment: s.enrollment,
         department: s.department || "",
         branch: s.department || "",
+        section: (s as any).section || "",
         yearOfAdmission: s.yearOfAdmission,
         currentSemester: s.currentSemester || "",
         lastLogin: s.lastLogin || null,
@@ -3361,13 +3421,14 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(404).json({ error: "Student not found" });
       }
 
-      const { name, email, phone, rollNumber, enrollment, department, yearOfAdmission } = req.body as {
+      const { name, email, phone, rollNumber, enrollment, department, section, yearOfAdmission } = req.body as {
         name?: string;
         email?: string;
         phone?: string;
         rollNumber?: string;
         enrollment?: string;
         department?: string;
+        section?: string;
         yearOfAdmission?: number;
       };
 
@@ -3402,6 +3463,14 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           return res.status(400).json({ error: "Department must be at least 2 characters" });
         }
         student.department = normalizedDepartment;
+      }
+
+      if (typeof section === "string") {
+        const normalizedSection = section.trim().toUpperCase();
+        if (normalizedSection.length > 40) {
+          return res.status(400).json({ error: "Section must be 40 characters or less", field: "section" });
+        }
+        student.set("section", normalizedSection);
       }
 
       const nextEmail = typeof email === "string" ? email.trim() : student.email;
@@ -3463,6 +3532,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           rollNumber: student.rollNumber || "",
           enrollment: student.enrollment,
           department: student.department || "",
+          section: (student as any).section || "",
           yearOfAdmission: student.yearOfAdmission,
           currentSemester: student.currentSemester,
           yearOfCourse,
@@ -5698,7 +5768,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         storage.getAllClubs(),
         storage.getAllEvents(),
         Student.find({}).select('id name email enrollment department lastLogin isDisabled'),
-        ClubMembership.find({ status: 'approved' }).select('joinedAt clubId')
+        ClubMembership.find({ status: { $ne: 'rejected' } }).select('joinedAt clubId')
       ]);
 
       // Create a map of clubId -> member count
@@ -6276,6 +6346,134 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
   app.get("/api/participation", requireFacultyAuth, async (req: Request, res: Response) => {
     try {
+      const parseTimeToMinutes = (value: unknown): number | null => {
+        const input = String(value || "").trim().toLowerCase();
+        if (!input) return null;
+        const normalized = input
+          .replace(/\./g, "")
+          .replace(/\s+/g, " ")
+          .replace(/(\d)(am|pm)$/, "$1 $2");
+        const match = normalized.match(/^(\d{1,2})(?::(\d{1,2}))?\s*(am|pm)?$/);
+        if (!match) return null;
+
+        let hours = Number(match[1]);
+        const minutes = Number(match[2] || 0);
+        const meridiem = match[3];
+        if (!Number.isInteger(hours) || !Number.isInteger(minutes) || minutes < 0 || minutes > 59) return null;
+
+        if (meridiem) {
+          if (hours < 1 || hours > 12) return null;
+          if (hours === 12) hours = 0;
+          if (meridiem === "pm") hours += 12;
+        } else if (hours < 0 || hours > 23) {
+          return null;
+        }
+
+        return hours * 60 + minutes;
+      };
+
+      const parseDateOnly = (value: unknown): Date | null => {
+        const input = String(value || "").trim();
+        if (!input) return null;
+
+        let year: number;
+        let month: number;
+        let day: number;
+
+        const yyyyMmDd = input.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+        const ddMmYyyy = input.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
+
+        if (yyyyMmDd) {
+          year = Number(yyyyMmDd[1]);
+          month = Number(yyyyMmDd[2]);
+          day = Number(yyyyMmDd[3]);
+        } else if (ddMmYyyy) {
+          day = Number(ddMmYyyy[1]);
+          month = Number(ddMmYyyy[2]);
+          year = Number(ddMmYyyy[3]);
+          if (year < 100) year += year >= 70 ? 1900 : 2000;
+        } else {
+          const parsed = new Date(input);
+          if (Number.isNaN(parsed.getTime())) return null;
+          return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+        }
+
+        const date = new Date(year, month - 1, day);
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+          return null;
+        }
+        return date;
+      };
+
+      const eventDateMatchesRange = (row: any, requestedDateRange: string): boolean => {
+        const eventDate = parseDateOnly(row.eventDate);
+        if (!eventDate) return false;
+
+        const rangeParts = requestedDateRange.split(/\s+(?:-|to)\s+/i);
+        if (rangeParts.length === 2) {
+          const start = parseDateOnly(rangeParts[0]);
+          const end = parseDateOnly(rangeParts[1]);
+          if (!start || !end) return false;
+          const min = Math.min(start.getTime(), end.getTime());
+          const max = Math.max(start.getTime(), end.getTime());
+          const value = eventDate.getTime();
+          return value >= min && value <= max;
+        }
+
+        const exactDate = parseDateOnly(requestedDateRange);
+        if (!exactDate) return String(row.eventDate || "").toLowerCase().includes(requestedDateRange.toLowerCase());
+        return eventDate.getTime() === exactDate.getTime();
+      };
+
+      const eventWindowIncludesTime = (row: any, requestedTime: string): boolean => {
+        const buildSegments = (start: number, end: number): Array<[number, number]> => {
+          if (start === end) return [[0, 24 * 60]];
+          if (end > start) return [[start, end]];
+          return [
+            [start, 24 * 60],
+            [0, end],
+          ];
+        };
+
+        const windowsOverlap = (aStart: number, aEnd: number, bStart: number, bEnd: number): boolean => {
+          const aSegments = buildSegments(aStart, aEnd);
+          const bSegments = buildSegments(bStart, bEnd);
+          return aSegments.some(([leftStart, leftEnd]) =>
+            bSegments.some(([rightStart, rightEnd]) => leftStart <= rightEnd && rightStart <= leftEnd),
+          );
+        };
+
+        const rangeParts = requestedTime.split(/\s+(?:-|to)\s+/i);
+        if (rangeParts.length === 2) {
+          const requestedStart = parseTimeToMinutes(rangeParts[0]);
+          const requestedEnd = parseTimeToMinutes(rangeParts[1]);
+          const rowStart = parseTimeToMinutes(row.eventTime);
+          if (requestedStart === null || requestedEnd === null || rowStart === null) return false;
+
+          const rowDuration = Math.max(1, Number(row.eventDurationMinutes) || 120);
+          const rowEnd = (rowStart + rowDuration) % (24 * 60);
+          return windowsOverlap(rowStart, rowEnd, requestedStart, requestedEnd);
+        }
+
+        const requestedMinutes = parseTimeToMinutes(requestedTime);
+        if (requestedMinutes === null) {
+          return String(row.eventTime || "").toLowerCase().includes(requestedTime.toLowerCase());
+        }
+
+        const startMinutes = parseTimeToMinutes(row.eventTime);
+        if (startMinutes === null) return false;
+
+        const durationMinutes = Math.max(1, Number(row.eventDurationMinutes) || 120);
+        if (durationMinutes >= 24 * 60) return true;
+
+        const endMinutes = startMinutes + durationMinutes;
+        if (endMinutes <= 24 * 60) {
+          return requestedMinutes >= startMinutes && requestedMinutes <= endMinutes;
+        }
+
+        return requestedMinutes >= startMinutes || requestedMinutes <= endMinutes % (24 * 60);
+      };
+
       const department = String(req.query.department || "").trim();
       const section = String(req.query.section || "").trim();
       const year = String(req.query.year || "").trim();
@@ -6284,8 +6482,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const club = String(req.query.club || "").trim();
       const eventName = String(req.query.eventName || "").trim();
       const eventStatus = String(req.query.eventStatus || "").trim().toLowerCase();
-      const dateFrom = String(req.query.dateFrom || "").trim();
-      const dateTo = String(req.query.dateTo || "").trim();
+      const dateRange = String(req.query.dateRange || "").trim();
       const time = String(req.query.time || "").trim();
       const page = Math.max(1, Number(req.query.page) || 1);
       const limit = Math.min(100, Math.max(5, Number(req.query.limit) || 20));
@@ -6300,38 +6497,30 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       if (category) filter.eventCategory = category;
       if (club) filter.clubName = club;
       if (eventName) filter.eventTitle = eventName;
-      if (time) filter.eventTime = { $regex: time.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
-      if (dateFrom || dateTo) {
-        filter.registeredAt = {};
-        if (dateFrom) filter.registeredAt.$gte = new Date(`${dateFrom}T00:00:00.000Z`);
-        if (dateTo) filter.registeredAt.$lte = new Date(`${dateTo}T23:59:59.999Z`);
-      }
 
       const allRows = await EventRegistration.find(filter).sort({ registeredAt: -1 }).lean();
+      const dateFilteredRows = dateRange
+        ? allRows.filter((row: any) => eventDateMatchesRange(row, dateRange))
+        : allRows;
       const statusFilteredRows =
         eventStatus === "upcoming" || eventStatus === "past"
-          ? allRows.filter((row: any) => {
+          ? dateFilteredRows.filter((row: any) => {
               const eventDate = new Date(String(row.eventDate || ""));
               if (Number.isNaN(eventDate.getTime())) return false;
               return eventStatus === "upcoming" ? eventDate >= new Date() : eventDate < new Date();
             })
-          : allRows;
-      const total = statusFilteredRows.length;
-      const rows = statusFilteredRows.slice((page - 1) * limit, page * limit);
+          : dateFilteredRows;
+      const timeFilteredRows = time
+        ? statusFilteredRows.filter((row: any) => eventWindowIncludesTime(row, time))
+        : statusFilteredRows;
+      const total = timeFilteredRows.length;
+      const rows = timeFilteredRows.slice((page - 1) * limit, page * limit);
 
-      const participationCountAggregation = await EventRegistration.aggregate([
-        { $match: filter },
-        {
-          $group: {
-            _id: "$enrollmentNumber",
-            participationCount: { $sum: 1 },
-          },
-        },
-      ]);
-
-      const participationByEnrollment = new Map(
-        participationCountAggregation.map((entry: any) => [String(entry._id), Number(entry.participationCount)]),
-      );
+      const participationByEnrollment = new Map<string, number>();
+      timeFilteredRows.forEach((row: any) => {
+        const enrollment = String(row.enrollmentNumber || "");
+        participationByEnrollment.set(enrollment, (participationByEnrollment.get(enrollment) || 0) + 1);
+      });
 
       const items = rows.map((row: any) => ({
         id: row.id,
@@ -6345,57 +6534,49 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         club: row.clubName,
         date: row.eventDate,
         time: row.eventTime,
+        eventDurationMinutes: Number(row.eventDurationMinutes) || 120,
         registeredAt: row.registeredAt,
         participationCount: participationByEnrollment.get(String(row.enrollmentNumber)) || 0,
       }));
 
-      const [summaryAgg, departmentAgg, categoryAgg, timelineAgg] = await Promise.all([
-        EventRegistration.aggregate([
-          { $match: filter },
-          {
-            $group: {
-              _id: null,
-              totalParticipations: { $sum: 1 },
-              uniqueStudentsSet: { $addToSet: "$enrollmentNumber" },
-            },
-          },
-        ]),
-        EventRegistration.aggregate([
-          { $match: filter },
-          { $group: { _id: "$department", value: { $sum: 1 } } },
-          { $sort: { value: -1 } },
-        ]),
-        EventRegistration.aggregate([
-          { $match: filter },
-          { $group: { _id: "$eventCategory", value: { $sum: 1 } } },
-          { $sort: { value: -1 } },
-        ]),
-        EventRegistration.aggregate([
-          { $match: filter },
-          {
-            $group: {
-              _id: {
-                $dateToString: { format: "%Y-%m-%d", date: "$registeredAt" },
-              },
-              value: { $sum: 1 },
-            },
-          },
-          { $sort: { _id: 1 } },
-        ]),
-      ]);
+      const summarizeBy = (key: string) =>
+        Array.from(
+          timeFilteredRows.reduce((acc: Map<string, number>, row: any) => {
+            const label = String(row[key] || "Unknown");
+            acc.set(label, (acc.get(label) || 0) + 1);
+            return acc;
+          }, new Map<string, number>()),
+        )
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value);
 
-      const mostActiveStudentAgg = await EventRegistration.aggregate([
-        { $match: filter },
-        { $group: { _id: "$studentName", value: { $sum: 1 } } },
-        { $sort: { value: -1 } },
-        { $limit: 1 },
-      ]);
+      const timeline = Array.from(
+        timeFilteredRows.reduce((acc: Map<string, number>, row: any) => {
+          const date = row.registeredAt ? new Date(row.registeredAt).toISOString().slice(0, 10) : "Unknown";
+          acc.set(date, (acc.get(date) || 0) + 1);
+          return acc;
+        }, new Map<string, number>()),
+      )
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      const mostActiveStudent =
+        Array.from(
+          timeFilteredRows.reduce((acc: Map<string, number>, row: any) => {
+            const label = String(row.studentName || "Unknown");
+            acc.set(label, (acc.get(label) || 0) + 1);
+            return acc;
+          }, new Map<string, number>()),
+        ).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A";
+
+      const departments = summarizeBy("department");
+      const categories = summarizeBy("eventCategory");
 
       const summary = {
-        totalParticipations: Number(summaryAgg[0]?.totalParticipations || 0),
-        uniqueStudents: Number(summaryAgg[0]?.uniqueStudentsSet?.length || 0),
-        mostActiveStudent: String(mostActiveStudentAgg[0]?._id || "N/A"),
-        mostPopularCategory: String(categoryAgg[0]?._id || "N/A"),
+        totalParticipations: timeFilteredRows.length,
+        uniqueStudents: new Set(timeFilteredRows.map((row: any) => String(row.enrollmentNumber || ""))).size,
+        mostActiveStudent,
+        mostPopularCategory: String(categories[0]?.name || "N/A"),
       };
 
       res.json({
@@ -6408,9 +6589,9 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         },
         analytics: {
           summary,
-          byDepartment: departmentAgg.map((d: any) => ({ name: d._id || "Unknown", value: d.value })),
-          byCategory: categoryAgg.map((c: any) => ({ name: c._id || "Unknown", value: c.value })),
-          byTimeline: timelineAgg.map((t: any) => ({ name: t._id, value: t.value })),
+          byDepartment: departments,
+          byCategory: categories,
+          byTimeline: timeline,
         },
       });
     } catch (error) {
