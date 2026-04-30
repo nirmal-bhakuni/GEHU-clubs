@@ -10,7 +10,7 @@ import { UNIVERSITY_BRANCH_OPTIONS } from "@/lib/branchOptions";
 import CaptchaComponent from "@/components/CaptchaComponent";
 import { UserPlus } from "lucide-react";
 
-const SECTION_OPTIONS = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2", "E1", "E2", "F1", "F2", "G1", "G2", "H1", "H2", "I1", "I2", "J1", "J2", "K1", "K2", "L1", "L2", "AI/DS", "AI/ML-1", "AI/ML-2", "AI/ML-3", "Cyber Security"];
+const SECTION_OPTIONS = ["A1", "A2", "B1", "B2", "C1", "C2", "A", "B", "C"];
 
 export default function StudentSignup() {
   const [, setLocation] = useLocation();
@@ -54,11 +54,14 @@ export default function StudentSignup() {
       const data = await response.json();
 
       if (data.success) {
+        const student = data.student || {};
+        sessionStorage.setItem("studentDashboardLock", "1");
+        localStorage.setItem("currentStudent", student.enrollment || formData.enrollment.trim());
         toast({
           title: "Account created",
-          description: "Please login with your credentials",
+          description: "You are signed in now.",
         });
-        setLocation("/student/login");
+        setLocation("/student/dashboard");
       }
     } catch (error: any) {
       const errorMessage = error?.message || "";

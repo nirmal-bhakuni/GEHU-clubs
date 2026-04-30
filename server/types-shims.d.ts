@@ -63,6 +63,11 @@ declare module 'bcryptjs' {
 	export default content;
 }
 
+declare module 'pdfkit' {
+	const PDFDocument: any;
+	export default PDFDocument;
+}
+
 declare module 'drizzle-orm' {
 	export const sql: any;
 }

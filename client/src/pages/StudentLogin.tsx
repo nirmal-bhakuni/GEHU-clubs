@@ -44,7 +44,8 @@ export default function StudentLogin() {
     setIsLoading(true);
 
     try {
-      const response = await apiRequest("POST", "/api/student/login", { enrollment, password });
+      const normalizedEnrollment = enrollment.trim();
+      const response = await apiRequest("POST", "/api/student/login", { enrollment: normalizedEnrollment, password });
       const data = await response.json();
 
       if (data.success) {
@@ -63,9 +64,11 @@ export default function StudentLogin() {
           phone: data.student.phone || "",
           rollNumber: data.student.rollNumber || "",
           department: data.student.department || "",
+          section: data.student.section || "",
           yearOfAdmission: data.student.yearOfAdmission || undefined,
           currentSemester: data.student.currentSemester || "",
         });
+        localStorage.setItem("currentStudent", data.student.enrollment || normalizedEnrollment);
         // Store student session for offline functionality
        // localStorage.setItem("currentStudent", enrollment);
         toast({
@@ -83,7 +86,7 @@ export default function StudentLogin() {
       }
     } catch (error: any) {
       const message = error?.message || "";
-      const statusCode = parseInt(message.split(":")[0], 10);
+      const statusCode = Number(error?.status) || parseInt(message.split(":")[0], 10);
 
       // If the server says disabled or unauthorized, do not fall back to offline login
       if (statusCode === 403) {
@@ -119,7 +122,8 @@ export default function StudentLogin() {
 
       // Check offline-created students first
       const offlineStudents = JSON.parse(localStorage.getItem("offlineStudents") || "{}");
-      const offlineStudent = offlineStudents[enrollment];
+      const normalizedEnrollment = enrollment.trim();
+      const offlineStudent = offlineStudents[normalizedEnrollment] || offlineStudents[enrollment];
 
       if (offlineStudent && offlineStudent.password === password) {
         sessionStorage.setItem("studentDashboardLock", "1");
@@ -156,9 +160,9 @@ export default function StudentLogin() {
       }
 
       // Check static demo student
-      if (password === "password123" && staticStudents[enrollment as keyof typeof staticStudents]) {
+      if (password === "password123" && staticStudents[normalizedEnrollment as keyof typeof staticStudents]) {
         sessionStorage.setItem("studentDashboardLock", "1");
-        const studentData = staticStudents[enrollment as keyof typeof staticStudents];
+        const studentData = staticStudents[normalizedEnrollment as keyof typeof staticStudents];
         // Set the student data in the query cache
         queryClient.setQueryData(["/api/student/me"], studentData);
         toast({

@@ -2293,15 +2293,18 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const { name, email, phone, rollNumber, password, enrollment, department, section, yearOfAdmission, currentSemester } = req.body;
 
       const normalizedEmail = String(email || "").trim().toLowerCase();
+      const normalizedEnrollment = String(enrollment || "").trim();
+      const normalizedRollNumber = String(rollNumber || "").trim();
+      const normalizedPhone = String(phone || "").trim();
       const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-      const normalizedSection = typeof section === "string" ? section.trim().toUpperCase() : "";
+      const normalizedSection = normalizeSectionCode(section);
 
-      if (!name || !normalizedEmail || !password || !enrollment || !department || !normalizedSection)
+      if (!name || !normalizedEmail || !password || !normalizedEnrollment || !department || !normalizedSection)
         return res.status(400).json({ error: "All fields required" });
 
-      if (normalizedSection.length > 40) {
-        return res.status(400).json({ error: "Section must be 40 characters or less", field: "section" });
+      if (!isAllowedSectionCode(normalizedSection)) {
+        return res.status(400).json({ error: "Invalid section. Allowed sections: A1, A2, B1, B2, C1, C2, A, B, C.", field: "section" });
       }
 
       if (!emailPattern.test(normalizedEmail)) {
@@ -2311,17 +2314,17 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const exists = await Student.findOne({ email: { $regex: `^${escapeRegexInput(normalizedEmail)}$`, $options: "i" } });
       if (exists) return res.status(409).json({ error: "Email already exists", field: "email" });
 
-      const enrollmentExists = await Student.findOne({ enrollment });
+      const enrollmentExists = await Student.findOne({ enrollment: { $regex: `^${escapeRegexInput(normalizedEnrollment)}$`, $options: "i" } });
       if (enrollmentExists) return res.status(409).json({ error: "Enrollment number already registered. Please login instead or contact the administrator.", field: "enrollment" });
 
       // Check for duplicate roll number if provided
-      if (rollNumber) {
-        const rollNumberExists = await Student.findOne({ rollNumber });
+      if (normalizedRollNumber) {
+        const rollNumberExists = await Student.findOne({ rollNumber: normalizedRollNumber });
         if (rollNumberExists) return res.status(409).json({ error: "Roll number already registered with another account. Please use a different roll number or contact the administrator.", field: "rollNumber" });
       }
 
-      if (typeof phone === "string" && phone.trim()) {
-        const phoneExists = await Student.findOne({ phone: phone.trim() });
+      if (normalizedPhone) {
+        const phoneExists = await Student.findOne({ phone: normalizedPhone });
         if (phoneExists) return res.status(409).json({ error: "Phone number already registered with another account.", field: "phone" });
       }
 
@@ -2335,10 +2338,10 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const student = await Student.create({
         name,
         email: normalizedEmail,
-        phone: phone || "",
-        rollNumber: rollNumber || "",
+        phone: normalizedPhone,
+        rollNumber: normalizedRollNumber,
         password: hashed,
-        enrollment,
+        enrollment: normalizedEnrollment,
         department: department || "",
         section: normalizedSection,
         yearOfAdmission: normalizedAdmissionYear,
@@ -2504,8 +2507,15 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   app.post("/api/student/login", async (req: Request, res: Response) => {
     try {
       const { enrollment, password } = req.body;
+      const normalizedEnrollment = String(enrollment || "").trim();
 
-      const student = await Student.findOne({ enrollment });
+      if (!normalizedEnrollment || !password) {
+        return res.status(400).json({ error: "Enrollment and password are required" });
+      }
+
+      const student = await Student.findOne({
+        enrollment: { $regex: `^${escapeRegexInput(normalizedEnrollment)}$`, $options: "i" },
+      });
       if (!student) return res.status(401).json({ error: "Invalid enrollment or password" });
 
       const loginConflict = await findStudentIdentityConflict({
@@ -2562,6 +2572,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
             rollNumber: student.rollNumber,
             enrollment: student.enrollment,
             department: student.department,
+            section: (student as any).section || "",
             yearOfAdmission: student.yearOfAdmission,
             currentSemester: student.currentSemester,
             yearOfCourse,

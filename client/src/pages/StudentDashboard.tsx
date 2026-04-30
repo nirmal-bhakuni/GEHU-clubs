@@ -1,70 +1,4 @@
-﻿import { useQuery } from "@tanstack/react-query";
-  // Drives for this student's section
-  const { data: sectionDrives = [] } = useQuery<any[]>({
-    queryKey: ["/api/student/drives"],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/student/drives");
-      return res.json();
-    },
-    enabled: isAuthenticated,
-  });
-
-  // New drive notifications
-  const { data: driveNotifications = [] } = useQuery<any[]>({
-    queryKey: ["/api/student/notifications"],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/student/notifications");
-      return res.json();
-    },
-    enabled: isAuthenticated,
-  });
-          {/* Section Drives */}
-          {sectionDrives.length > 0 && (
-            <Card className="border border-blue-400/30 bg-blue-50/40 dark:bg-blue-950/10 p-4 mb-6">
-              <h3 className="font-semibold mb-2 flex items-center gap-2 text-blue-700 dark:text-blue-200">
-                <FileText className="w-4 h-4" /> Section Drives
-              </h3>
-              <div className="space-y-2">
-                {sectionDrives.map((drive) => (
-                  <div key={drive.id} className="border rounded p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/80 dark:bg-background/60">
-                    <div>
-                      <p className="font-medium">{drive.title}</p>
-                      <p className="text-xs text-muted-foreground">Deadline: {new Date(drive.deadline).toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">Section: {drive.targetSection}</p>
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => setLocation(`/drive/${drive.id}/submit`)}>
-                      Submit
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* New Drive Notifications */}
-          {driveNotifications.length > 0 && (
-            <Card className="border border-yellow-400/30 bg-yellow-50/40 dark:bg-yellow-950/10 p-4 mb-6">
-              <h3 className="font-semibold mb-2 flex items-center gap-2 text-yellow-700 dark:text-yellow-200">
-                <Bell className="w-4 h-4" /> New Drive Notifications
-              </h3>
-              <div className="space-y-2">
-                {driveNotifications.map((notif, idx) => (
-                  <div key={idx} className="border rounded p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white/80 dark:bg-background/60">
-                    <div>
-                      <p className="font-medium">{notif.title}</p>
-                      <p className="text-xs text-muted-foreground">Deadline: {notif.deadline ? new Date(notif.deadline).toLocaleString() : "-"}</p>
-                    </div>
-                    {notif.driveId && (
-                      <Button size="sm" variant="outline" onClick={() => setLocation(`/drive/${notif.driveId}/submit`)}>
-                        View Drive
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-import { useMemo, useState, useEffect, useRef } from "react";
+﻿import { useMemo, useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueries } from "@tanstack/react-query";
 import { AgGridReact } from "ag-grid-react";
@@ -1242,7 +1176,6 @@ export default function StudentDashboard() {
           const variant = value === "present" ? "default" : value === "absent" ? "destructive" : "outline";
           return (
             <Badge variant={variant as any} className="capitalize text-[11px] leading-none">
-              {value === "present" ? "✓ " : value === "absent" ? "✗ " : ""}
               {value}
             </Badge>
           );
@@ -1641,7 +1574,7 @@ export default function StudentDashboard() {
                 <div className="space-y-2">
                   <p className="inline-flex items-center rounded-full border border-border/70 bg-background/70 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground sm:px-2.5 sm:text-[10px] sm:tracking-[0.2em]">Daily Snapshot</p>
                   <h2 className="text-2xl font-bold leading-tight text-foreground drop-shadow-sm sm:text-3xl lg:text-4xl">
-                    Welcome back, {student?.name}! 👋
+                    Welcome back, {student?.name}!
                   </h2>
                   <p className="max-w-2xl text-xs text-muted-foreground sm:text-sm lg:text-lg">
                     Ready to explore clubs and events? Your key actions are grouped so you can jump straight into what matters.
@@ -3112,3 +3045,4 @@ export default function StudentDashboard() {
     </div>
   );
 }
+
