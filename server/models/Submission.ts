@@ -11,6 +11,7 @@ const submissionSchema = new mongoose.Schema(
       section: { type: String, required: true, trim: true },
       department: { type: String, required: true, trim: true },
       year: { type: Number, required: true },
+      semester: { type: String, required: false, default: "", trim: true },
     },
     eventCategory: { type: String, required: true, trim: true },
     certificateUrl: { type: String, required: true },

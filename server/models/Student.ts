@@ -23,6 +23,7 @@ const studentSchema = new mongoose.Schema({
   dismissedReminderIds: [{ type: String }],
   savedEventIds: [{ type: String }],
   savedClubIds: [{ type: String }],
+  interests: [{ type: String }],
   certificates: [{
     title: { type: String, required: true },
     issuedBy: { type: String, required: true },

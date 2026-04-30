@@ -1,28 +1,8 @@
-import { Download } from "lucide-react";
-  // Generate PDF and email for a drive
-  const handleGeneratePdf = async (driveId: string) => {
-    try {
-      const res = await facultyApiFetch(`/api/drive/${driveId}/section-pdf`, { method: "POST" });
-      if (!res.ok) throw new Error("Failed to generate PDF");
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `section_students_${driveId}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      toast({ title: "PDF generated & emailed", description: "PDF downloaded and students notified by email." });
-    } catch (error: any) {
-      toast({ title: "PDF generation failed", description: error.message, variant: "destructive" });
-    }
-  };
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Activity, Calendar, CheckCircle2, Clock3, Loader2, Star, TrendingUp, Users, XCircle } from "lucide-react";
+import { Activity, Calendar, CheckCircle2, Clock3, Download, Loader2, Star, TrendingUp, Trophy, Users, XCircle } from "lucide-react";
 import { AgGridReact } from "ag-grid-react";
 import type { ColDef } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
@@ -66,6 +46,16 @@ type ParticipationResponse = {
     };
     byDepartment: Array<{ name: string; value: number }>;
     byCategory: Array<{ name: string; value: number }>;
+    bestByCategory: Array<{
+      category: string;
+      studentName: string;
+      enrollmentNumber: string;
+      department: string;
+      section: string;
+      semester: string;
+      participationCount: number;
+      attendedCount: number;
+    }>;
     byTimeline: Array<{ name: string; value: number }>;
   };
 };
@@ -94,7 +84,7 @@ type Drive = {
 
 type Submission = {
   id: string;
-  studentDetails: { name: string; section: string; department: string; year: number };
+  studentDetails: { name: string; section: string; department: string; year: number; semester?: string };
   eventCategory: string;
   certificateUrl: string;
   submittedAt: string;
@@ -150,11 +140,11 @@ const MASTER_DEPARTMENTS = [
   "Performing Arts",
   "Other",
 ];
-const MASTER_SECTIONS = ["A1", "A2", "B1", "B2", "C1", "C2", "D1", "D2", "E1", "E2","F1","F2","G1","G2","H1","H2","I1","I2","J1","J2","K1","K2","L1","L2","AI/DS","AI/ML-1","AI/ML-2","AI/ML-3","Cyber Security"];
+const MASTER_SECTIONS = ["A1", "A2", "B1", "B2", "C1", "C2", "A", "B", "C"];
 const MASTER_YEARS = ["First Year", "Second Year", "Third Year", "Fourth Year"];
-const MASTER_SEMESTERS = Array.from({ length: 10 }, (_, i) => `Semester ${i + 1}`);
-const MASTER_EVENT_CATEGORIES = ["Workshop", "Bootcamp","Social" , "Competition" , "Conference" , "Hackathon" , "Meetup" , "Webinar" , "Exhibition" , "Festival" , "Training" , "Networking" , "Sports", "Technical", "Finance", "Cultural", "Research", "Seminar"];
-const MASTER_CURRENT_CLUBS = ["IEEE", "ARYAVRAT", "PAPERTECH-GEHU", "Entrepreneurship Hub", "CODE_HUNTERS", "RANGMANCH"];
+const MASTER_SEMESTERS = Array.from({ length: 8 }, (_, i) => `Semester ${i + 1}`);
+const MASTER_EVENT_CATEGORIES = ["Workshop", "Bootcamp", "Social", "Competition", "Conference", "Hackathon", "Meetup", "Webinar", "Exhibition", "Festival", "Training", "Networking", "Sports", "E-Sports", "Technical", "Finance", "Cultural", "Research", "Seminar"];
+const MASTER_CURRENT_CLUBS = ["IEEE", "ARYAVRAT", "PAPERTECH-GEHU", "Entrepreneurship Hub", "CODE_HUNTERS", "RANGMANCH", "GEHU Sports Council", "E-Sports Arena", "Cultural Collective"];
 const MASTER_FUTURE_CLUBS = ["AI Innovators Guild", "Cyber Security Council", "Robotics & Automation Cell", "Green Energy Society", "Media & Podcast Club"];
 const MASTER_EVENT_NAMES = ["Winter Tech Fest", "Hackathon", "Financial Literacy", "Web Development Bootcamp", "Startup Expo", "AI Summit", "Robotics Challenge", "Cyber Drill", "Green Future Conclave"];
 
@@ -213,6 +203,25 @@ export default function FacultyDashboard() {
   const [submissionsPage, setSubmissionsPage] = useState(1);
   const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<string[]>([]);
   const [isBulkReviewing, setIsBulkReviewing] = useState(false);
+
+  const handleGeneratePdf = async (driveId: string) => {
+    try {
+      const res = await facultyApiFetch(`/api/drive/${driveId}/section-pdf`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to generate PDF");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `section_students_${driveId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast({ title: "PDF generated & emailed", description: "PDF downloaded and students notified by email." });
+    } catch (error: any) {
+      toast({ title: "PDF generation failed", description: error.message, variant: "destructive" });
+    }
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -296,6 +305,7 @@ export default function FacultyDashboard() {
     if (!term) return tableRows;
     return tableRows.filter((row) =>
       [row.studentName, row.eventName, row.club, row.department, row.section]
+        .concat(row.semester ? [row.semester] : [])
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term)),
     );
@@ -355,8 +365,8 @@ export default function FacultyDashboard() {
     { field: "studentName", headerName: "Student Name", minWidth: 180, flex: 1.1 },
     { field: "department", headerName: "Department", minWidth: 160 },
     { field: "section", headerName: "Section", minWidth: 110 },
-    { field: "year", headerName: "Year", minWidth: 90 },
     { field: "semester", headerName: "Semester", minWidth: 120 },
+    { field: "year", headerName: "Year", minWidth: 90 },
     { field: "eventName", headerName: "Event Name", minWidth: 200, flex: 1.2 },
     { field: "eventCategory", headerName: "Event Category", minWidth: 150 },
     { field: "club", headerName: "Club", minWidth: 150 },
@@ -413,8 +423,8 @@ export default function FacultyDashboard() {
       "Student Name",
       "Department",
       "Section",
-      "Year",
       "Semester",
+      "Year",
       "Event Name",
       "Event Category",
       "Club",
@@ -428,8 +438,8 @@ export default function FacultyDashboard() {
         row.studentName,
         row.department,
         row.section,
-        row.year,
         row.semester,
+        row.year,
         row.eventName,
         row.eventCategory,
         row.club,
@@ -723,6 +733,35 @@ export default function FacultyDashboard() {
           </div>
 
           <Card className="p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-amber-500" />
+              <div>
+                <h3 className="font-medium">Best Student by Category</h3>
+                <p className="text-xs text-muted-foreground">Ranked by participation and attendance within each event/game category.</p>
+              </div>
+            </div>
+            {analytics?.bestByCategory?.length ? (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {analytics.bestByCategory.map((item) => (
+                  <div key={item.category} className="rounded-lg border bg-muted/20 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{item.category}</p>
+                    <p className="mt-1 text-base font-semibold">{item.studentName}</p>
+                    <p className="text-xs text-muted-foreground">{item.department}</p>
+                    <p className="mt-2 text-sm">
+                      Section {item.section || "-"} | {item.semester || "Semester N/A"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.participationCount} participations | {item.attendedCount} attended
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No category leaders found for the selected filters.</p>
+            )}
+          </Card>
+
+          <Card className="p-4">
             {participationQuery.isLoading ? (
               <div className="py-12 flex justify-center items-center text-sm text-muted-foreground gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -764,7 +803,7 @@ export default function FacultyDashboard() {
               <div className="space-y-2"><Label>Title</Label><Input value={driveForm.title} onChange={(e) => setDriveForm((p) => ({ ...p, title: e.target.value }))} required /></div>
               <div className="space-y-2"><Label>Deadline</Label><Input type="datetime-local" value={driveForm.deadline} onChange={(e) => setDriveForm((p) => ({ ...p, deadline: e.target.value }))} required /></div>
               <div className="space-y-2"><Label>Target Course</Label><Input value={driveForm.targetCourse} onChange={(e) => setDriveForm((p) => ({ ...p, targetCourse: e.target.value }))} placeholder="B.Tech CSE" required /></div>
-              <div className="space-y-2"><Label>Target Section</Label><Input value={driveForm.targetSection} onChange={(e) => setDriveForm((p) => ({ ...p, targetSection: e.target.value }))} placeholder="A1" required /></div>
+              <div className="space-y-2"><Label>Target Section</Label><Input value={driveForm.targetSection} onChange={(e) => setDriveForm((p) => ({ ...p, targetSection: e.target.value.toUpperCase() }))} placeholder="A1, A2, B1, B2, C1, C2, A, B, or C" required /></div>
               <div className="space-y-2"><Label>Allowed File Types (comma separated)</Label><Input value={driveForm.allowedFileTypes} onChange={(e) => setDriveForm((p) => ({ ...p, allowedFileTypes: e.target.value }))} required /></div>
               <div className="space-y-2"><Label>Max File Size (bytes)</Label><Input value={driveForm.maxFileSize} onChange={(e) => setDriveForm((p) => ({ ...p, maxFileSize: e.target.value }))} required /></div>
               <div className="md:col-span-2 space-y-2"><Label>Description</Label><Input value={driveForm.description} onChange={(e) => setDriveForm((p) => ({ ...p, description: e.target.value }))} /></div>
@@ -872,7 +911,9 @@ export default function FacultyDashboard() {
                     Select for bulk action
                   </label>
                   <p className="font-medium">{submission.studentDetails.name} ({submission.studentDetails.department})</p>
-                  <p className="text-sm">Section: {submission.studentDetails.section} | Year: {submission.studentDetails.year}</p>
+                  <p className="text-sm">
+                    Section: {submission.studentDetails.section} | Semester: {submission.studentDetails.semester || "-"} | Year: {submission.studentDetails.year}
+                  </p>
                   <p className="text-sm">Event Category: {submission.eventCategory}</p>
                   <a href={submission.certificateUrl} className="underline text-sm" target="_blank" rel="noreferrer">Preview Certificate</a>
                   <p className="text-xs text-muted-foreground">Submitted: {new Date(submission.submittedAt).toLocaleString()}</p>

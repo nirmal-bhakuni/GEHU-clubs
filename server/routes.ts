@@ -87,7 +87,16 @@ function isAllowedProfileImage(file: Express.Multer.File) {
 
 const phonePattern = /^\+?[0-9]{10,15}$/;
 const semesterPattern = /^semester\s*([1-8])$/i;
+const allowedSectionCodes = new Set(["A1", "A2", "B1", "B2", "C1", "C2", "A", "B", "C"]);
 const ACADEMIC_START_MONTH_INDEX = 6; // July
+
+function normalizeSectionCode(value?: string | null): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function isAllowedSectionCode(value?: string | null): boolean {
+  return allowedSectionCodes.has(normalizeSectionCode(value));
+}
 
 function parseSemesterNumber(value?: string | null): number | null {
   if (!value) return null;
@@ -703,6 +712,7 @@ const submissionSchema = z.object({
   section: z.string().min(1).max(40),
   department: z.string().min(2).max(120),
   year: z.number().int().min(1).max(8),
+  semester: z.string().min(1).max(40),
   eventCategory: z.string().min(2).max(100),
 });
 
@@ -3697,7 +3707,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const normalizedSemester = String(
         student.currentSemester || registrationData.semester || "",
       ).trim();
-      const normalizedSection = String(registrationData.section || "").trim().toUpperCase();
+      const normalizedSection = normalizeSectionCode(registrationData.section);
       const normalizedInterests = Array.isArray(registrationData.interests)
         ? registrationData.interests
             .map((value: unknown) => String(value).trim())
@@ -3735,6 +3745,12 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         });
       }
 
+      if (!isAllowedSectionCode(normalizedSection)) {
+        return res.status(400).json({
+          error: "Invalid section. Allowed sections: A1, A2, B1, B2, C1, C2, A, B, C.",
+        });
+      }
+
       // Get event details
       const event = await storage.getEvent(eventId);
       if (!event) return res.status(404).json({ error: "Event not found" });
@@ -3753,6 +3769,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const registration = await storage.createEventRegistration({
         eventId,
         eventTitle: event.title,
+        eventCategory: event.category || "",
         eventDate: event.date,
         eventTime: event.time,
         eventDurationMinutes: Number(event.durationMinutes ?? 120),
@@ -6592,6 +6609,56 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       const departments = summarizeBy("department");
       const categories = summarizeBy("eventCategory");
 
+      const bestByCategory = Array.from(
+        timeFilteredRows.reduce((categoryMap: Map<string, Map<string, any>>, row: any) => {
+          const categoryLabel = String(row.eventCategory || "Unknown");
+          const enrollment = String(row.enrollmentNumber || row.studentEmail || row.studentName || "unknown");
+          if (!categoryMap.has(categoryLabel)) {
+            categoryMap.set(categoryLabel, new Map<string, any>());
+          }
+
+          const studentMap = categoryMap.get(categoryLabel)!;
+          const existing = studentMap.get(enrollment) || {
+            category: categoryLabel,
+            studentName: row.studentName || "Unknown",
+            enrollmentNumber: row.enrollmentNumber || "",
+            department: row.department || "",
+            section: row.section || "",
+            semester: row.semester || "",
+            participationCount: 0,
+            attendedCount: 0,
+            latestRegistration: 0,
+          };
+
+          existing.participationCount += 1;
+          if (row.attended || row.attendanceStatus === "present") {
+            existing.attendedCount += 1;
+          }
+          const registeredAt = row.registeredAt ? new Date(row.registeredAt).getTime() : 0;
+          existing.latestRegistration = Math.max(existing.latestRegistration, Number.isNaN(registeredAt) ? 0 : registeredAt);
+          studentMap.set(enrollment, existing);
+          return categoryMap;
+        }, new Map<string, Map<string, any>>()),
+      )
+        .map(([category, studentMap]) => {
+          const leader = Array.from(studentMap.values()).sort((a: any, b: any) => {
+            if (b.attendedCount !== a.attendedCount) return b.attendedCount - a.attendedCount;
+            if (b.participationCount !== a.participationCount) return b.participationCount - a.participationCount;
+            return b.latestRegistration - a.latestRegistration;
+          })[0];
+          return {
+            category,
+            studentName: leader.studentName,
+            enrollmentNumber: leader.enrollmentNumber,
+            department: leader.department,
+            section: leader.section,
+            semester: leader.semester,
+            participationCount: leader.participationCount,
+            attendedCount: leader.attendedCount,
+          };
+        })
+        .sort((a, b) => a.category.localeCompare(b.category));
+
       const summary = {
         totalParticipations: timeFilteredRows.length,
         uniqueStudents: new Set(timeFilteredRows.map((row: any) => String(row.enrollmentNumber || ""))).size,
@@ -6611,6 +6678,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           summary,
           byDepartment: departments,
           byCategory: categories,
+          bestByCategory,
           byTimeline: timeline,
         },
       });
@@ -6950,6 +7018,13 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid request data" });
       }
 
+      const targetSection = normalizeSectionCode(parsed.data.targetSection);
+      if (!isAllowedSectionCode(targetSection)) {
+        return res.status(400).json({
+          error: "Invalid target section. Allowed sections: A1, A2, B1, B2, C1, C2, A, B, C.",
+        });
+      }
+
       const allowedFileTypes = normalizeAllowedFileTypes(parsed.data.allowedFileTypes);
       if (!allowedFileTypes.length) {
         return res.status(400).json({ error: "No supported allowedFileTypes provided" });
@@ -6966,7 +7041,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         description: parsed.data.description,
         deadline: new Date(parsed.data.deadline),
         targetCourse: parsed.data.targetCourse,
-        targetSection: parsed.data.targetSection,
+        targetSection,
         allowedFileTypes,
         maxFileSize: parsed.data.maxFileSize,
         allowMultipleSubmissions: parsed.data.allowMultipleSubmissions,
@@ -6974,7 +7049,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       });
 
       // Notify students in section (simple in-memory notification)
-      const students = await Student.find({ section: drive.targetSection });
+      const students = await Student.find({ section: targetSection });
       students.forEach((stu) => {
         if (!studentNotifications[stu.enrollment]) studentNotifications[stu.enrollment] = [];
         studentNotifications[stu.enrollment].push({
@@ -7017,7 +7092,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           doc.fontSize(18).text(`Student List for Section ${drive.targetSection}`, { align: 'center' });
           doc.moveDown();
           students.forEach((stu, idx) => {
-            doc.fontSize(12).text(`${idx + 1}. Name: ${stu.name} | Section: ${stu.section} | Email: ${stu.email} | Enrollment: ${stu.enrollment}`);
+            doc.fontSize(12).text(`${idx + 1}. Name: ${stu.name} | Section: ${stu.section} | Semester: ${stu.currentSemester || "-"} | Email: ${stu.email} | Enrollment: ${stu.enrollment}`);
           });
           doc.end();
         } catch (error) {
@@ -7068,6 +7143,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         section: req.body.section,
         department: req.body.department,
         year: Number(req.body.year),
+        semester: req.body.semester,
         eventCategory: req.body.eventCategory,
       });
       if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid request data" });
@@ -7086,6 +7162,9 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       if (normalizeComparableValue(parsed.data.section) !== normalizeComparableValue((drive as any).targetSection)) {
         return res.status(400).json({ error: "This drive is not assigned to the provided section" });
       }
+      if (!isAllowedSectionCode(parsed.data.section)) {
+        return res.status(400).json({ error: "Invalid section. Allowed sections: A1, A2, B1, B2, C1, C2, A, B, C." });
+      }
 
       if (!drive.allowMultipleSubmissions) {
         const existingSubmission = await Submission.findOne({
@@ -7095,6 +7174,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           "studentDetails.section": parsed.data.section,
           "studentDetails.department": parsed.data.department,
           "studentDetails.year": parsed.data.year,
+          "studentDetails.semester": parsed.data.semester,
         });
         if (existingSubmission) {
           return res.status(409).json({ error: "Multiple submissions are not allowed for this drive" });
@@ -7110,6 +7190,7 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
           section: parsed.data.section,
           department: parsed.data.department,
           year: parsed.data.year,
+          semester: parsed.data.semester,
         },
         eventCategory: parsed.data.eventCategory,
         certificateUrl,

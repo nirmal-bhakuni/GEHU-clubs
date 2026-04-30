@@ -4,6 +4,7 @@ const eventRegistrationSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   eventId: { type: String, required: true },
   eventTitle: { type: String, required: true },
+  eventCategory: { type: String, required: false, default: "" },
   eventDate: { type: String, required: true },
   eventTime: { type: String, required: true },
   eventDurationMinutes: { type: Number, default: 120 },
