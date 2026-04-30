@@ -33,6 +33,7 @@ import { Calendar, Image, Users, Settings, Edit, Bell, MapPin, UserCheck, CheckC
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { resolveMediaUrl } from "@/lib/utils";
+import { formatEventTimeRange } from "@/lib/eventTime";
 import type { Event, Club } from "@shared/schema";
 import type { ClubMembership } from "@shared/schema";
 import type { Achievement } from "@shared/schema";
@@ -46,6 +47,7 @@ type AttendanceEventRow = {
   title: string;
   date: string;
   time: string;
+  durationMinutes?: number;
   location: string;
   registrations: number;
   attended: number;
@@ -58,6 +60,7 @@ type EventsGridRow = {
   title: string;
   date: string;
   time: string;
+  durationMinutes?: number;
   location: string;
   status: "Upcoming" | "Past";
   registrations: number;
@@ -1507,6 +1510,7 @@ export default function ClubAdmin() {
         title: event.title,
         date: formatDate(event.date),
         time: event.time || "Time TBA",
+        durationMinutes: event.durationMinutes,
         location: event.location || "Location TBA",
         registrations: stats.registrations,
         attended: stats.attended,
@@ -1519,7 +1523,12 @@ export default function ClubAdmin() {
     { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
     { field: "title", headerName: "Event", flex: 1.4, minWidth: 220 },
     { field: "date", headerName: "Date", minWidth: 120 },
-    { field: "time", headerName: "Time", minWidth: 130 },
+    {
+      field: "time",
+      headerName: "Time",
+      minWidth: 170,
+      valueFormatter: (params) => formatEventTimeRange(params.data?.time, params.data?.durationMinutes),
+    },
     { field: "location", headerName: "Location", flex: 1, minWidth: 180 },
     { field: "registrations", headerName: "Registered", minWidth: 120 },
     { field: "attended", headerName: "Attended", minWidth: 110 },
@@ -1594,6 +1603,7 @@ export default function ClubAdmin() {
         title: event.title,
         date: formatDate(event.date),
         time: event.time || "Time TBA",
+        durationMinutes: event.durationMinutes,
         location: event.location || "Location TBA",
         status: isUpcoming ? "Upcoming" : "Past",
         registrations: eventRegs.length,
@@ -1607,7 +1617,12 @@ export default function ClubAdmin() {
     { field: "srNo", headerName: "Sr No", minWidth: 90, maxWidth: 110, sortable: false, filter: false },
     { field: "title", headerName: "Event", flex: 1.4, minWidth: 220 },
     { field: "date", headerName: "Date", minWidth: 120 },
-    { field: "time", headerName: "Time", minWidth: 120 },
+    {
+      field: "time",
+      headerName: "Time",
+      minWidth: 170,
+      valueFormatter: (params) => formatEventTimeRange(params.data?.time, params.data?.durationMinutes),
+    },
     { field: "location", headerName: "Location", flex: 1, minWidth: 180 },
     { field: "status", headerName: "Status", minWidth: 110 },
     { field: "registrations", headerName: "Registered", minWidth: 120 },
@@ -2118,7 +2133,7 @@ export default function ClubAdmin() {
                         <div>
                           <p className="font-medium text-sm">{event.title}</p>
                           <p className="text-xs text-muted-foreground">
-                            {formatDate(event.date)} at {event.time}
+                            {formatDate(event.date)} at {formatEventTimeRange(event.time, event.durationMinutes)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {eventRegistrations.filter(r => r.eventId === event.id).length} registered

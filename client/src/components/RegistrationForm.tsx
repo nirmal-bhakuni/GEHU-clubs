@@ -14,6 +14,7 @@ interface StudentData {
   rollNumber?: string;
   enrollmentNumber?: string;
   department?: string;
+  section?: string;
   yearOfAdmission?: number;
   currentSemester?: string;
 }
@@ -81,7 +82,7 @@ export default function RegistrationForm({
     department: studentData?.department || "",
     year: studentData?.yearOfAdmission ? getYearLabel(studentData.yearOfAdmission) : "First Year",
     semester: studentData?.currentSemester || "",
-    section: "",
+    section: studentData?.section || "",
     eventDurationMinutes,
     enrollmentNumber: studentData?.enrollmentNumber || "",
     interests: [],
@@ -105,6 +106,7 @@ export default function RegistrationForm({
           enrollmentNumber: studentData.enrollmentNumber || prev.enrollmentNumber || "",
           course: studentData.department || prev.course || "",
           department: studentData.department || prev.department || "",
+          section: studentData.section || prev.section || "",
           year: academicYear,
           semester: studentData.currentSemester || prev.semester || "",
           eventDurationMinutes,

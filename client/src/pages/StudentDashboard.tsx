@@ -104,6 +104,7 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { UNIVERSITY_BRANCH_OPTIONS } from "@/lib/branchOptions";
 import { useToast } from "@/hooks/use-toast";
+import { formatEventTimeRange } from "@/lib/eventTime";
 import type { Event, Club } from "@shared/schema";
 import type { EventRegistration } from "@shared/schema";
 import type { AttendanceDispute } from "@shared/schema";
@@ -116,6 +117,7 @@ type AttendanceGridRow = {
   eventId: string;
   eventTitle: string;
   eventTime: string;
+  eventDurationMinutes?: number;
   eventDateDisplay: string;
   eventDateValue: number;
   clubName: string;
@@ -226,6 +228,7 @@ export default function StudentDashboard() {
   const [profileForm, setProfileForm] = useState({
     phone: "",
     department: "",
+    section: "",
     yearOfAdmission: "",
     rollNumber: "",
     currentSemester: "",
@@ -233,6 +236,7 @@ export default function StudentDashboard() {
   const [profileTouched, setProfileTouched] = useState({
     phone: false,
     department: false,
+    section: false,
     yearOfAdmission: false,
     rollNumber: false,
     currentSemester: false,
@@ -445,6 +449,7 @@ export default function StudentDashboard() {
     mutationFn: async (payload: {
       phone: string;
       department: string;
+      section: string;
       yearOfAdmission?: number;
       rollNumber: string;
     }) => {
@@ -464,6 +469,27 @@ export default function StudentDashboard() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!student) return;
+    setProfileForm({
+      phone: student.phone || "",
+      department: student.department || "",
+      section: student.section || "",
+      yearOfAdmission: student.yearOfAdmission ? String(student.yearOfAdmission) : "",
+      rollNumber: student.rollNumber || "",
+      currentSemester: student.currentSemester || "",
+    });
+    setProfileTouched({
+      phone: false,
+      department: false,
+      section: false,
+      yearOfAdmission: false,
+      rollNumber: false,
+      currentSemester: false,
+    });
+    setProfileServerErrors({});
+  }, [student]);
 
   useEffect(() => {
     if (profileUploadCooldownSeconds <= 0) return;
@@ -552,6 +578,7 @@ export default function StudentDashboard() {
     const errors: Partial<Record<keyof typeof profileForm, string>> = {};
     const normalizedPhone = profileForm.phone.trim();
     const normalizedDepartment = profileForm.department.trim();
+    const normalizedSection = profileForm.section.trim();
     const normalizedRollNumber = profileForm.rollNumber.trim();
     const normalizedYear = profileForm.yearOfAdmission.trim();
 
@@ -561,6 +588,10 @@ export default function StudentDashboard() {
 
     if (normalizedDepartment && normalizedDepartment.length < 2) {
       errors.department = "Department should be at least 2 characters.";
+    }
+
+    if (normalizedSection && normalizedSection.length > 40) {
+      errors.section = "Section should be 40 characters or less.";
     }
 
     if (normalizedRollNumber && normalizedRollNumber.length < 2) {
@@ -581,6 +612,7 @@ export default function StudentDashboard() {
     const normalizedCurrent = {
       phone: profileForm.phone.trim(),
       department: profileForm.department.trim(),
+      section: profileForm.section.trim().toUpperCase(),
       yearOfAdmission: profileForm.yearOfAdmission.trim(),
       rollNumber: profileForm.rollNumber.trim(),
       currentSemester: profileForm.currentSemester.trim(),
@@ -589,6 +621,7 @@ export default function StudentDashboard() {
     const normalizedOriginal = {
       phone: String(student?.phone || "").trim(),
       department: String(student?.department || "").trim(),
+      section: String(student?.section || "").trim().toUpperCase(),
       yearOfAdmission: student?.yearOfAdmission ? String(student.yearOfAdmission).trim() : "",
       rollNumber: String(student?.rollNumber || "").trim(),
       currentSemester: String(student?.currentSemester || "").trim(),
@@ -606,6 +639,7 @@ export default function StudentDashboard() {
     const values = [
       profileForm.phone,
       profileForm.department,
+      profileForm.section,
       profileForm.rollNumber,
       profileForm.yearOfAdmission,
       profileForm.currentSemester,
@@ -680,6 +714,7 @@ export default function StudentDashboard() {
     setProfileTouched({
       phone: true,
       department: true,
+      section: true,
       yearOfAdmission: true,
       rollNumber: true,
       currentSemester: true,
@@ -715,6 +750,7 @@ export default function StudentDashboard() {
     updateProfileMutation.mutate({
       phone: profileForm.phone.trim(),
       department: profileForm.department.trim(),
+      section: profileForm.section.trim().toUpperCase(),
       rollNumber: profileForm.rollNumber.trim(),
       yearOfAdmission: profileForm.yearOfAdmission
         ? Number(profileForm.yearOfAdmission)
@@ -726,6 +762,7 @@ export default function StudentDashboard() {
     setProfileForm({
       phone: student?.phone || "",
       department: student?.department || "",
+      section: student?.section || "",
       yearOfAdmission: student?.yearOfAdmission ? String(student.yearOfAdmission) : "",
       rollNumber: student?.rollNumber || "",
       currentSemester: student?.currentSemester || "",
@@ -733,6 +770,7 @@ export default function StudentDashboard() {
     setProfileTouched({
       phone: false,
       department: false,
+      section: false,
       yearOfAdmission: false,
       rollNumber: false,
       currentSemester: false,
@@ -933,7 +971,7 @@ export default function StudentDashboard() {
     const rows = filteredStudentRegistrations.map((registration) => [
       registration.eventTitle,
       registration.eventDate,
-      registration.eventTime,
+      formatEventTimeRange(registration.eventTime, registration.eventDurationMinutes),
       registration.clubName,
       registration.year || "N/A",
       registration.semester || "N/A",
@@ -997,7 +1035,7 @@ export default function StudentDashboard() {
           <tr>
             <td>${escapeHtml(registration.eventTitle)}</td>
             <td>${escapeHtml(registration.eventDate)}</td>
-            <td>${escapeHtml(registration.eventTime)}</td>
+            <td>${escapeHtml(formatEventTimeRange(registration.eventTime, registration.eventDurationMinutes))}</td>
             <td>${escapeHtml(registration.clubName)}</td>
             <td>${escapeHtml(registration.year || "N/A")}</td>
             <td>${escapeHtml(registration.semester || "N/A")}</td>
@@ -1135,6 +1173,7 @@ export default function StudentDashboard() {
         eventId: registration.eventId,
         eventTitle: registration.eventTitle,
         eventTime: registration.eventTime || "",
+        eventDurationMinutes: registration.eventDurationMinutes,
         eventDateDisplay: safeEventDateValue
           ? new Date(safeEventDateValue).toLocaleDateString("en-US", {
               year: "numeric",
@@ -1181,6 +1220,12 @@ export default function StudentDashboard() {
         width: 140,
         comparator: (_a, _b, nodeA, nodeB) =>
           ((nodeA?.data?.eventDateValue as number) || 0) - ((nodeB?.data?.eventDateValue as number) || 0),
+      },
+      {
+        field: "eventTime",
+        headerName: "Time",
+        width: 170,
+        valueFormatter: (params) => formatEventTimeRange(params.data?.eventTime, params.data?.eventDurationMinutes),
       },
       {
         field: "clubName",
@@ -1325,7 +1370,7 @@ export default function StudentDashboard() {
       id: String(registration.id),
       eventId: String(registration.eventId || ""),
       eventTitle: String(registration.eventTitle || "-"),
-      dateTime: `${registration.eventDate || ""}${registration.eventTime ? ` at ${registration.eventTime}` : ""}`,
+      dateTime: `${registration.eventDate || ""}${registration.eventTime ? ` at ${formatEventTimeRange(registration.eventTime, registration.eventDurationMinutes)}` : ""}`,
       enrollment: String(registration.enrollmentNumber || "-"),
       clubName: String(registration.clubName || "-"),
     }));
@@ -1611,6 +1656,12 @@ export default function StudentDashboard() {
                     <BookOpen className="h-3 w-3" />
                     {student?.department || student?.branch || "Branch not set"}
                   </Badge>
+                  {student?.section && (
+                    <Badge variant="outline" className="flex items-center gap-1 border-border/70 bg-background/70 text-[11px] shadow-sm">
+                      <Users className="h-3 w-3" />
+                      Section {student.section}
+                    </Badge>
+                  )}
                   {student?.currentSemester && (
                     <Badge variant="outline" className="flex items-center gap-1 border-border/70 bg-background/70 text-[11px] shadow-sm">
                       <TrendingUp className="h-3 w-3" />
@@ -1634,6 +1685,10 @@ export default function StudentDashboard() {
                   <div className="rounded-xl border border-border/70 bg-background/60 px-3 py-2.5">
                     <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Semester</p>
                     <p className="mt-1 text-sm font-medium">{student?.currentSemester || "Not set"}</p>
+                  </div>
+                  <div className="rounded-xl border border-border/70 bg-background/60 px-3 py-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Section</p>
+                    <p className="mt-1 text-sm font-medium">{student?.section || "Not set"}</p>
                   </div>
                   <div className="rounded-xl border border-border/70 bg-background/60 px-3 py-2.5">
                     <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Enrollment no.</p>
@@ -1862,7 +1917,7 @@ export default function StudentDashboard() {
                           <div>
                             <p className="text-sm font-semibold">{event.title}</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              {new Date(event.date).toLocaleDateString()} at {event.time} • {event.location}
+                              {new Date(event.date).toLocaleDateString()} at {formatEventTimeRange(event.time, event.durationMinutes)} • {event.location}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -2879,6 +2934,24 @@ export default function StudentDashboard() {
                     </select>
                     <p className={`mt-1 text-xs ${(profileServerErrors.department || (profileTouched.department && profileValidationErrors.department)) ? "text-destructive" : "text-muted-foreground"}`}>
                       {profileServerErrors.department || (profileTouched.department && profileValidationErrors.department) || "Pick your official branch/department from the list."}
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="student-section" className="text-sm font-medium">Section</Label>
+                    <Input
+                      id="student-section"
+                      value={profileForm.section}
+                      onChange={(e) => {
+                        setProfileTouched((prev) => ({ ...prev, section: true }));
+                        setProfileServerErrors((prev) => ({ ...prev, section: undefined, form: undefined }));
+                        setProfileForm((prev) => ({ ...prev, section: e.target.value.toUpperCase() }));
+                      }}
+                      placeholder="e.g. A1"
+                      maxLength={40}
+                      className="mt-2"
+                    />
+                    <p className={`mt-1 text-xs ${(profileServerErrors.section || (profileTouched.section && profileValidationErrors.section)) ? "text-destructive" : "text-muted-foreground"}`}>
+                      {profileServerErrors.section || (profileTouched.section && profileValidationErrors.section) || "Used by admins and faculty to sort student records."}
                     </p>
                   </div>
                   <div>

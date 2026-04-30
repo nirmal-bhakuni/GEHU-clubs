@@ -16,21 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useStudentAuth } from "@/hooks/useStudentAuth";
 import type { Event } from "@shared/schema";
 import { resolveMediaUrl } from "@/lib/utils";
-
-function formatDuration(minutes?: number): string {
-  const safeMinutes = Number(minutes);
-  const totalMinutes = Number.isFinite(safeMinutes) && safeMinutes > 0 ? safeMinutes : 120;
-  const hours = Math.floor(totalMinutes / 60);
-  const remainingMinutes = totalMinutes % 60;
-
-  if (hours > 0 && remainingMinutes > 0) {
-    return `${hours}h ${remainingMinutes}m`;
-  }
-  if (hours > 0) {
-    return `${hours}h`;
-  }
-  return `${totalMinutes}m`;
-}
+import { formatDuration, formatEventTimeRange } from "@/lib/eventTime";
 
 export default function EventDetail() {
   const params = useParams<{ id: string }>();
@@ -296,7 +282,7 @@ export default function EventDetail() {
                 <Clock className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
                 <div>
                   <p className="text-sm text-muted-foreground">Time</p>
-                  <p className="text-lg font-semibold">{event.time}</p>
+                  <p className="text-lg font-semibold">{formatEventTimeRange(event.time, event.durationMinutes)}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -389,6 +375,7 @@ export default function EventDetail() {
                 rollNumber: student.rollNumber,
                 enrollmentNumber: student.enrollment,
                 department: student.department,
+                section: student.section,
                 yearOfAdmission: student.yearOfAdmission,
                 currentSemester: student.currentSemester,
               } : undefined}
