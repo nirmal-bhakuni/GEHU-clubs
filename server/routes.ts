@@ -35,6 +35,8 @@ import { z } from "zod";
 import { Faculty } from "./models/Faculty";
 import { Drive } from "./models/Drive";
 import { Submission } from "./models/Submission";
+import { FacultyAuditLog } from "./models/FacultyAuditLog";
+import { InvalidatedToken } from "./models/InvalidatedTokens";
 
 const uploadsDirCandidates = [
   path.join(process.cwd(), "uploads"),
@@ -727,6 +729,40 @@ function normalizeAllowedFileTypes(rawTypes: string[]) {
   return normalized;
 }
 
+import crypto from "crypto";
+
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+async function createAuditLog(params: {
+  facultyId: string;
+  facultyEmail: string;
+  action: "registered" | "approved" | "rejected" | "blocked" | "unblocked";
+  performedBy: string;
+  performedByEmail?: string;
+  reason?: string;
+  oldStatus?: string;
+  newStatus?: string;
+}) {
+  try {
+    await FacultyAuditLog.create({
+      facultyId: params.facultyId,
+      facultyEmail: params.facultyEmail,
+      action: params.action,
+      performedBy: params.performedBy,
+      performedByEmail: params.performedByEmail || "",
+      reason: params.reason || "",
+      metadata: {
+        oldStatus: params.oldStatus || "",
+        newStatus: params.newStatus || "",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to create audit log:", error);
+  }
+}
+
 function normalizeComparableValue(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
@@ -799,6 +835,18 @@ async function requireFacultyAuth(req: Request, res: Response, next: NextFunctio
     if (!faculty) return res.status(401).json({ error: "Faculty not found" });
     if (faculty.status !== "approved") {
       return res.status(403).json({ error: "Faculty is not approved" });
+    }
+
+    // Check if faculty is blocked
+    if (faculty.isBlocked) {
+      return res.status(403).json({ error: "Faculty access has been blocked" });
+    }
+
+    // Check if token is invalidated
+    const tokenHash = hashToken(token);
+    const invalidated = await InvalidatedToken.findOne({ tokenHash });
+    if (invalidated) {
+      return res.status(401).json({ error: "Token has been invalidated" });
     }
 
     (req as any).faculty = faculty;
@@ -6067,6 +6115,15 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
         status: "pending",
       });
 
+      // Create audit log for registration
+      await createAuditLog({
+        facultyId: faculty.id,
+        facultyEmail: faculty.email,
+        action: "registered",
+        performedBy: "system",
+        performedByEmail: "system@gehu.edu",
+      });
+
       res.status(201).json({
         success: true,
         message: "Faculty registered successfully. Awaiting admin approval.",
@@ -6365,9 +6422,54 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
   app.get("/api/admin/faculty", requireAuth, async (req: Request, res: Response) => {
     try {
       const status = String(req.query.status || "").trim();
-      const query = status && ["pending", "approved", "rejected"].includes(status) ? { status } : {};
-      const faculty = await Faculty.find(query).select("-password").sort({ createdAt: -1 });
-      res.json(faculty);
+      const search = String(req.query.search || "").trim().toLowerCase();
+      const isBlocked = req.query.isBlocked === "true";
+      const limit = Math.min(Number(req.query.limit) || 20, 100);
+      const offset = Number(req.query.offset) || 0;
+      const sortBy = String(req.query.sortBy || "createdAt").trim();
+
+      const query: any = {};
+
+      if (status && ["pending", "approved", "rejected"].includes(status)) {
+        query.status = status;
+      }
+
+      if (typeof req.query.isBlocked !== "undefined") {
+        query.isBlocked = isBlocked;
+      }
+
+      if (search) {
+        query.$or = [
+          { fullName: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+          { department: { $regex: search, $options: "i" } },
+        ];
+      }
+
+      // Determine sort order
+      let sortObj: any = { createdAt: -1 };
+      if (sortBy === "name") sortObj = { fullName: 1 };
+      else if (sortBy === "email") sortObj = { email: 1 };
+      else if (sortBy === "status") sortObj = { status: 1 };
+      else if (sortBy === "approvedAt") sortObj = { approvedAt: -1 };
+      else if (sortBy === "blockedAt") sortObj = { blockedAt: -1 };
+
+      const total = await Faculty.countDocuments(query);
+      const faculty = await Faculty.find(query)
+        .select("-password")
+        .sort(sortObj)
+        .limit(limit)
+        .skip(offset);
+
+      res.json({
+        data: faculty,
+        pagination: {
+          total,
+          limit,
+          offset,
+          hasMore: offset + limit < total,
+        },
+      });
     } catch (error) {
       console.error("Failed to fetch faculty list:", error);
       res.status(500).json({ error: "Failed to fetch faculty" });
@@ -6388,6 +6490,16 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
       ).select("-password");
 
       if (!faculty) return res.status(404).json({ error: "Faculty not found" });
+
+      // Create audit log
+      const adminEmail = (req as any).session?.adminEmail || "admin@gehu.edu";
+      await createAuditLog({
+        facultyId: faculty.id,
+        facultyEmail: faculty.email,
+        action: "approved",
+        performedBy: (req as any).session?.adminId || "admin",
+        performedByEmail: adminEmail,
+      });
 
       await sendEmail({
         to: faculty.email,
@@ -6418,6 +6530,17 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
 
       if (!faculty) return res.status(404).json({ error: "Faculty not found" });
 
+      // Create audit log
+      const adminEmail = (req as any).session?.adminEmail || "admin@gehu.edu";
+      await createAuditLog({
+        facultyId: faculty.id,
+        facultyEmail: faculty.email,
+        action: "rejected",
+        performedBy: (req as any).session?.adminId || "admin",
+        performedByEmail: adminEmail,
+        reason: reason,
+      });
+
       await sendEmail({
         to: faculty.email,
         subject: "Faculty Registration Rejected",
@@ -6428,6 +6551,182 @@ export async function registerRoutes(app: ReturnType<typeof express>): Promise<v
     } catch (error) {
       console.error("Failed to reject faculty:", error);
       res.status(500).json({ error: "Failed to reject faculty" });
+    }
+  });
+
+  // Block Faculty
+  app.put("/api/admin/faculty/:id/block", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const reason = String(req.body.reason || "").trim();
+      if (!reason) return res.status(400).json({ error: "Reason is required for blocking" });
+
+      const adminEmail = (req as any).session?.adminEmail || "admin@gehu.edu";
+      const faculty = await Faculty.findOneAndUpdate(
+        { id: req.params.id },
+        {
+          isBlocked: true,
+          blockedAt: new Date(),
+          blockedReason: reason,
+          blockedBy: (req as any).session?.adminId || "admin",
+        },
+        { new: true },
+      ).select("-password");
+
+      if (!faculty) return res.status(404).json({ error: "Faculty not found" });
+
+      // Create audit log
+      await createAuditLog({
+        facultyId: faculty.id,
+        facultyEmail: faculty.email,
+        action: "blocked",
+        performedBy: (req as any).session?.adminId || "admin",
+        performedByEmail: adminEmail,
+        reason: reason,
+        oldStatus: faculty.isBlocked ? "already_blocked" : "active",
+        newStatus: "blocked",
+      });
+
+      // Invalidate all existing tokens for this faculty
+      try {
+        const tokenIds = await InvalidatedToken.find({ facultyId: faculty.id }).select("_id");
+        if (tokenIds.length < 1000) {
+          // Only do bulk invalidation if not too many tokens
+          await InvalidatedToken.deleteMany({ facultyId: faculty.id });
+        }
+      } catch (e) {
+        console.error("Error cleaning up old tokens:", e);
+      }
+
+      // Send email notification
+      await sendEmail({
+        to: faculty.email,
+        subject: "Faculty Account Blocked",
+        text: `Hello ${faculty.fullName}, your faculty account has been blocked. Reason: ${reason}. Please contact the administration office for more information.`,
+      });
+
+      res.json({ success: true, faculty });
+    } catch (error) {
+      console.error("Failed to block faculty:", error);
+      res.status(500).json({ error: "Failed to block faculty" });
+    }
+  });
+
+  // Unblock Faculty
+  app.put("/api/admin/faculty/:id/unblock", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const reason = String(req.body.reason || "").trim();
+      const adminEmail = (req as any).session?.adminEmail || "admin@gehu.edu";
+
+      const faculty = await Faculty.findOneAndUpdate(
+        { id: req.params.id },
+        {
+          isBlocked: false,
+          blockedAt: null,
+          blockedReason: "",
+          blockedBy: "",
+        },
+        { new: true },
+      ).select("-password");
+
+      if (!faculty) return res.status(404).json({ error: "Faculty not found" });
+
+      // Create audit log
+      await createAuditLog({
+        facultyId: faculty.id,
+        facultyEmail: faculty.email,
+        action: "unblocked",
+        performedBy: (req as any).session?.adminId || "admin",
+        performedByEmail: adminEmail,
+        reason: reason,
+        oldStatus: "blocked",
+        newStatus: "active",
+      });
+
+      // Send email notification
+      await sendEmail({
+        to: faculty.email,
+        subject: "Faculty Account Unblocked",
+        text: `Hello ${faculty.fullName}, your faculty account has been unblocked. You can now log in and access the system.${reason ? ` Additional details: ${reason}` : ""}`,
+      });
+
+      res.json({ success: true, faculty });
+    } catch (error) {
+      console.error("Failed to unblock faculty:", error);
+      res.status(500).json({ error: "Failed to unblock faculty" });
+    }
+  });
+
+  // Get Audit Logs
+  app.get("/api/admin/faculty/audit-logs", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const facultyId = String(req.query.facultyId || "").trim();
+      const action = String(req.query.action || "").trim();
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const offset = Number(req.query.offset) || 0;
+      const startDate = req.query.startDate ? new Date(String(req.query.startDate)) : null;
+      const endDate = req.query.endDate ? new Date(String(req.query.endDate)) : null;
+
+      const query: any = {};
+
+      if (facultyId) query.facultyId = facultyId;
+      if (action && ["registered", "approved", "rejected", "blocked", "unblocked"].includes(action)) {
+        query.action = action;
+      }
+
+      if (startDate || endDate) {
+        query.timestamp = {};
+        if (startDate) query.timestamp.$gte = startDate;
+        if (endDate) query.timestamp.$lte = endDate;
+      }
+
+      const total = await FacultyAuditLog.countDocuments(query);
+      const logs = await FacultyAuditLog.find(query)
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .skip(offset)
+        .lean();
+
+      res.json({
+        data: logs,
+        pagination: {
+          total,
+          limit,
+          offset,
+          hasMore: offset + limit < total,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch audit logs:", error);
+      res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+
+  // Get Audit Logs for Specific Faculty
+  app.get("/api/admin/faculty/:id/history", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const facultyId = req.params.id;
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const offset = Number(req.query.offset) || 0;
+
+      const total = await FacultyAuditLog.countDocuments({ facultyId });
+      const logs = await FacultyAuditLog.find({ facultyId })
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .skip(offset)
+        .lean();
+
+      res.json({
+        data: logs,
+        pagination: {
+          total,
+          limit,
+          offset,
+          hasMore: offset + limit < total,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch faculty history:", error);
+      res.status(500).json({ error: "Failed to fetch faculty history" });
     }
   });
 

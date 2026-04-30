@@ -19,6 +19,11 @@ const facultySchema = new mongoose.Schema(
     rejectionReason: { type: String, default: "" },
     approvedAt: { type: Date, default: null },
     rejectedAt: { type: Date, default: null },
+    // Access control fields
+    isBlocked: { type: Boolean, default: false, index: true },
+    blockedAt: { type: Date, default: null },
+    blockedReason: { type: String, default: "" },
+    blockedBy: { type: String, default: "" }, // admin ID who blocked
   },
   { timestamps: true },
 );

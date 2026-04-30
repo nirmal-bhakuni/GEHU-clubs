@@ -6,6 +6,7 @@
     "/^node api-check\\.js$/": {
       "approve": true,
       "matchCommandLine": true
-    }
+    },
+    "npx tsc": true
   }
 }
