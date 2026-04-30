@@ -1,3 +1,23 @@
+import { Download } from "lucide-react";
+  // Generate PDF and email for a drive
+  const handleGeneratePdf = async (driveId: string) => {
+    try {
+      const res = await facultyApiFetch(`/api/drive/${driveId}/section-pdf`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to generate PDF");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `section_students_${driveId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast({ title: "PDF generated & emailed", description: "PDF downloaded and students notified by email." });
+    } catch (error: any) {
+      toast({ title: "PDF generation failed", description: error.message, variant: "destructive" });
+    }
+  };
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -739,6 +759,9 @@ export default function FacultyDashboard() {
                       Copy Link
                     </Button>
                     <Button variant="outline" onClick={() => setSelectedDriveId(drive.id)}>View Submissions</Button>
+                    <Button variant="outline" onClick={() => handleGeneratePdf(drive.id)} title="Generate PDF & Email">
+                      <Download className="w-4 h-4 mr-1" /> PDF & Email
+                    </Button>
                   </div>
                 </div>
               ))}

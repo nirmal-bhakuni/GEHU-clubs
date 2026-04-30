@@ -4,6 +4,8 @@ import { randomUUID } from "crypto";
 const driveSchema = new mongoose.Schema(
   {
     id: { type: String, default: () => randomUUID(), unique: true, index: true },
+    // Keep compatibility with existing DB unique index uniqueCode_1.
+    uniqueCode: { type: String, default: () => randomUUID(), unique: true, index: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "", trim: true },
     deadline: { type: Date, required: true, index: true },

@@ -44,7 +44,10 @@ if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
 }
 
 let sessionStore: ReturnType<typeof MongoStore.create> | InstanceType<typeof SessionMemoryStore>;
-if (process.env.MONGO_URI) {
+const shouldUseMongoSessionStore =
+  process.env.NODE_ENV === "production" && !!process.env.MONGO_URI;
+
+if (shouldUseMongoSessionStore) {
   try {
     sessionStore = MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
@@ -133,13 +136,17 @@ app.use(
       // Handle uncaught exceptions
       process.on('uncaughtException', (error) => {
         console.error('Uncaught Exception:', error);
-        process.exit(1);
+        if (process.env.NODE_ENV === "production") {
+          process.exit(1);
+        }
       });
 
       // Handle unhandled promise rejections
       process.on('unhandledRejection', (reason, promise) => {
         console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-        process.exit(1);
+        if (process.env.NODE_ENV === "production") {
+          process.exit(1);
+        }
       });
     } catch (error) {
       console.error('Failed to start server:', error);
